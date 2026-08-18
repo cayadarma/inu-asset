@@ -17,8 +17,8 @@ export default function RegistrasiAsetPage() {
     <div className="flex flex-col gap-8 max-w-[1000px]">
       {/* Judul */}
       <div>
-        <h1 className="text-2xl font-bold text-[#0F172A]">Registrasi Aset</h1>
-        <p className="text-[#475569] text-sm">Pilih lokasi untuk melihat daftar aset</p>
+        <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Registrasi Aset</h1>
+        <p className="text-[#475569] dark:text-[#94A3B8] text-sm">Pilih lokasi untuk melihat daftar aset</p>
       </div>
 
       {/* List Lokasi */}
@@ -27,14 +27,14 @@ export default function RegistrasiAsetPage() {
           <Link 
             key={loc.id}
             href={`/registrasi-aset/${loc.id}`}
-            className="group p-6 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-primary hover:shadow-md transition-all flex items-center justify-between"
+            className="group p-6 bg-white dark:bg-[#1E293B] rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm hover:border-primary hover:shadow-md transition-all flex items-center justify-between"
           >
             <div className="flex items-center gap-6">
               <div className="w-12 h-12 bg-[#CCFBF1] rounded-lg flex items-center justify-center text-[#0D9488]">
                 <MapPin size={24} />
               </div>
               <div className="flex flex-col">
-                <span className="text-lg font-bold text-[#0F172A] group-hover:text-primary transition-colors">
+                <span className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC] dark:text-[#F8FAFC]group-hover:text-primary transition-colors">
                   {loc.name}
                 </span>
                 <span className="text-sm font-semibold text-[#64748B]">

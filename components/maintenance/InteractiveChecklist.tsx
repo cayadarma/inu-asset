@@ -22,13 +22,13 @@ export default function InteractiveChecklist({ title, initialTasks }: { title: s
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
-      <div className="p-4 bg-white border-b border-gray-100">
+    <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-200 dark:border-[#334155] shadow-sm overflow-hidden mb-6">
+      <div className="p-4 bg-white dark:bg-[#1E293B] border-b border-gray-100 dark:border-[#334155]">
         <h3 className="font-bold text-[#0D9488]">{title}</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="bg-[#F8FAFC] text-[#475569] font-bold border-b">
+          <thead className="bg-[#F8FAFC] dark:bg-[#0F172A] dark:bg-[#0F172A] dark:bg-[#0F172A] text-[#475569] dark:text-[#94A3B8] font-bold border-b">
             <tr>
               <th className="px-6 py-4">Task / Langkah Kerja</th>
               <th className="px-6 py-4">Teknisi</th>
@@ -36,7 +36,7 @@ export default function InteractiveChecklist({ title, initialTasks }: { title: s
               <th className="px-6 py-4">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 dark:divide-[#334155] dark:divide-[#334155]">
             {tasks.map((item, i) => (
               <tr 
                 key={i} 
@@ -49,12 +49,12 @@ export default function InteractiveChecklist({ title, initialTasks }: { title: s
                   ) : (
                     <Circle size={20} className="text-[#94A3B8] group-hover:text-[#0D9488]" />
                   )}
-                  <span className={item.status === "Selesai" ? "text-gray-400 line-through" : "text-[#0F172A]"}>
+                  <span className={item.status === "Selesai" ? "text-gray-400 line-through" : "text-[#0F172A] dark:text-[#F8FAFC]"}>
                     {item.task}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-[#475569]">{item.tech}</td>
-                <td className="px-6 py-4 text-[#475569] italic">{item.note}</td>
+                <td className="px-6 py-4 text-[#475569] dark:text-[#94A3B8]">{item.tech}</td>
+                <td className="px-6 py-4 text-[#475569] dark:text-[#94A3B8] italic">{item.note}</td>
                 <td className="px-6 py-4">
                   <div className={`flex items-center gap-2 font-bold ${item.status === 'Selesai' ? 'text-[#10B981]' : 'text-[#F59E0B]'}`}>
                     <div className={`w-2 h-2 rounded-full ${item.status === 'Selesai' ? 'bg-[#10B981]' : 'bg-[#F59E0B]'}`}></div>

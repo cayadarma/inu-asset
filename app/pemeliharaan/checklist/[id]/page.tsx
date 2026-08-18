@@ -9,13 +9,13 @@ export default async function ChecklistPage({ params }: { params: Promise<{ id: 
   return (
     <div className="flex flex-col gap-6 pb-10">
 
-      <h1 className="text-2xl font-bold text-[#0F172A]">Checklist Pemeliharaan Preventif</h1>
+      <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Checklist Pemeliharaan Preventif</h1>
 
       {/* Info Aset Tetap Sama */}
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
+      <div className="bg-white dark:bg-[#1E293B] p-6 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex flex-col gap-2">
-          <h2 className="text-lg font-bold text-[#0F172A]">Genset Caterpillar 3516</h2>
-          <div className="flex flex-wrap gap-4 text-sm text-[#475569]">
+          <h2 className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC]">Genset Caterpillar 3516</h2>
+          <div className="flex flex-wrap gap-4 text-sm text-[#475569] dark:text-[#94A3B8]">
             <span>Kode: <span className="font-bold">AST-001</span></span>
             <span>Lokasi: <span className="font-bold">Lagoon</span></span>
           </div>

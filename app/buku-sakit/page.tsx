@@ -17,7 +17,7 @@ export default function BukuSakitPage() {
     <div className="flex flex-col gap-8 max-w-[1200px]">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-[#0F172A]">Buku Sakit</h1>
+        <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Buku Sakit</h1>
         <p className="text-[#94A3B8] text-sm">Pilih lokasi untuk melihat riwayat serta laporan kerusakan aset yang aktif</p>
       </div>
 
@@ -27,7 +27,7 @@ export default function BukuSakitPage() {
           <Link 
             key={loc.id}
             href={`/buku-sakit/${loc.id}`}
-            className="group p-6 bg-white rounded-xl border border-gray-200 shadow-[0px_4px_6px_rgba(0,0,0,0.02)] hover:border-primary transition-all flex items-center justify-between"
+            className="group p-6 bg-white dark:bg-[#1E293B] rounded-xl border border-gray-200 dark:border-[#334155] shadow-[0px_4px_6px_rgba(0,0,0,0.02)] hover:border-primary transition-all flex items-center justify-between"
           >
             <div className="flex items-start gap-6">
               {/* Ikon Kiri */}
@@ -37,7 +37,7 @@ export default function BukuSakitPage() {
 
               {/* Konten Tengah: Nama & 4 Status */}
               <div className="flex flex-col gap-3">
-                <h3 className="text-lg font-bold text-[#0F172A]">{loc.name}</h3>
+                <h3 className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC]">{loc.name}</h3>
                 
                 {/* Grid Status (2 Kolom) */}
                 <div className="flex flex-wrap gap-x-8 gap-y-3">

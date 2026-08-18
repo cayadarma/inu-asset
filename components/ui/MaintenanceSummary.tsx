@@ -9,13 +9,13 @@ export default function MaintenanceSummary() {
   ];
 
   return (
-    <div className="flex-1 p-6 bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col gap-6">
-      <h3 className="font-bold text-[#0F172A] text-base">Ikhtisar Pemeliharaan</h3>
+    <div className="flex-1 p-6 bg-white dark:bg-[#1E293B] dark:bg-[#1E293B] rounded-xl border border-gray-100 dark:border-[#334155] dark:border-[#334155] shadow-sm flex flex-col gap-6 transition-all duration-300">
+      <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] dark:text-[#F8FAFC]dark:text-[#F8FAFC] text-base">Ikhtisar Pemeliharaan</h3>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {data.map((item) => (
-          <div key={item.label} className="p-4 bg-[#F8FAFC] rounded-lg border border-gray-100 flex flex-col gap-1">
-            <span className="text-[13px] text-[#475569]">{item.label}</span>
-            <span className={`text-2xl font-bold ${item.color}`}>{item.count}</span>
+          <div key={item.label} className="p-4 bg-[#F8FAFC] dark:bg-[#0F172A] dark:bg-[#0F172A] dark:bg-[#0F172A] dark:bg-[#0F172A]/40 rounded-lg border border-gray-100 dark:border-[#334155] dark:border-[#334155] flex flex-col gap-1">
+            <span className="text-[12px] text-[#475569] dark:text-[#94A3B8] dark:text-[#94A3B8] font-bold uppercase">{item.label}</span>
+            <span className={`text-2xl font-black ${item.color}`}>{item.count}</span>
           </div>
         ))}
       </div>

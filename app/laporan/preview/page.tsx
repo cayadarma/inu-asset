@@ -6,12 +6,12 @@ export default function ReportPreviewPage() {
   return (
     <div className="flex flex-col gap-6 max-w-[1000px] mx-auto">
       {/* Action Bar */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <Link href="/laporan" className="flex items-center gap-2 text-sm font-bold text-[#475569] hover:text-dark">
+      <div className="flex justify-between items-center bg-white dark:bg-[#1E293B] p-4 rounded-xl shadow-sm border border-gray-100 dark:border-[#334155]">
+        <Link href="/laporan" className="flex items-center gap-2 text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:text-dark">
           <ChevronLeft size={20} /> Kembali
         </Link>
         <div className="flex gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-bold text-[#475569] hover:bg-gray-50">
+          <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-[#334155] rounded-lg text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 dark:hover:bg-[#334155]/50">
             <Printer size={18} /> Cetak
           </button>
           <button className="flex items-center gap-2 px-4 py-2 bg-[#0D9488] text-white rounded-lg text-sm font-bold hover:bg-teal-700">
@@ -21,7 +21,7 @@ export default function ReportPreviewPage() {
       </div>
 
       {/* KERTAS LAPORAN */}
-      <div className="bg-white p-12 md:p-16 shadow-xl border border-gray-200 rounded-sm min-h-[1000px] flex flex-col gap-10">
+      <div className="bg-white dark:bg-[#1E293B] p-12 md:p-16 shadow-xl border border-gray-200 dark:border-[#334155] rounded-sm min-h-[1000px] flex flex-col gap-10">
         {/* Kop Surat */}
         <div className="flex justify-between items-start border-b-2 border-dark pb-8">
           <div className="flex items-center gap-4">
@@ -45,15 +45,15 @@ export default function ReportPreviewPage() {
 
         {/* Kotak Ringkasan */}
         <div className="grid grid-cols-3 gap-6">
-          <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex flex-col items-center">
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 dark:border-[#334155] flex flex-col items-center">
             <span className="text-[10px] text-secondary font-bold uppercase mb-1">Total Kegiatan</span>
             <span className="text-xl font-black text-dark">45 Kegiatan</span>
           </div>
-          <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex flex-col items-center">
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 dark:border-[#334155] flex flex-col items-center">
             <span className="text-[10px] text-secondary font-bold uppercase mb-1">Tepat Waktu</span>
             <span className="text-xl font-black text-[#10B981]">42 Kegiatan</span>
           </div>
-          <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex flex-col items-center">
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 dark:border-[#334155] flex flex-col items-center">
             <span className="text-[10px] text-secondary font-bold uppercase mb-1">Max Downtime</span>
             <span className="text-xl font-black text-[#F59E0B]">2 Jam</span>
           </div>
@@ -75,7 +75,7 @@ export default function ReportPreviewPage() {
                 <tr key={i}>
                   <td className="border border-gray-300 p-2">WO-89{i}</td>
                   <td className="border border-gray-300 p-2 font-bold italic">Kalibrasi sensor pressure uap rutin berkala</td>
-                  <td className="border border-gray-300 p-2 text-center text-[#475569]">Turbin #{i}</td>
+                  <td className="border border-gray-300 p-2 text-center text-[#475569] dark:text-[#94A3B8]">Turbin #{i}</td>
                   <td className="border border-gray-300 p-2 text-center font-bold text-green-600">Selesai</td>
                 </tr>
               ))}
