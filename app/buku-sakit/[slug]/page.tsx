@@ -2,7 +2,7 @@
 
 import React, { useState, use } from "react";
 import Link from "next/link";
-import { ChevronLeft, Search, Eye, Plus, ChevronDown, Calendar, User, AlertCircle } from "lucide-react";
+import { ChevronLeft, Search, Eye, Plus, ChevronDown, Calendar, User, AlertCircle, ImageIcon } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 
@@ -116,53 +116,64 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
 
       {/* 5. MODAL FORM LAPOR KERUSAKAN (IDENTIK DENGAN PERMINTAAN) */}
       <Modal isOpen={isBrokenModalOpen} onClose={() => setIsBrokenModalOpen(false)} title="Laporkan Kerusakan Aset">
-        <form className="flex flex-col gap-6">
-           <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] uppercase tracking-wider">Pilih Aset Yang Rusak</label>
-              <div className="relative">
-                <select className="w-full appearance-none p-3 bg-[#F8FAFC] border border-gray-200 rounded-xl outline-none focus:border-primary text-sm font-bold text-[#0F172A] cursor-pointer">
-                    <option>-- Pilih Aset --</option>
-                    {assets.map(a => <option key={a.id}>{a.id} - {a.name}</option>)}
+        <form className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
+          {/* KIRI: DATA TEKS */}
+          <div className="lg:col-span-2 flex flex-col gap-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A]">Pilih Aset</label>
+                <select className="p-3 border border-gray-200 rounded-xl bg-[#F8FAFC] text-sm font-bold outline-none focus:border-primary">
+                  {assets.map(a => <option key={a.id}>{a.id} - {a.name}</option>)}
                 </select>
-                <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
-              </div>
-           </div>
-
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="flex flex-col gap-2">
-                 <label className="text-sm font-bold text-[#0F172A] uppercase tracking-wider">Tanggal Kejadian</label>
-                 <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    <input type="date" className="w-full pl-10 pr-4 py-3 bg-[#F8FAFC] border border-gray-200 rounded-xl outline-none focus:border-primary text-sm" />
-                 </div>
               </div>
               <div className="flex flex-col gap-2">
-                 <label className="text-sm font-bold text-[#0F172A] uppercase tracking-wider">Tingkat Urgensi</label>
-                 <div className="relative">
-                    <select className="w-full appearance-none p-3 bg-[#F8FAFC] border border-gray-200 rounded-xl outline-none focus:border-primary text-sm font-bold cursor-pointer">
-                        <option value="ringan">Ringan (Masih bisa operasi)</option>
-                        <option value="sedang">Sedang (Performa menurun)</option>
-                        <option value="berat">Berat (Mati total / Fatal)</option>
-                    </select>
-                    <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
-                 </div>
+                <label className="text-sm font-bold text-[#0F172A]">Tingkat Urgensi</label>
+                <select className="p-3 border border-gray-200 rounded-xl bg-[#F8FAFC] text-sm font-bold outline-none focus:border-primary">
+                  <option>Ringan</option>
+                  <option>Sedang</option>
+                  <option>Berat / Fatal</option>
+                </select>
               </div>
-           </div>
+            </div>
 
-           <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] uppercase tracking-wider">Judul Masalah</label>
-              <input type="text" placeholder="Contoh: Kebocoran oli pada seal utama" className="w-full px-4 py-3 bg-[#F8FAFC] border border-gray-200 rounded-xl outline-none focus:border-primary text-sm font-medium" />
-           </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A]">Nama Pelapor</label>
+                <input type="text" placeholder="Ketik nama pelapor..." className="p-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-primary" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A]">Tanggal Kejadian</label>
+                <input type="date" className="p-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-primary" />
+              </div>
+            </div>
 
-           <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] uppercase tracking-wider">Kronologi Kejadian</label>
-              <textarea rows={3} placeholder="Jelaskan secara detail apa yang terjadi..." className="w-full px-4 py-3 bg-[#F8FAFC] border border-gray-200 rounded-xl outline-none focus:border-primary text-sm"></textarea>
-           </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A]">Judul Masalah</label>
+              <input type="text" placeholder="Contool: Kebocoran Seal" className="p-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-primary" />
+            </div>
 
-           <div className="flex gap-3 pt-4">
-              <button type="button" onClick={() => setIsBrokenModalOpen(false)} className="flex-1 py-3.5 border border-gray-200 rounded-xl font-bold text-[#475569] hover:bg-gray-50 transition-all">Batalkan</button>
-              <button type="submit" className="flex-1 py-3.5 bg-[#EF4444] text-white rounded-xl font-bold hover:bg-red-600 transition-all shadow-md">Kirim Laporan</button>
-           </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A]">Kronologi Kejadian</label>
+              <textarea rows={3} placeholder="Jelaskan detail kejadian..." className="p-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-primary"></textarea>
+            </div>
+          </div>
+
+          {/* KANAN: FOTO & KIRIM */}
+          <div className="lg:col-span-1 flex flex-col gap-5">
+            <label className="text-sm font-bold text-[#0F172A]">Foto Aset Rusak</label>
+            <div className="w-full aspect-square bg-[#D6DEE6] rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300">
+              <ImageIcon size={48} className="text-[#94A3B8]" />
+              <span className="text-xs font-bold text-[#94A3B8]">Upload Foto</span>
+            </div>
+            <button type="button" className="w-fit px-4 py-2 bg-[#F1F5F9] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569]">
+                Pilih foto (.jpg, .png, .jpeg, .webp)
+             </button>
+
+            <div className="flex flex-col gap-3 mt-auto pt-6">
+              <button type="submit" className="w-full bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-red-600">Kirim Laporan</button>
+              <button type="button" onClick={() => setIsBrokenModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">Batalkan</button>
+            </div>
+          </div>
         </form>
       </Modal>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image"; 
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -53,9 +54,16 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         <div className="flex flex-col gap-8">
           {/* Header Sidebar: Logo & Tombol Close (Mobile) */}
           <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-[#0D9488]/10 rounded-lg flex items-center justify-center">
-                <div className="w-6 h-6 bg-gradient-to-tr from-teal-500 to-emerald-400 rounded-md"></div>
+            <div className="flex items-center gap-3 px-2">
+              {/* Container Logo Tanpa Background */}
+              <div className="flex items-center justify-center">
+                <Image 
+                  src="/CROP_Logo_INU_UPDATE_2024.png" 
+                  alt="Logo INU Asset"
+                  width={40}  // Ukuran sedikit diperbesar agar proporsional tanpa kotak
+                  height={40} 
+                  className="object-contain"
+                />
               </div>
               <span className="text-[#0F172A] text-xl font-bold tracking-tight">INU Asset</span>
             </div>
@@ -72,8 +80,6 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
           {/* Navigasi Menu */}
           <nav className="flex flex-col gap-1.5">
             {menuItems.map((item) => {
-              // LOGIKA BARU: Cek apakah halaman sekarang ada di dalam rute menu ini
-              // Contoh: Jika URL '/pemeliharaan/korektif', maka menu '/pemeliharaan' akan tetap aktif
               const isActive = item.href === "/" 
                 ? pathname === "/" 
                 : pathname.startsWith(item.href);
@@ -82,7 +88,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                 <Link 
                   key={item.name} 
                   href={item.href}
-                  onClick={() => setIsOpen(false)} // Tutup otomatis di mobile saat menu diklik
+                  onClick={() => setIsOpen(false)} 
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                     isActive
                       ? "bg-[#CCFBF1] text-[#0D9488] font-semibold shadow-sm"

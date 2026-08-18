@@ -16,17 +16,6 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="flex flex-col gap-6 pb-10">
-      {/* Header & Back */}
-      <div className="flex items-center gap-4">
-        <Link href="/stok" className="p-2 hover:bg-white rounded-full border border-transparent hover:border-gray-200 transition-all">
-          <ChevronLeft size={24} />
-        </Link>
-        <div className="flex items-center gap-2 text-sm text-[#94A3B8]">
-          <span>Manajemen Stok</span>
-          <span>/</span>
-          <span className="text-dark font-bold text-[#0F172A]">Detail Barang</span>
-        </div>
-      </div>
 
       {/* Info Card Utama */}
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">

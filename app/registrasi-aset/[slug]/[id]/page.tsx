@@ -24,7 +24,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     purchaseDate: "2019-03-15",
     age: "5 tahun 4 bulan",
     location: locationName,
-    status: "Aktif",
+    status: "Beroperasi",
     image: "https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=800"
   };
 
@@ -42,15 +42,6 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
 
   return (
     <div className="flex flex-col gap-6 pb-10 font-poppins">
-      {/* HEADER & BREADCRUMBS */}
-      <div className="flex items-center gap-4">
-        <Link href={`/registrasi-aset/${slug}`} className="p-2 hover:bg-white rounded-full transition-all border border-transparent hover:border-gray-200 shadow-sm">
-          <ChevronLeft size={24} className="text-[#0F172A]" />
-        </Link>
-        <div className="text-[13px] text-[#94A3B8]">
-          INU Asset / <span className="hover:text-primary cursor-pointer">Registrasi Aset</span> / <span className="hover:text-primary cursor-pointer">{locationName}</span> / <span className="text-[#0F172A] font-bold">{asset.name}</span>
-        </div>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         

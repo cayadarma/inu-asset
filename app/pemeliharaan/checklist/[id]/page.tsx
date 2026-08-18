@@ -8,17 +8,6 @@ export default async function ChecklistPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="flex flex-col gap-6 pb-10">
-      {/* Tombol Kembali & Breadcrumbs */}
-      <div className="flex items-center gap-4">
-        <Link href="/pemeliharaan" className="p-2 hover:bg-gray-100 rounded-full transition-all">
-            <ChevronLeft size={24} />
-        </Link>
-        <div className="flex items-center gap-2 text-[13px] text-[#94A3B8]">
-            <span>Pemeliharaan</span>
-            <span>/</span>
-            <span className="text-[#0F172A] font-bold">Genset Caterpillar 3516</span>
-        </div>
-      </div>
 
       <h1 className="text-2xl font-bold text-[#0F172A]">Checklist Pemeliharaan Preventif</h1>
 
