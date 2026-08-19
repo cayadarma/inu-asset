@@ -1,23 +1,39 @@
 "use client";
 
 import React from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation"; // 1. Tambah useSearchParams
 import { Sun, Moon, Bell, Menu, ChevronDown } from "lucide-react";
 import Link from "next/link";
-import { useTheme } from "../../context/ThemeContext"; // 1. Tambahkan Import ini
+import { useTheme } from "../../context/ThemeContext";
 
 export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const pathname = usePathname();
-  const { isDarkMode, toggleTheme } = useTheme(); // 2. Ambil fungsi tema
+  const searchParams = useSearchParams(); // 2. Ambil parameter pencarian
+  const { isDarkMode, toggleTheme } = useTheme();
 
+  // 3. Fungsi Breadcrumbs yang lebih cerdas
   const generateBreadcrumbs = () => {
     if (pathname === "/") return [{ label: "Dashboard", href: "/" }];
+    
     const paths = pathname.split("/").filter((path) => path !== "");
     let currentHref = "";
+    
     return paths.map((path) => {
       currentHref += `/${path}`;
+      
+      // Ambil nama dari URL (?name=...) jika ada
+      const nameFromUrl = searchParams.get("name");
+      
+      // LOGIKA: Jika segmen URL ini adalah UUID (panjang) DAN kita punya nama di URL, pakai namanya.
+      // Jika tidak, rapikan teks segment-nya seperti biasa.
+      let label = path.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+      
+      if (path.length > 20 && nameFromUrl) {
+        label = nameFromUrl.toUpperCase();
+      }
+
       return {
-        label: path.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
+        label: label,
         href: currentHref,
       };
     });

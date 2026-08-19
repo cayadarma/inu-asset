@@ -4,8 +4,11 @@ import StatusChart from "../components/ui/StatusChart";
 import MaintenanceSummary from "../components/ui/MaintenanceSummary"; 
 import RecentActivity from "../components/ui/RecentActivity"; 
 import { Box, Clock, Banknote, ShieldCheck } from "lucide-react";
+import { supabase } from "../lib/supabase";
 
 export default function Home() {
+  console.log("Supabase Client:", supabase);
+
   return (
     <div className="flex flex-col gap-8 max-w-[1400px] mx-auto pb-10 transition-colors duration-300">
       {/* Header - Ditambahkan dark:text pada h1 dan p */}
@@ -34,5 +37,6 @@ export default function Home() {
         <RecentActivity />
       </div>
     </div>
+
   );
 }
