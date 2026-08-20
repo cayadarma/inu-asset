@@ -1,191 +1,222 @@
 "use client";
 
-import React, { useState, use } from "react";
+import React, { useState, use, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ChevronLeft, Search, Eye, Plus, ChevronDown, Calendar, User, AlertCircle, ImageIcon } from "lucide-react";
+import { ChevronLeft, Search, Eye, Plus, ChevronDown, Calendar, User, Image as LucideImage, X } from "lucide-react";
+import imageCompression from 'browser-image-compression';
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
+import { supabase } from "@/lib/supabase";
 
 export default function AssetSakitListPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const locationName = slug.replace("-", " ").toUpperCase();
+  const locationId = slug;
 
-  // State untuk Modal Lapor Kerusakan
+  // --- STATE DATA ---
+  const [assets, setAssets] = useState<any[]>([]);
+  const [realLocationName, setRealLocationName] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const [isBrokenModalOpen, setIsBrokenModalOpen] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState("");
 
-  // Data aset lengkap (7 Kolom)
-  const assets = [
-    { id: "AST-001", name: "Genset Caterpillar 3516", type: "Generator", spec: "2000 kVA, Diesel", age: "5 tahun", status: "Beroperasi" },
-    { id: "AST-002", name: "Pompa Centrifugal Ebara", type: "Pompa Air", spec: "45 kW, 3-Phase", age: "3 tahun", status: "Beroperasi" },
-    { id: "AST-003", name: "Compressor Atlas Copco", type: "Kompresor", spec: "7.5 Bar, Air-Cooled", age: "2 tahun", status: "Pemeliharaan" },
-    { id: "AST-004", name: "Transformator Schneider", type: "Kelistrikan", spec: "1000 kVA, Step-Down", age: "6 tahun", status: "Beroperasi" },
-    { id: "AST-005", name: "Chiller York Central", type: "HVAC", spec: "150 TR, Water-Cooled", age: "4 tahun", status: "Rusak" },
-    { id: "AST-006", name: "Genset Perkins 150kVA", type: "Generator", spec: "150 kVA, Silent", age: "1 tahun", status: "Beroperasi" },
-    { id: "AST-007", name: "Genset Perkins 150kVA", type: "Generator", spec: "150 kVA, Silent", age: "1 tahun", status: "Perbaikan" },
-  ];
+  // --- STATE FILTER & SEARCH ---
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState("Semua Tipe");
+
+  // --- STATE FORM LAPORAN ---
+  const [reportData, setReportData] = useState({
+    asset_id: "",
+    urgency: "Sedang",
+    reporter_name: "",
+    issue_title: "",
+    description: ""
+  });
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- AMBIL DATA DARI DB (POIN 3: Terlama ke Terbaru) ---
+  const fetchAssets = async () => {
+    setIsLoading(true);
+    const { data: locData } = await supabase.from("locations").select("name").eq("id", locationId).single();
+    if (locData) setRealLocationName(locData.name);
+
+    const { data: assetData } = await supabase
+      .from("assets")
+      .select("*")
+      .eq("location_id", locationId)
+      .order("created_at", { ascending: true }); 
+
+    if (assetData) setAssets(assetData);
+    setIsLoading(false);
+  };
+
+  useEffect(() => { fetchAssets(); }, [locationId]);
+
+  // --- LOGIKA OLAH FOTO (POIN 5) ---
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+    setIsLoading(true);
+    try {
+      if (file.name.toLowerCase().endsWith(".heic")) {
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      }
+      const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 1000 });
+      setImageFile(compressedFile);
+      setImagePreview(URL.createObjectURL(compressedFile));
+    } catch (err) { console.error(err); }
+    setIsLoading(false);
+  };
+
+  // --- FUNGSI KIRIM LAPORAN (POIN 4: Masuk Notif & Update Status) ---
+  const handleSubmitReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportData.asset_id) return alert("Pilih aset!");
+    setIsLoading(true);
+
+    let finalImageUrl = "";
+    if (imageFile) {
+      const fileName = `${Date.now()}-damage-${reportData.asset_id}`;
+      const { data: uploadData } = await supabase.storage.from("asset-images").upload(fileName, imageFile);
+      if (uploadData) {
+        const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+        finalImageUrl = publicUrl;
+      }
+    }
+
+    const { error: reportError } = await supabase.from("damage_reports").insert([{
+      asset_id: reportData.asset_id,
+      reporter_name: reportData.reporter_name,
+      issue_title: reportData.issue_title,
+      description: reportData.description,
+      urgency: reportData.urgency,
+      image_url: finalImageUrl
+    }]);
+
+    if (!reportError) {
+      // OTOMATIS GANTI STATUS ASET JADI RUSAK
+      await supabase.from("assets").update({ status: "Rusak" }).eq("id", reportData.asset_id);
+      alert("Laporan terkirim! Status aset diperbarui.");
+      setIsBrokenModalOpen(false);
+      setImagePreview(null);
+      setReportData({ asset_id: "", urgency: "Sedang", reporter_name: "", issue_title: "", description: "" });
+      fetchAssets();
+    }
+    setIsLoading(false);
+  };
+
+  const filteredAssets = assets.filter(a => 
+    (a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.id.toLowerCase().includes(searchQuery.toLowerCase())) &&
+    (filterType === "Semua Tipe" || a.type === filterType)
+  );
 
   return (
     <div className="flex flex-col gap-6 pb-10 font-poppins text-left">
-      {/* 1. HEADER DENGAN TOMBOL MERAH */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Daftar Kerusakan Aset — {locationName}</h1>
-          <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Pilih aset untuk melihat riwayat atau laporkan kerusakan baru</p>
+        <div className="flex items-center gap-4">
+          <Link href="/buku-sakit" className="p-2 hover:bg-white rounded-full transition-all border border-transparent hover:border-gray-200 shadow-sm"><ChevronLeft size={24} /></Link>
+          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Daftar Kerusakan — {realLocationName || "Memuat..."}</h1>
         </div>
-        {/* Tombol Merah Sesuai Permintaan */}
-        <button 
-          onClick={() => setIsBrokenModalOpen(true)}
-          className="flex items-center justify-center gap-2 bg-[#EF4444] text-white px-5 py-3 rounded-xl font-bold text-sm hover:bg-red-600 transition-all shadow-md active:scale-95"
-        >
+        <button onClick={() => setIsBrokenModalOpen(true)} className="bg-[#EF4444] text-white px-5 py-3 rounded-xl font-bold text-sm shadow-md hover:bg-red-600 transition-all flex items-center gap-2">
           <Plus size={18} /> Tambah Kerusakan Aset
         </button>
       </div>
 
-      {/* 2. FILTER & SEARCH BAR */}
+      {/* Filter */}
       <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[300px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" size={18} />
-          <input 
-            type="text" 
-            placeholder="Cari kode/nama aset..." 
-            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary transition-all"
-          />
+          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Cari kode/nama aset..." className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:text-white" />
         </div>
-        <FilterSelect label="Tipe Aset" />
-        <FilterSelect label="Status" />
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-white outline-none">
+          <option>Semua Tipe</option><option>Generator</option><option>Pompa Air</option>
+        </select>
       </div>
 
-      {/* 3. TABEL DATA LENGKAP (7 KOLOM) */}
+      {/* Tabel */}
       <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-200 dark:border-[#334155] shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-white dark:bg-[#1E293B] border-b border-gray-100 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] text-[13px] font-bold uppercase tracking-wider">
-                <th className="px-6 py-4">Kode Aset</th>
-                <th className="px-6 py-4">Nama Aset</th>
-                <th className="px-6 py-4">Tipe Aset</th>
-                <th className="px-6 py-4">Spesifikasi</th>
-                <th className="px-6 py-4">Usia Aset</th>
-                <th className="px-6 py-4 text-center">Status</th>
-                <th className="px-6 py-4 text-center">Aksi</th>
+            <thead className="bg-[#F8FAFC] dark:bg-[#0F172A]/50 border-b border-gray-100 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] text-[13px] font-bold uppercase">
+              <tr>
+                <th className="px-6 py-4">Kode</th><th className="px-6 py-4">Nama Aset</th><th className="px-6 py-4">Tipe</th><th className="px-6 py-4">Spesifikasi</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-center">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              {assets.map((asset, i) => (
-                <tr key={i} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50 dark:hover:bg-[#334155]/50/50 transition-colors">
+            <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
+              {filteredAssets.map((asset) => (
+                <tr key={asset.id} className="hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-colors">
                   <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.id}</td>
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src={`https://placehold.co/36x36?text=${asset.id.split('-')[1]}`} alt="" />
-                      </div>
-                      <span className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8] font-medium">{asset.type}</td>
-                  <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8] font-medium">{asset.spec}</td>
-                  <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8] font-medium">{asset.age}</td>
+                  <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.name}</td>
+                  <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.type}</td>
+                  <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.specification}</td>
+                  <td className="px-6 py-5 text-center"><Badge status={asset.status} /></td>
                   <td className="px-6 py-5 text-center">
-                    <Badge status={asset.status} />
-                  </td>
-                  <td className="px-6 py-5 text-center">
-                    <Link 
-                      href={`/buku-sakit/${slug}/${asset.id}`}
-                      className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] hover:bg-teal-50 rounded-lg transition-all"
-                    >
-                      <Eye size={20} />
-                    </Link>
+                    <Link href={`/buku-sakit/${locationId}/${asset.id}?name=${realLocationName}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all">
+                      <Eye size={20} /></Link>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-
-        {/* 4. PAGINATION FOOTER */}
-        <div className="px-6 py-4 bg-white dark:bg-[#1E293B] border-t border-gray-100 dark:border-[#334155] flex items-center justify-between">
-          <span className="text-sm text-[#94A3B8] font-medium">Menampilkan 1-10 dari 234 aset</span>
-          <div className="flex gap-2">
-            <button className="px-4 py-2 border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 dark:hover:bg-[#334155]/50 font-bold transition-all">Sebelumnya</button>
-            <button className="w-10 h-10 bg-[#0D9488] text-white rounded-lg font-bold text-sm shadow-sm">1</button>
-            <button className="w-10 h-10 border border-gray-200 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] rounded-lg font-bold text-sm hover:bg-gray-50 dark:hover:bg-[#334155]/50 dark:hover:bg-[#334155]/50 transition-all">2</button>
-            <button className="px-4 py-2 border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 dark:hover:bg-[#334155]/50 font-bold transition-all">Selanjutnya</button>
-          </div>
-        </div>
       </div>
 
-      {/* 5. MODAL FORM LAPOR KERUSAKAN (IDENTIK DENGAN PERMINTAAN) */}
-      <Modal isOpen={isBrokenModalOpen} onClose={() => setIsBrokenModalOpen(false)} title="Laporkan Kerusakan Aset">
-        <form className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
-          {/* KIRI: DATA TEKS */}
+      {/* MODAL FORM */}
+      <Modal isOpen={isBrokenModalOpen} onClose={() => setIsBrokenModalOpen(false)} title="Laporkan Kerusakan">
+        <form onSubmit={handleSubmitReport} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
           <div className="lg:col-span-2 flex flex-col gap-5">
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pilih Aset</label>
-                <select className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] dark:bg-[#0F172A] dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary">
-                  {assets.map(a => <option key={a.id}>{a.id} - {a.name}</option>)}
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Pilih Aset</label>
+                <select required value={reportData.asset_id} onChange={(e) => setReportData({...reportData, asset_id: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white">
+                  <option value="">-- Pilih Aset --</option>
+                  {assets.map(a => <option key={a.id} value={a.id}>{a.id} - {a.name}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Tingkat Urgensi</label>
-                <select className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] dark:bg-[#0F172A] dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary">
-                  <option>Ringan</option>
-                  <option>Sedang</option>
-                  <option>Berat / Fatal</option>
-                </select>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Urgensi</label>
+                <select value={reportData.urgency} onChange={(e) => setReportData({...reportData, urgency: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white"><option>Berat (Mati Total)</option><option>Sedang</option><option>Ringan</option></select>
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Nama Pelapor</label>
-                <input type="text" placeholder="Ketik nama pelapor..." className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary" />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Tanggal Kejadian</label>
-                <input type="date" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary" />
-              </div>
+              <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Nama Pelapor</label><input required type="text" value={reportData.reporter_name} onChange={(e) => setReportData({...reportData, reporter_name: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
+              <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Tanggal</label><input required type="date" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
             </div>
-
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Judul Masalah</label>
-              <input type="text" placeholder="Contool: Kebocoran Seal" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary" />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Kronologi Kejadian</label>
-              <textarea rows={3} placeholder="Jelaskan detail kejadian..." className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary"></textarea>
-            </div>
+            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Masalah</label><input required type="text" value={reportData.issue_title} onChange={(e) => setReportData({...reportData, issue_title: e.target.value})} placeholder="Contoh: Mesin Bunyi Kasar" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
+            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Kronologi</label><textarea rows={3} value={reportData.description} onChange={(e) => setReportData({...reportData, description: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white"></textarea></div>
           </div>
-
-          {/* KANAN: FOTO & KIRIM */}
           <div className="lg:col-span-1 flex flex-col gap-5">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Aset Rusak</label>
-            <div className="w-full aspect-square bg-[#D6DEE6] rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300">
-              <ImageIcon size={48} className="text-[#94A3B8]" />
-              <span className="text-xs font-bold text-[#94A3B8]">Upload Foto</span>
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white">Foto Aset Rusak</label>
+            <div className="w-full aspect-square bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 overflow-hidden relative cursor-zoom-in" onClick={() => imagePreview && (setLightboxSrc(imagePreview), setIsLightboxOpen(true))}>
+              {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <><LucideImage size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Upload Foto</span></>}
             </div>
-            <button type="button" className="w-fit px-4 py-2 bg-[#F1F5F9] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#94A3B8]">
-                Pilih foto (.jpg, .png, .jpeg, .webp)
-             </button>
-
-            <div className="flex flex-col gap-3 mt-auto pt-6">
-              <button type="submit" className="w-full bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-red-600">Kirim Laporan</button>
-              <button type="button" onClick={() => setIsBrokenModalOpen(false)} className="w-full bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] py-3.5 rounded-xl font-bold text-sm">Batalkan</button>
-            </div>
+            <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/*" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">Pilih file</button>
+            <div className="flex flex-col gap-3 mt-auto pt-6"><button type="submit" className="w-full bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-red-600">Kirim Laporan</button><button type="button" onClick={() => setIsBrokenModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">Batal</button></div>
           </div>
         </form>
       </Modal>
+
+      {/* LIGHTBOX (POIN 6) */}
+      {isLightboxOpen && (
+        <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md" onClick={() => setIsLightboxOpen(false)}>
+          <img src={lightboxSrc} className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl animate-in zoom-in" />
+        </div>
+      )}
     </div>
   );
 }
 
-// Helper untuk Dropdown Filter
+// Helper untuk Dropdown
 function FilterSelect({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm text-[#475569] dark:text-[#94A3B8] font-bold cursor-pointer hover:border-primary transition-all shadow-sm">
-      <span>{label}</span>
-      <ChevronDown size={16} className="text-[#94A3B8]" />
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm text-[#475569] dark:text-white font-bold cursor-pointer transition-all shadow-sm">
+      <span>{label}</span><ChevronDown size={16} className="text-[#94A3B8]" />
     </div>
   );
 }

@@ -206,7 +206,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                     <td className="px-6 py-4 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.type}</td>
                     <td className="px-6 py-4 text-center"><Badge status={asset.status} /></td>
                     <td className="px-6 py-4 text-center">
-                      <Link href={`/registrasi-aset/${locationId}/${asset.id}`} className="p-2 inline-block text-[#64748B] hover:text-primary transition-all">
+                      <Link href={`/registrasi-aset/${locationId}/${asset.id}?name=${realLocationName}`} className="p-2 inline-block text-[#64748B] hover:text-primary transition-all">
                         <Eye size={18} />
                       </Link>
                     </td>
