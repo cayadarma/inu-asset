@@ -1,87 +1,136 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Sun, Moon, Bell, Menu } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "../../context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 
-export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
+// Komponen Breadcrumbs yang sudah dimodifikasi untuk menangkap Nama Lokasi, Nama Aset, dan Judul Masalah
+function Breadcrumbs() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  
+  // Tangkap semua "titipan" nama dari URL
+  const nameFromUrl = searchParams.get("name");       // Untuk Lokasi (LAGOON)
+  const assetName = searchParams.get("assetName");   // Untuk Nama Aset (GENSET...)
+  const issueTitle = searchParams.get("issueTitle"); // Untuk Judul Masalah (AGAK MREBET)
+
+  if (pathname === "/") return <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">Dashboard</span>;
+
+  const paths = pathname.split("/").filter((p) => p !== "");
+  let currentHref = "";
+
+  return (
+    <div className="flex items-center gap-2">
+      <Link href="/" className="text-[#64748B] dark:text-[#94A3B8] font-medium hover:text-primary transition-colors hidden md:inline font-poppins">INU Asset</Link>
+      <span className="text-[#94A3B8] hidden md:inline">/</span>
+      
+      {paths.map((path, index) => {
+        currentHref += `/${path}`;
+        const isLast = index === paths.length - 1;
+        
+        // 1. Label Default (Membersihkan teks URL)
+        let label = path.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+        
+        // 2. LOGIKA ANTI-UUID (MENGGANTI UUID DENGAN NAMA DARI URL)
+        // Jika index 1 (Lokasi) -> Pakai ?name=
+        if (index === 1 && nameFromUrl) {
+          label = nameFromUrl.toUpperCase();
+        }
+        // Jika index 2 (Aset) -> Pakai ?assetName=
+        if (index === 2 && assetName) {
+          label = assetName.toUpperCase();
+        }
+        // Jika index 3 (Detail Laporan) -> Pakai ?issueTitle=
+        if (index === 3 && issueTitle) {
+          label = issueTitle.toUpperCase();
+        }
+
+        // 3. LOGIKA PERSISTENCE (Agar parameter tidak hilang saat diklik)
+        let finalHref = currentHref;
+        const params = [];
+        if (nameFromUrl) params.push(`name=${nameFromUrl}`);
+        if (assetName) params.push(`assetName=${assetName}`);
+        if (issueTitle) params.push(`issueTitle=${issueTitle}`);
+        
+        if (params.length > 0) {
+          finalHref += `?${params.join("&")}`;
+        }
+
+        return (
+          <React.Fragment key={index}>
+            {isLast ? (
+              <span className="text-[#0F172A] dark:text-[#F8FAFC] font-bold truncate max-w-[150px] md:max-w-none">
+                {label}
+              </span>
+            ) : (
+              <Link 
+                href={finalHref} 
+                className="text-[#64748B] dark:text-[#94A3B8] font-medium hover:text-primary transition-colors whitespace-nowrap"
+              >
+                {label}
+              </Link>
+            )}
+            {!isLast && <span className="text-[#94A3B8]">/</span>}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { isDarkMode, toggleTheme } = useTheme();
   const [notifCount, setNotifCount] = useState(0);
 
+  // Efek Real-time Notifikasi
   useEffect(() => {
-    const channel = supabase.channel('realtime-notif').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'damage_reports' }, () => setNotifCount((prev) => prev + 1)).subscribe();
+    const channel = supabase
+      .channel('realtime-notif')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'damage_reports' }, () => setNotifCount(prev => prev + 1))
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
-
-  const generateBreadcrumbs = () => {
-    if (pathname === "/") return [{ label: "Dashboard", href: "/" }];
-    const paths = pathname.split("/").filter((path) => path !== "");
-    let currentHref = "";
-    const nameFromUrl = searchParams.get("name");
-
-    return paths.map((path, index) => {
-      currentHref += `/${path}`;
-      let label = path.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-      let finalHref = currentHref;
-
-      if (paths[0] === "buku-sakit") {
-        // Level 1: LAGOON
-        if (index === 1 && nameFromUrl) {
-          label = nameFromUrl.toUpperCase();
-          finalHref = `${currentHref}?name=${nameFromUrl}`;
-        }
-        // Level 2: ID Aset (Contoh: AST-001)
-        if (index === 2) {
-          label = path.toUpperCase();
-          finalHref = `${currentHref}?name=${nameFromUrl}`;
-        }
-        // Level 3: Detail Laporan
-        if (index === 3) {
-          label = "DETAIL LAPORAN";
-        }
-      }
-
-      return { label, href: finalHref };
-    });
-  };
-
-  const breadcrumbs = generateBreadcrumbs();
 
   return (
     <header className="h-[72px] bg-white dark:bg-[#1E293B] border-b border-gray-100 dark:border-[#334155] px-4 md:px-8 flex justify-between items-center sticky top-0 z-40 transition-colors duration-300 font-poppins">
       <div className="flex items-center gap-4">
-        <button onClick={onMenuClick} className="p-2 lg:hidden text-secondary dark:text-[#94A3B8] hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg"><Menu size={24} /></button>
-        <div className="flex items-center gap-2 text-[14px]">
-          <Link href="/" className="text-[#64748B] dark:text-[#94A3B8] font-medium hover:text-primary transition-colors hidden md:inline">INU Asset</Link>
-          <span className="text-[#94A3B8] hidden md:inline">/</span>
-          {breadcrumbs.map((crumb, index) => (
-            <React.Fragment key={index}>
-              {index === breadcrumbs.length - 1 ? (
-                <span className="text-[#0F172A] dark:text-[#F8FAFC] font-bold">{crumb.label}</span>
-              ) : (
-                <Link href={crumb.href} className="text-[#64748B] dark:text-[#94A3B8] font-medium hover:text-primary transition-colors">{crumb.label}</Link>
-              )}
-              {index < breadcrumbs.length - 1 && <span className="text-[#94A3B8]">/</span>}
-            </React.Fragment>
-          ))}
-        </div>
+        <button onClick={onMenuClick} className="p-2 lg:hidden text-secondary dark:text-[#94A3B8] hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg transition-colors">
+          <Menu size={24} />
+        </button>
+        
+        <Suspense fallback={<span className="text-sm text-gray-400 italic">Memuat...</span>}>
+          <Breadcrumbs />
+        </Suspense>
       </div>
+
       <div className="flex items-center gap-3 md:gap-6">
-        <div onClick={toggleTheme} className="flex items-center gap-2 md:gap-3 bg-[#F1F5F9] dark:bg-[#334155] p-1 rounded-full border border-gray-100 dark:border-[#475569] cursor-pointer">
+        {/* Dark Mode Toggle */}
+        <div 
+          onClick={toggleTheme}
+          className="flex items-center gap-2 md:gap-3 bg-[#F1F5F9] dark:bg-[#334155] p-1 rounded-full border border-gray-100 dark:border-[#475569] cursor-pointer"
+        >
           <div className={`p-1.5 ${!isDarkMode ? 'text-orange-500' : 'text-gray-500'}`}><Sun size={14} /></div>
           <div className="w-10 h-5 bg-white dark:bg-[#0F172A] rounded-full shadow-sm flex items-center px-1">
              <div className={`w-3.5 h-3.5 rounded-full transition-all duration-300 ${isDarkMode ? 'translate-x-4 bg-[#37BAAE]' : 'translate-x-0 bg-[#E2E8F0]'}`}></div>
           </div>
           <div className={`p-1.5 ${isDarkMode ? 'text-yellow-300' : 'text-gray-500'}`}><Moon size={14} /></div>
         </div>
-        <Link href="/notifikasi" onClick={() => setNotifCount(0)} className="relative w-10 h-10 bg-[#F1F5F9] dark:bg-[#334155] rounded-full flex items-center justify-center hover:bg-gray-200 dark:hover:bg-[#475569]">
+
+        {/* Bell Notifikasi */}
+        <Link 
+          href="/notifikasi"
+          onClick={() => setNotifCount(0)}
+          className="relative w-10 h-10 bg-[#F1F5F9] dark:bg-[#334155] rounded-full flex items-center justify-center transition-all hover:bg-gray-200 dark:hover:bg-[#475569]"
+        >
           <Bell size={20} className="text-[#0F172A] dark:text-[#F8FAFC]" />
-          {notifCount > 0 && <div className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#EF4444] rounded-full border-2 border-white dark:border-[#1E293B] text-[10px] text-white flex items-center justify-center font-bold animate-bounce">{notifCount}</div>}
+          {notifCount > 0 && (
+            <div className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#EF4444] rounded-full border-2 border-white dark:border-[#1E293B] text-[10px] text-white flex items-center justify-center font-bold animate-bounce">
+              {notifCount}
+            </div>
+          )}
         </Link>
       </div>
     </header>

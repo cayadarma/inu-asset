@@ -169,8 +169,8 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                     </td>
                     <td className="px-6 py-5 text-center">
                       {/* MODIFIKASI: Ubah Button menjadi Link ke halaman rute baru */}
-                      <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${locationName}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] hover:bg-teal-50 rounded-lg transition-all">
-                        <Eye size={20} />
+                      <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${locationName}&assetName=${asset?.name}&issueTitle=${report.issue_title}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all">
+                          <Eye size={20} />
                       </Link>
                     </td>
                   </tr>
