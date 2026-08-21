@@ -20,20 +20,32 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
 
   const generateBreadcrumbs = () => {
     if (pathname === "/") return [{ label: "Dashboard", href: "/" }];
-    const paths = pathname.split("/").filter((p) => p !== "");
+    const paths = pathname.split("/").filter((path) => path !== "");
     let currentHref = "";
     const nameFromUrl = searchParams.get("name");
 
     return paths.map((path, index) => {
       currentHref += `/${path}`;
       let label = path.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+      let finalHref = currentHref;
 
-      // Jika ini posisi lokasi (index 1) dan ada parameter name di URL, pakai namanya!
-      if ((paths[0] === "registrasi-aset" || paths[0] === "buku-sakit") && index === 1 && nameFromUrl) {
-        label = nameFromUrl.toUpperCase();
+      if (paths[0] === "buku-sakit") {
+        // Level 1: LAGOON
+        if (index === 1 && nameFromUrl) {
+          label = nameFromUrl.toUpperCase();
+          finalHref = `${currentHref}?name=${nameFromUrl}`;
+        }
+        // Level 2: ID Aset (Contoh: AST-001)
+        if (index === 2) {
+          label = path.toUpperCase();
+          finalHref = `${currentHref}?name=${nameFromUrl}`;
+        }
+        // Level 3: Detail Laporan
+        if (index === 3) {
+          label = "DETAIL LAPORAN";
+        }
       }
 
-      const finalHref = (index === 1 && nameFromUrl) ? `${currentHref}?name=${nameFromUrl}` : currentHref;
       return { label, href: finalHref };
     });
   };

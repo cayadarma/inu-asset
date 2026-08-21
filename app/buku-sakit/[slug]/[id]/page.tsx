@@ -168,12 +168,10 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                       <span className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-black rounded uppercase">{report.urgency || 'Sedang'}</span>
                     </td>
                     <td className="px-6 py-5 text-center">
-                      <button 
-                        onClick={() => { setSelectedReport(report); setIsViewDetailOpen(true); }}
-                        className="p-2 text-[#64748B] hover:text-[#0D9488] transition-all"
-                      >
+                      {/* MODIFIKASI: Ubah Button menjadi Link ke halaman rute baru */}
+                      <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${locationName}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] hover:bg-teal-50 rounded-lg transition-all">
                         <Eye size={20} />
-                      </button>
+                      </Link>
                     </td>
                   </tr>
                 ))}

@@ -75,38 +75,53 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
   // --- FUNGSI KIRIM LAPORAN (POIN 4: Masuk Notif & Update Status) ---
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reportData.asset_id) return alert("Pilih aset!");
-    setIsLoading(true);
 
-    let finalImageUrl = "";
-    if (imageFile) {
-      const fileName = `${Date.now()}-damage-${reportData.asset_id}`;
-      const { data: uploadData } = await supabase.storage.from("asset-images").upload(fileName, imageFile);
-      if (uploadData) {
-        const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
-        finalImageUrl = publicUrl;
+    // CEK GANDA: Jika sedang loading, hentikan fungsi agar tidak jalan dua kali
+    if (isLoading) return; 
+
+    if (!reportData.asset_id) return alert("Pilih aset terlebih dahulu!");
+
+    setIsLoading(true); // Kunci tombol segera
+
+    try {
+      let finalImageUrl = "";
+      if (imageFile) {
+        const fileName = `${Date.now()}-report-${reportData.asset_id}`;
+        const { data: uploadData } = await supabase.storage.from("asset-images").upload(fileName, imageFile);
+        if (uploadData) {
+          const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+          finalImageUrl = publicUrl;
+        }
       }
-    }
 
-    const { error: reportError } = await supabase.from("damage_reports").insert([{
-      asset_id: reportData.asset_id,
-      reporter_name: reportData.reporter_name,
-      issue_title: reportData.issue_title,
-      description: reportData.description,
-      urgency: reportData.urgency,
-      image_url: finalImageUrl
-    }]);
+      // 1. Simpan Laporan
+      const { error: reportError } = await supabase.from("damage_reports").insert([{
+        asset_id: reportData.asset_id,
+        reporter_name: reportData.reporter_name,
+        issue_title: reportData.issue_title,
+        description: reportData.description,
+        urgency: reportData.urgency,
+        image_url: finalImageUrl
+      }]);
 
-    if (!reportError) {
-      // OTOMATIS GANTI STATUS ASET JADI RUSAK
-      await supabase.from("assets").update({ status: "Rusak" }).eq("id", reportData.asset_id);
-      alert("Laporan terkirim! Status aset diperbarui.");
-      setIsBrokenModalOpen(false);
-      setImagePreview(null);
-      setReportData({ asset_id: "", urgency: "Sedang", reporter_name: "", issue_title: "", description: "" });
-      fetchAssets();
+      if (!reportError) {
+        // 2. Update Status Aset
+        await supabase.from("assets").update({ status: "Rusak" }).eq("id", reportData.asset_id);
+        
+        alert("Laporan terkirim!");
+        setIsBrokenModalOpen(false);
+        setImagePreview(null);
+        setReportData({ asset_id: "", urgency: "Sedang", reporter_name: "", issue_title: "", description: "" });
+        fetchAssets();
+      } else {
+        alert("Gagal: " + reportError.message);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      // Buka kunci tombol hanya setelah semua proses selesai
+      setIsLoading(false); 
     }
-    setIsLoading(false);
   };
 
   const filteredAssets = assets.filter(a => 
@@ -197,7 +212,30 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
             </div>
             <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/*" />
             <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">Pilih file</button>
-            <div className="flex flex-col gap-3 mt-auto pt-6"><button type="submit" className="w-full bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-red-600">Kirim Laporan</button><button type="button" onClick={() => setIsBrokenModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">Batal</button></div>
+            <div className="flex flex-col gap-3 mt-auto pt-6">
+              <button 
+                type="submit" 
+                disabled={isLoading} // TOMBOL MATI JIKA SEDANG LOADING
+                className={`w-full py-4 rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2
+                  ${isLoading 
+                    ? "bg-gray-400 cursor-not-allowed opacity-70" // Tampilan saat loading
+                    : "bg-[#EF4444] text-white hover:bg-red-600 active:scale-95" // Tampilan normal
+                  }`}
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    Mengirim...
+                  </>
+                ) : (
+                  "Kirim Laporan"
+                )}
+              </button>
+              
+              <button type="button" disabled={isLoading} onClick={() => setIsBrokenModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm disabled:opacity-50">
+                Batalkan
+              </button>
+            </div>
           </div>
         </form>
       </Modal>
