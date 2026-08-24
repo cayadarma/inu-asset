@@ -1,7 +1,7 @@
 import React from "react";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
-import InteractiveChecklist from "@/components/maintenance/InteractiveChecklist"; // Import baru
+import InteractiveChecklist from "@/components/maintenance/InteractiveChecklist";
 
 export default async function ChecklistPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

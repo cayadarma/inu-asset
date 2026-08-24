@@ -52,11 +52,11 @@ export default function MaintenancePage() {
           <p className="text-[#475569] dark:text-[#94A3B8] text-sm">Ikhtisar jadwal dan rencana pemeliharaan aset perusahaan</p>
         </div>
         
-        <div className="flex bg-[#E2E8F0] p-1 rounded-xl">
-          <button className="px-6 py-2 bg-white dark:bg-[#1E293B] rounded-lg text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] dark:text-[#F8FAFC]shadow-sm">
+        <div className="flex bg-[#E2E8F0] dark:bg-[#334155] p-1 rounded-xl">
+          <button className="px-6 py-2 bg-white dark:bg-[#1E293B] rounded-lg text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] shadow-sm">
             Pemeliharaan Pencegahan
           </button>
-          <Link href="/pemeliharaan/korektif" className="px-6 py-2 rounded-lg text-sm font-medium text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:text-[#F8FAFC] dark:text-[#F8FAFC]transition-all">
+          <Link href="/pemeliharaan/korektif" className="px-6 py-2 rounded-lg text-sm font-medium text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]">
             Pemeliharaan Korektif
           </Link>
         </div>
