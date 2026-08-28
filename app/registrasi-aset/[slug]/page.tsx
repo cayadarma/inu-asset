@@ -16,7 +16,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
 
   // --- STATE DATA ---
   const [assets, setAssets] = useState<any[]>([]);
-  const [availableTypes, setAvailableTypes] = useState<any[]>([]); // List tipe dari DB
+  const [availableTypes, setAvailableTypes] = useState<any[]>([]);
   const [realLocationName, setRealLocationName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -32,7 +32,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   const [newAsset, setNewAsset] = useState({
     id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi"
   });
-  const [isNewType, setIsNewType] = useState(false); // Melacak apakah user ketik tipe baru
+  const [isNewType, setIsNewType] = useState(false);
 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -74,7 +74,6 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
     setIsLoading(false);
   };
 
-  // AMBIL MASTER DATA TIPE (POIN 2 & 3)
   const fetchTypes = async () => {
     const { data } = await supabase.from("asset_types").select("name").order("name", { ascending: true });
     if (data) setAvailableTypes(data);
@@ -85,16 +84,18 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
     fetchTypes();
   }, [locationId]);
 
-  // --- LOGIKA FILTERING ---
+  // --- LOGIKA FILTERING (DIPASTIKAN BERJALAN) ---
   const filteredAssets = assets.filter((asset) => {
-    const matchesSearch = asset.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          asset.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = 
+      asset.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      asset.id.toLowerCase().includes(searchQuery.toLowerCase());
+    
     const matchesType = filterType === "Semua Tipe" || asset.type === filterType;
     const matchesStatus = filterStatus === "Semua Status" || asset.status === filterStatus;
+    
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  // --- LOGIKA OLAH FOTO ---
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     let file = e.target.files?.[0];
     if (!file) return;
@@ -115,12 +116,10 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
     }
   };
 
-  // --- FUNGSI SIMPAN ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // 1. Jika User mengetik tipe baru, simpan ke tabel asset_types dulu (POIN 1)
     if (isNewType && newAsset.type) {
       await supabase.from("asset_types").insert([{ name: newAsset.type }]);
     }
@@ -135,7 +134,6 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       }
     }
 
-    // 2. Simpan Aset
     const { error } = await supabase.from("assets").insert([{ ...newAsset, location_id: locationId, image_url: finalImageUrl }]);
     
     if (error) alert("Gagal: " + error.message);
@@ -145,7 +143,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       setNewAsset({ id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi" });
       setIsNewType(false);
       fetchAssets();
-      fetchTypes(); // Refresh list tipe agar pilihan baru muncul di filter
+      fetchTypes();
     }
     setIsLoading(false);
   };
@@ -168,14 +166,19 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
         </button>
       </div>
 
-      {/* FILTER BAR DINAMIS (POIN 2 & 3) */}
+      {/* FILTER BAR */}
       <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[300px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" size={18} />
-          <input type="text" placeholder="Cari kode/nama aset..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary transition-all dark:text-white" />
+          <input 
+            type="text" 
+            placeholder="Cari kode/nama aset..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary transition-all dark:text-white" 
+          />
         </div>
         
-        {/* Filter Tipe Mengambil dari Database */}
         <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
           <option>Semua Tipe</option>
           {availableTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
@@ -186,34 +189,14 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
         </select>
       </div>
 
-      {/* Tabel */}
+      {/* Tabel Section */}
       <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-gray-200 dark:border-[#334155] shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          {/* 1. KONDISI LOADING */}
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center p-20 gap-4">
-              <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-              <p className="text-sm font-medium text-[#94A3B8]">Sedang memproses data...</p>
-            </div>
-          ) : 
-          
-          /* 2. KONDISI DATA KOSONG (POIN UTAMA ANDA) */
-          assets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-20 text-center gap-4">
-              {/* Ikon Box Terbuka / Kosong */}
-              <div className="w-20 h-20 bg-[#F8FAFC] dark:bg-[#0F172A] rounded-full flex items-center justify-center text-[#94A3B8] border border-gray-100 dark:border-[#334155]">
-                <Plus size={40} className="rotate-45" /> 
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC]">Belum ada aset di lokasi ini</h3>
-                <p className="text-sm text-[#94A3B8] max-w-[300px] mt-1">
-                  Silakan tambahkan aset baru melalui tombol "Tambah Aset" di pojok kanan atas.
-                </p>
-              </div>
-            </div>
+            <div className="p-20 text-center text-[#94A3B8]">Memproses data...</div>
+          ) : filteredAssets.length === 0 ? (
+            <div className="p-20 text-center text-[#94A3B8]">Aset tidak ditemukan.</div>
           ) : (
-
-            /* 3. TAMPILAN TABEL JIKA ADA DATA */
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#F8FAFC] dark:bg-[#0F172A]/50 border-b border-gray-100 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] text-sm font-bold">
@@ -225,7 +208,8 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
-                {assets.map((asset) => (
+                {/* PERBAIKAN: Menggunakan filteredAssets, bukan assets */}
+                {filteredAssets.map((asset) => (
                   <tr key={asset.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/30 transition-colors">
                     <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.id}</td>
                     <td className="px-6 py-5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{asset.name}</td>
@@ -244,14 +228,13 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
         </div>
       </div>
 
-      {/* MODAL TAMBAH ASET DENGAN LOGIKA TIPE DINAMIS */}
+      {/* Modal Tambah Aset & Lightbox tetap sama */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Informasi Utama Aset">
         <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
           <div className="lg:col-span-2 flex flex-col gap-5">
              <FormInput label="Kode Aset" placeholder="Contoh: AST-001" value={newAsset.id} onChange={(e: any) => setNewAsset({...newAsset, id: e.target.value})} />
              <FormInput label="Nama Aset" placeholder="Masukkan nama aset" value={newAsset.name} onChange={(e: any) => setNewAsset({...newAsset, name: e.target.value})} />
              
-             {/* Dropdown Tipe (POIN 1) */}
              <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Tipe Aset</label>
                 <div className="relative">
@@ -282,13 +265,13 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                 <input type="text" value={realLocationName} disabled className="w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm text-[#94A3B8] font-bold" />
              </div>
           </div>
-          <div className="lg:col-span-1 flex flex-col gap-5">
+          <div className="lg:col-span-1 flex flex-col gap-5 text-left">
              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Aset</label>
               <div className={`w-full aspect-square bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 dark:border-[#334155] overflow-hidden relative ${imagePreview ? 'cursor-zoom-in' : ''}`} onClick={() => imagePreview && setIsPreviewFullOpen(true)}>
                 {imagePreview ? <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /> : <><ImageIcon size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Preview Foto</span></>}
               </div>
              <input type="file" className="hidden" ref={fileInputRef} onChange={handleImageChange} accept=".jpg,.jpeg,.png,.svg,.heic" />
-             <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200">Pilih Foto</button>
+             <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">Pilih Foto</button>
              <div className="flex flex-col gap-3 mt-auto pt-10">
                 <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">Simpan Aset</button>
                 <button type="button" onClick={() => setIsModalOpen(false)} className="w-full bg-[#EF4444] text-white py-4 rounded-xl font-bold text-sm shadow-md">Batalkan</button>
@@ -311,7 +294,14 @@ function FormInput({ label, placeholder, value, type = "text", disabled = false,
   return (
     <div className="flex flex-col gap-2 text-left">
       <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{label}</label>
-      <input type={type} disabled={disabled} placeholder={placeholder} value={value} onChange={onChange} className={`w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary ${disabled ? 'bg-[#F8FAFC] dark:bg-[#0F172A] cursor-not-allowed' : 'bg-white dark:bg-[#1E293B] dark:text-white'}`} />
+      <input 
+        type={type} 
+        disabled={disabled} 
+        placeholder={placeholder} 
+        value={value}
+        onChange={onChange}
+        className={`w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary ${disabled ? 'bg-[#F8FAFC] dark:bg-[#0F172A] cursor-not-allowed' : 'bg-white dark:bg-[#1E293B] dark:text-white'}`} 
+      />
     </div>
   );
 }

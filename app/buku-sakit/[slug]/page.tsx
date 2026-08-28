@@ -223,7 +223,7 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
               {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <><LucideImage size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Upload Foto</span></>}
             </div>
             <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/*" />
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">Pilih file</button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">Pilih Foto (.jpg, .png, .jpeg, .heic, .webp)</button>
             <div className="flex flex-col gap-3 mt-auto pt-6">
               <button type="submit" disabled={isLoading} className={`w-full py-4 rounded-xl font-bold text-sm shadow-md transition-all ${isLoading ? "bg-gray-400" : "bg-[#EF4444] text-white"}`}>Kirim Laporan</button>
               <button type="button" onClick={() => setIsBrokenModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">Batal</button>

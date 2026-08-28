@@ -11,6 +11,8 @@ import { supabase } from "@/lib/supabase";
 function CorrectiveContent() {
   const searchParams = useSearchParams();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedWO, setSelectedWO] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   // --- STATE DATA REAL ---
@@ -22,27 +24,24 @@ function CorrectiveContent() {
   const [isNewCategory, setIsNewType] = useState(false);
   const [formData, setFormData] = useState({
     id: "",
-    tgl: new Date().toISOString().split('T')[0], // 1. Tgl otomatis hari ini
-    kategori: "Perbaikan", // 2. Kategori
-    asset_id: "", // 3. Kode
-    trouble: "", // 4. Trouble
-    jenis_barang: "", // 5. Jenis Barang (Auto)
-    pengawas: "", // 6. Pengawas
-    oleh: "", // 7. Pelaksana
-    priority: "TINGGI", // 8. Prioritas
-    costPart: 0, // 9. Biaya Part
-    costService: 0, // 9. Biaya Jasa
-    tindak_lanjut: "" // 10. Tindak Lanjut
+    tgl: new Date().toISOString().split('T')[0],
+    kategori: "Perbaikan",
+    asset_id: "",
+    trouble: "",
+    jenis_barang: "", 
+    pengawas: "",
+    oleh: "",
+    priority: "TINGGI",
+    costPart: 0,
+    costService: 0,
+    tindak_lanjut: ""
   });
 
   // Ambil data dari database
   const fetchData = async () => {
     setIsLoading(true);
-    // Ambil WO
     const { data: woData } = await supabase.from("work_orders").select(`*, assets(name, type, location_id, locations(name))`).order("created_at", { ascending: false });
-    // Ambil Aset
     const { data: assetData } = await supabase.from("assets").select("id, name, type");
-    // Ambil Staff
     const { data: staffData } = await supabase.from("staff").select("name, role");
 
     if (woData) setWorkOrders(woData);
@@ -54,12 +53,11 @@ function CorrectiveContent() {
   useEffect(() => {
     fetchData();
 
-    // Logika Deep Linking dari Buku Sakit / Notif
+    // Logika Deep Linking dari URL
     const assetId = searchParams.get("assetId");
     const problem = searchParams.get("problem");
     if (searchParams.get("openModal") === "true") {
       setIsAddModalOpen(true);
-      // Poin 4: Ambil judul kerusakan dari URL jika ada
       setFormData(prev => ({ 
         ...prev, 
         asset_id: assetId || "", 
@@ -69,13 +67,18 @@ function CorrectiveContent() {
     }
   }, [searchParams]);
 
-  // Poin 5: Update Jenis Barang otomatis saat Kode Aset dipilih
+  // --- PERBAIKAN UTAMA: AUTO FILL JENIS BARANG ---
   useEffect(() => {
-    const selected = assetsList.find(a => a.id === formData.asset_id);
-    if (selected) {
-      setFormData(prev => ({ ...prev, jenis_barang: selected.type }));
+    // Kita cari aset di dalam list berdasarkan ID yang dipilih
+    const selectedAsset = assetsList.find(a => a.id === formData.asset_id);
+    
+    if (selectedAsset) {
+      setFormData(prev => ({ 
+        ...prev, 
+        jenis_barang: selectedAsset.type || "Tidak diketahui" 
+      }));
     }
-  }, [formData.asset_id]);
+  }, [formData.asset_id, assetsList]); // Tambahkan assetsList di sini agar saat data DB datang, fungsi langsung jalan
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +110,7 @@ function CorrectiveContent() {
   };
 
   return (
-    <div className="flex flex-col gap-8 pb-10 font-poppins text-left">
+    <div className="flex flex-col gap-8 pb-10 font-poppins text-left transition-colors duration-300">
       {/* 1. HEADER */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
@@ -115,7 +118,7 @@ function CorrectiveContent() {
           <p className="text-[#475569] dark:text-[#94A3B8] text-sm">Kelola tiket perbaikan dan Work Order aset secara reaktif</p>
         </div>
         <div className="flex bg-[#E2E8F0] dark:bg-[#334155] p-1 rounded-xl">
-          <Link href="/pemeliharaan" className="px-6 py-2 rounded-lg text-sm font-medium text-[#475569] dark:text-[#94A3B8]">Pemeliharaan Pencegahan</Link>
+          <Link href="/pemeliharaan" className="px-6 py-2 rounded-lg text-sm font-medium text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]">Pemeliharaan Pencegahan</Link>
           <button className="px-6 py-2 bg-white dark:bg-[#1E293B] rounded-lg text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] shadow-sm">Pemeliharaan Korektif</button>
         </div>
       </div>
@@ -124,7 +127,7 @@ function CorrectiveContent() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <StatItem label="Total WO" val={workOrders.length} color="text-[#0F172A] dark:text-[#F8FAFC]" />
         <StatItem label="Dalam Proses" val={workOrders.filter(w => w.status === 'Dalam Proses').length} color="text-[#3B82F6]" />
-        <StatItem label="Suku Cadang" val={workOrders.filter(w => w.status === 'Menunggu Part').length} color="text-[#F59E0B]" />
+        <StatItem label="Menunggu Sparepart" val={workOrders.filter(w => w.status === 'Menunggu Part').length} color="text-[#F59E0B]" />
         <StatItem label="Selesai" val={workOrders.filter(w => w.status === 'Selesai').length} color="text-[#10B981]" />
       </div>
 
@@ -137,20 +140,20 @@ function CorrectiveContent() {
           </div>
           <FilterSelect label="Prioritas" /><FilterSelect label="Status" /><FilterSelect label="Lokasi" />
         </div>
-        <button onClick={() => setIsAddModalOpen(true)} className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95">
+        <button onClick={() => setIsAddModalOpen(true)} className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
           <Plus size={18} /> Buat Work Order
         </button>
       </div>
 
-      {/* 4. TABEL DATA REAL */}
+      {/* 4. TABEL */}
       <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           {isLoading ? (
-            <p className="p-10 text-center text-[#94A3B8]">Memuat...</p>
+            <p className="p-10 text-center text-[#94A3B8] italic">Memproses data...</p>
           ) : workOrders.length === 0 ? (
             <div className="p-20 text-center flex flex-col items-center gap-4">
-               <AlertCircle size={48} className="text-gray-200" />
-               <p className="text-[#94A3B8] font-bold">Belum ada work order! Klik tombol Tambah Work Order untuk membuat work order baru!</p>
+               <AlertCircle size={48} className="text-gray-200 dark:text-gray-700" />
+               <p className="text-[#94A3B8] font-bold">Belum ada work order aktif.</p>
             </div>
           ) : (
             <table className="w-full text-left text-[13px]">
@@ -186,67 +189,58 @@ function CorrectiveContent() {
         </div>
       </div>
 
-      {/* 5. MODAL TERBITKAN WO (SESUAI 9 INSTRUKSI) */}
+      {/* 5. MODAL PENERBITAN WO */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Penerbitan Work Order">
         <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
           <div className="lg:col-span-2 flex flex-col gap-5">
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Pilih Kode Aset (KODE)</label>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Pilih Kode Aset (KODE)</label>
                 <select required value={formData.asset_id} onChange={e => setFormData({...formData, asset_id: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white">
                   <option value="">-- Pilih Kode --</option>
                   {assetsList.map(a => <option key={a.id} value={a.id}>{a.id} - {a.name}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Tanggal Terbit (TGL)</label>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Tanggal Terbit (TGL)</label>
                 <input type="date" value={formData.tgl} onChange={e => setFormData({...formData, tgl: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white" />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Kategori (Dropdown)</label>
-                <div className="relative">
-                   <select value={isNewCategory ? "custom" : formData.kategori} onChange={e => { if(e.target.value==="custom"){ setIsNewType(true); setFormData({...formData, kategori: ""}); } else { setIsNewType(false); setFormData({...formData, kategori: e.target.value}); } }} className="w-full p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none">
-                     <option>Perbaikan</option><option>Ganti Aset</option><option value="custom">+ Tambah Baru</option>
-                   </select>
-                   {isNewCategory && <input type="text" placeholder="Ketik kategori baru..." value={formData.kategori} onChange={e => setFormData({...formData, kategori: e.target.value})} className="mt-2 w-full p-3 border-2 border-primary rounded-xl text-sm" autoFocus />}
-                </div>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Kategori</label>
+                <select value={formData.kategori} onChange={e => setFormData({...formData, kategori: e.target.value})} className="w-full p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none dark:text-white">
+                    <option>Perbaikan</option><option>Ganti Aset</option>
+                </select>
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Jenis Barang (Auto)</label>
-                <input type="text" value={formData.jenis_barang} disabled className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm text-[#94A3B8]" />
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Jenis Barang (Auto)</label>
+                <input type="text" value={formData.jenis_barang} disabled className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm text-[#94A3B8] font-black cursor-not-allowed" placeholder="Otomatis terisi..." />
               </div>
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] dark:text-white">Masalah (TROUBLE)</label>
-              <input required type="text" value={formData.trouble} onChange={e => setFormData({...formData, trouble: e.target.value})} placeholder="Ketik masalah..." className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" />
+              <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Masalah (TROUBLE)</label>
+              <input required type="text" value={formData.trouble} onChange={e => setFormData({...formData, trouble: e.target.value})} placeholder="Ketik masalah yang ditemukan..." className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" />
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] dark:text-white">Tindakan Perbaikan (TINDAK LANJUT)</label>
-              <textarea 
-                rows={3} 
-                value={formData.tindak_lanjut} 
-                onChange={e => setFormData({...formData, tindak_lanjut: e.target.value})}
-                placeholder="Apa tindakan yang akan/sudah dilakukan?" 
-                className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none bg-white dark:bg-[#0F172A] dark:text-white font-medium"
-              ></textarea>
+              <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Instruksi Kerja (TINDAK LANJUT)</label>
+              <textarea rows={3} value={formData.tindak_lanjut} onChange={e => setFormData({...formData, tindak_lanjut: e.target.value})} placeholder="Apa tindakan yang harus dilakukan teknisi?" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none bg-white dark:bg-[#0F172A] dark:text-white"></textarea>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-[#0F172A] dark:text-white">Pengawas (Dropdown)</label>
-                  <select required value={formData.pengawas} onChange={e => setFormData({...formData, pengawas: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none">
+                  <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Pengawas (Staff)</label>
+                  <select required value={formData.pengawas} onChange={e => setFormData({...formData, pengawas: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none dark:text-white">
                     <option value="">-- Pilih Pengawas --</option>
                     {staffList.filter(s => s.role === 'Staff').map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
                   </select>
                </div>
                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-[#0F172A] dark:text-white">Pelaksana (OLEH)</label>
-                  <select required value={formData.oleh} onChange={e => setFormData({...formData, oleh: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none">
+                  <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Pelaksana (OLEH)</label>
+                  <select required value={formData.oleh} onChange={e => setFormData({...formData, oleh: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none dark:text-white">
                     <option value="">-- Pilih Pelaksana --</option>
                     {staffList.filter(s => s.role === 'Operator').map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
                   </select>
@@ -254,39 +248,61 @@ function CorrectiveContent() {
             </div>
           </div>
 
-          <div className="lg:col-span-1 flex flex-col gap-6 bg-[#F8FAFC] dark:bg-[#0F172A] p-6 rounded-2xl border border-gray-100 dark:border-[#334155]">
-            <h4 className="font-bold text-[#0F172A] dark:text-white text-sm border-b dark:border-[#334155] pb-2 uppercase">Eksekusi & Biaya</h4>
-            <div className="flex flex-col gap-4">
-               <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-bold text-[#94A3B8] uppercase">Prioritas</label>
-                  <select value={formData.priority} onChange={e => setFormData({...formData, priority: e.target.value})} className="p-2.5 border dark:border-[#334155] rounded-lg text-sm dark:bg-[#1E293B] dark:text-white">
-                    <option>TINGGI</option><option>SEDANG</option><option>RENDAH</option>
-                  </select>
-               </div>
-               <div className="flex flex-col gap-1"><label className="text-[11px] font-bold text-[#94A3B8] uppercase">Estimasi Biaya Part</label><input type="number" value={formData.costPart} onChange={e => setFormData({...formData, costPart: parseInt(e.target.value) || 0})} className="p-2 border dark:border-[#334155] rounded-lg text-sm dark:bg-[#1E293B] dark:text-white" /></div>
-               <div className="flex flex-col gap-1"><label className="text-[11px] font-bold text-[#94A3B8] uppercase">Estimasi Biaya Jasa</label><input type="number" value={formData.costService} onChange={e => setFormData({...formData, costService: parseInt(e.target.value) || 0})} className="p-2 border dark:border-[#334155] rounded-lg text-sm dark:bg-[#1E293B] dark:text-white" /></div>
+            <div className="lg:col-span-1 flex flex-col gap-6 bg-[#F8FAFC] dark:bg-[#0F172A] p-6 rounded-2xl border border-gray-100 dark:border-[#334155]">
+              <h4 className="font-bold text-[#0F172A] dark:text-white text-sm border-b dark:border-[#334155] pb-2 uppercase">Eksekusi & Biaya</h4>
+              <div className="flex flex-col gap-4">
+                {/* Prioritas */}
+                <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-[#94A3B8] uppercase">Prioritas</label>
+                    <select value={formData.priority} onChange={e => setFormData({...formData, priority: e.target.value})} className="p-2.5 border dark:border-[#334155] rounded-lg text-sm dark:bg-[#1E293B] dark:text-white outline-none">
+                      <option>TINGGI</option><option>SEDANG</option><option>RENDAH</option>
+                    </select>
+                </div>
+
+                {/* Biaya Part */}
+                <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-[#94A3B8] uppercase">Biaya Part (Rp)</label>
+                    <input type="number" value={formData.costPart === 0 ? "" : formData.costPart} onChange={e => setFormData({...formData, costPart: e.target.value === "" ? 0 : parseInt(e.target.value)})} placeholder="0" className="p-2.5 border dark:border-[#334155] rounded-lg text-sm dark:bg-[#1E293B] dark:text-white" />
+                </div>
+
+                {/* Biaya Jasa */}
+                <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-[#94A3B8] uppercase">Biaya Jasa (Rp)</label>
+                    <input type="number" value={formData.costService === 0 ? "" : formData.costService} onChange={e => setFormData({...formData, costService: e.target.value === "" ? 0 : parseInt(e.target.value)})} placeholder="0" className="p-2.5 border dark:border-[#334155] rounded-lg text-sm dark:bg-[#1E293B] dark:text-white" />
+                </div>
+
+                {/* TOTAL OTOMATIS (Menarik untuk User) */}
+                <div className="mt-2 p-3 bg-white dark:bg-[#1E293B] rounded-xl border border-dashed border-[#0D9488]/30 flex justify-between items-center">
+                    <span className="text-[11px] font-bold text-[#94A3B8] uppercase">Total Biaya</span>
+                    <span className="text-sm font-black text-[#0D9488]">
+                      Rp {(formData.costPart + formData.costService).toLocaleString('id-ID')}
+                    </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 mt-auto pt-6">
+                <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">Terbitkan WO</button>
+                <button type="button" onClick={() => setIsAddModalOpen(false)} className="text-[#475569] dark:text-[#94A3B8] text-sm font-bold hover:underline text-center">Batal</button>
+              </div>
             </div>
-            <div className="flex flex-col gap-3 mt-auto">
-              <button type="submit" className="w-full bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700">Terbitkan WO</button>
-              <button type="button" onClick={() => setIsAddModalOpen(false)} className="text-[#475569] dark:text-[#94A3B8] text-sm font-bold hover:underline text-center">Batal</button>
-            </div>
-          </div>
         </form>
       </Modal>
     </div>
   );
 }
 
-// WRAPPER
+// MAIN EXPORT
 export default function CorrectiveMaintenancePage() {
   return (
-    <Suspense fallback={<div className="p-20 text-center">Memuat...</div>}><CorrectiveContent /></Suspense>
+    <Suspense fallback={<div className="p-20 text-center font-bold dark:text-white">Memuat...</div>}>
+      <CorrectiveContent />
+    </Suspense>
   );
 }
 
 function StatItem({ label, val, color }: any) {
   return (
-    <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-1">
+    <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-1 transition-all duration-300">
       <span className="text-[13px] text-[#94A3B8] font-medium tracking-tight uppercase">{label}</span>
       <span className={`text-2xl font-black ${color}`}>{val}</span>
     </div>
