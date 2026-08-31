@@ -126,9 +126,9 @@ export default function FinalReportDetailPage({ params }: { params: Promise<{ sl
             {/* Kronologi Masalah */}
             <div className="flex flex-col gap-3">
               <span className="text-[11px] font-bold text-[#94A3B8] uppercase tracking-widest">Kronologi Masalah</span>
-              <div className={`p-6 rounded-[24px] italic leading-relaxed shadow-sm ${innerBoxStyle}`}>
+              <div className={`p-6 rounded-[24px] leading-relaxed shadow-sm ${innerBoxStyle}`}>
                 <p className="text-[15px] text-[#475569] dark:text-[#F8FAFC]">
-                  "{report.description || "Tidak ada deskripsi tambahan."}"
+                  {report.description || "Tidak ada deskripsi tambahan."}
                 </p>
               </div>
             </div>

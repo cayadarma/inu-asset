@@ -38,9 +38,19 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
   const [imageFile, setImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // STATE PAGINATION
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const itemsPerPage = 10; // Tampilkan 10 data per halaman
+
   // --- AMBIL DATA ---
   const fetchAssets = async () => {
     setIsLoading(true);
+
+    // Hitung posisi data yang akan diambil
+    const from = (currentPage - 1) * itemsPerPage;
+    const to = from + itemsPerPage - 1;
+
     const { data: locData } = await supabase.from("locations").select("name").eq("id", locationId).single();
     if (locData) setRealLocationName(locData.name);
 
@@ -57,7 +67,8 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
     setIsLoading(false);
   };
 
-  useEffect(() => { fetchAssets(); }, [locationId]);
+  // Tambahkan currentPage di dalam dependency useEffect
+  useEffect(() => { fetchAssets(); }, [locationId, currentPage]);
 
   // --- LOGIKA OLAH FOTO ---
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
