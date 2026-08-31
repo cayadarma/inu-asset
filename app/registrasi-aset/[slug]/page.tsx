@@ -282,7 +282,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                 {imagePreview ? <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /> : <><ImageIcon size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Preview Foto</span></>}
               </div>
              <input type="file" className="hidden" ref={fileInputRef} onChange={handleImageChange} accept=".jpg,.jpeg,.png,.svg,.heic" />
-             <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">Pilih Foto</button>
+             <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">Pilih Foto (.jpg, .png, .jpeg, .heic, .webp)</button>
              <div className="flex flex-col gap-3 mt-auto pt-10">
                 <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">Simpan Aset</button>
                 <button type="button" onClick={() => setIsModalOpen(false)} className="w-full bg-[#EF4444] text-white py-4 rounded-xl font-bold text-sm shadow-md">Batalkan</button>

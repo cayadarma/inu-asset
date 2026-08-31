@@ -28,3 +28,14 @@ body {
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Perbaikan Ikon Kalender di Dark Mode */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1); /* Mengubah hitam menjadi putih */
+    cursor: pointer;
+}
+
+/* Jika Anda ingin ikonnya sedikit abu-abu agar tidak terlalu terang */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+}

@@ -107,7 +107,7 @@ function CorrectiveContent() {
         </div>
         <div className="flex bg-[#E2E8F0] dark:bg-[#334155] p-1 rounded-xl">
           <Link href="/pemeliharaan" className="px-6 py-2 rounded-lg text-sm font-medium text-[#475569] dark:text-[#94A3B8]">Pemeliharaan Pencegahan</Link>
-          <button className="px-6 py-2 bg-white dark:bg-[#1E293B] rounded-lg text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] shadow-sm">PemeliharaanKorektif</button>
+          <button className="px-6 py-2 bg-white dark:bg-[#1E293B] rounded-lg text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] shadow-sm">Pemeliharaan Korektif</button>
         </div>
       </div>
 

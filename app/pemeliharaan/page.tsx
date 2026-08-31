@@ -60,8 +60,8 @@ function MaintenanceContent() {
             <div className="flex justify-between items-center">
                <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pilih Tanggal</h3>
                <div className="flex gap-1">
-                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1))} className="p-1 hover:bg-gray-100 dark:hover:bg-[#0F172A] rounded transition-all"><ChevronLeft size={18}/></button>
-                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1))} className="p-1 hover:bg-gray-100 dark:hover:bg-[#0F172A] rounded transition-all"><ChevronRight size={18}/></button>
+                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1))} className="p-1 hover:bg-gray-100 dark:hover:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] rounded transition-all"><ChevronLeft size={18}/></button>
+                  <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1))} className="p-1 hover:bg-gray-100 dark:hover:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] rounded transition-all"><ChevronRight size={18}/></button>
                </div>
             </div>
 

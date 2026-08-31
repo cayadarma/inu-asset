@@ -21,15 +21,12 @@ function Breadcrumbs() {
 
   return (
     <div className="flex items-center gap-1 md:gap-2 text-[13px] md:text-[14px]">
-      {/* Di HP, kita sembunyikan kata 'INU Asset' agar hemat tempat */}
       <Link href="/" className="text-[#64748B] dark:text-[#94A3B8] font-medium hover:text-primary hidden md:inline">INU Asset</Link>
       <span className="text-[#94A3B8] hidden md:inline">/</span>
       
       {paths.map((path, index) => {
         currentHref += `/${path}`;
         const isLast = index === paths.length - 1;
-        
-        // Sembunyikan segment tengah di HP jika path terlalu panjang
         const isHiddenOnMobile = !isLast && index < paths.length - 1;
 
         let label = path.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
@@ -64,6 +61,27 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { isDarkMode, toggleTheme } = useTheme();
   const [notifCount, setNotifCount] = useState(0);
 
+  // --- LOGIKA REAL-TIME BARU ---
+  useEffect(() => {
+  // Ambil angka awal (Hanya yang is_read = false)
+    const getInitialCount = async () => {
+      const { count } = await supabase
+        .from("damage_reports")
+        .select("*", { count: 'exact', head: true })
+        .eq("is_read", false);
+      setNotifCount(count || 0);
+    };
+    getInitialCount();
+
+    // Dengarkan perubahan Real-time
+    const channel = supabase.channel('realtime-notif').on('postgres_changes', 
+      { event: '*', schema: 'public', table: 'damage_reports' }, 
+      () => getInitialCount() // Refresh angka setiap ada perubahan (tambah/hapus)
+    ).subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   return (
     <header className="h-[72px] bg-white dark:bg-[#1E293B] border-b border-gray-100 dark:border-[#334155] px-4 md:px-8 flex justify-between items-center sticky top-0 z-40 transition-all font-poppins">
       <div className="flex items-center gap-2 md:gap-4">
@@ -72,8 +90,7 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       <div className="flex items-center gap-3 md:gap-6">
-        {/* SWITCH MODE: Sekarang tersembunyi di HP (hidden), muncul di Laptop (lg:flex) */}
-        <div onClick={toggleTheme} className="hidden lg:flex items-center gap-3 bg-[#F1F5F9] dark:bg-[#334155] p-1 rounded-full border border-gray-100 dark:border-[#475569] cursor-pointer">
+        <div onClick={toggleTheme} className="hidden lg:flex items-center gap-2 md:gap-3 bg-[#F1F5F9] dark:bg-[#334155] p-1 rounded-full border border-gray-100 dark:border-[#475569] cursor-pointer">
           <div className={`p-1.5 ${!isDarkMode ? 'text-orange-500' : 'text-gray-500'}`}><Sun size={14} /></div>
           <div className="w-10 h-5 bg-white dark:bg-[#0F172A] rounded-full shadow-sm flex items-center px-1">
              <div className={`w-3.5 h-3.5 rounded-full transition-all duration-300 ${isDarkMode ? 'translate-x-4 bg-[#37BAAE]' : 'translate-x-0 bg-[#E2E8F0]'}`}></div>
@@ -81,10 +98,17 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
           <div className={`p-1.5 ${isDarkMode ? 'text-yellow-300' : 'text-gray-500'}`}><Moon size={14} /></div>
         </div>
 
-        {/* NOTIF BELL: Tetap ada di HP karena penting */}
-        <Link href="/notifikasi" className="relative w-10 h-10 bg-[#F1F5F9] dark:bg-[#334155] rounded-full flex items-center justify-center transition-all">
+        {/* NOTIF BELL: Sekarang sudah bisa bertambah angkanya secara real-time */}
+        <Link 
+          href="/notifikasi" 
+          className="relative w-10 h-10 bg-[#F1F5F9] dark:bg-[#334155] rounded-full flex items-center justify-center transition-all hover:bg-gray-200 dark:hover:bg-[#475569]"
+        >
           <Bell size={20} className="text-[#0F172A] dark:text-[#F8FAFC]" />
-          {notifCount > 0 && <div className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#EF4444] rounded-full border-2 border-white dark:border-[#1E293B] text-[10px] text-white flex items-center justify-center font-bold">{notifCount}</div>}
+          {notifCount > 0 && (
+            <div className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#EF4444] rounded-full border-2 border-white dark:border-[#1E293B] text-[10px] text-white flex items-center justify-center font-bold animate-bounce shadow-lg">
+              {notifCount}
+            </div>
+          )}
         </Link>
       </div>
     </header>
