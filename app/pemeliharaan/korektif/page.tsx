@@ -18,6 +18,12 @@ function CorrectiveContent() {
   // --- STATE DATA REAL ---
   const [workOrders, setWorkOrders] = useState<any[]>([]);
   const [assetsList, setAssetsList] = useState<any[]>([]);
+  const [locationsList, setLocationsList] = useState<any[]>([]);
+
+  // --- STATE SEARCH & FILTER ---
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
   
   // --- STATE FORM TAMBAH ---
   const [isNewCategory, setIsNewType] = useState(false);
@@ -40,9 +46,11 @@ function CorrectiveContent() {
     setIsLoading(true);
     const { data: woData } = await supabase.from("work_orders").select(`*, assets(name, type, location_id, locations(name))`).order("created_at", { ascending: false });
     const { data: assetData } = await supabase.from("assets").select("id, name, type");
+    const { data: locationData } = await supabase.from("locations").select("id, name").order("name", { ascending: true });
 
     if (woData) setWorkOrders(woData);
     if (assetData) setAssetsList(assetData);
+    if (locationData) setLocationsList(locationData);
     setIsLoading(false);
   };
 
@@ -97,6 +105,21 @@ function CorrectiveContent() {
     setIsLoading(false);
   };
 
+  // --- FILTER WORK ORDER SESUAI SEARCH, STATUS, DAN LOKASI ---
+  const filteredWorkOrders = workOrders.filter((wo) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch = !q ||
+      wo.id?.toLowerCase().includes(q) ||
+      wo.trouble?.toLowerCase().includes(q) ||
+      wo.assets?.name?.toLowerCase().includes(q) ||
+      wo.tech_name?.toLowerCase().includes(q);
+
+    const matchesStatus = !statusFilter || wo.status === statusFilter;
+    const matchesLocation = !locationFilter || wo.assets?.location_id === locationFilter;
+
+    return matchesSearch && matchesStatus && matchesLocation;
+  });
+
   return (
     <div className="flex flex-col gap-8 pb-10 font-poppins text-left transition-colors duration-300">
       {/* 1. HEADER */}
@@ -120,14 +143,42 @@ function CorrectiveContent() {
       </div>
 
       {/* 3. FILTER BAR */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex flex-wrap items-center gap-3 flex-1 w-full">
-          <div className="relative flex-1 max-w-[320px]">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center gap-3 w-full md:flex-1">
+          {/* SEARCH: di mobile berada di atas, di desktop sejajar dengan filter lain */}
+          <div className="relative w-full md:flex-1 md:max-w-[320px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" size={16} />
-            <input type="text" placeholder="Cari No. WO..." className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-[#334155] rounded-lg text-sm outline-none focus:border-primary bg-white dark:bg-[#1E293B] dark:text-white" />
+            <input
+              type="text"
+              placeholder="Cari No. WO..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-[#334155] rounded-lg text-sm outline-none focus:border-primary bg-white dark:bg-[#1E293B] dark:text-white"
+            />
           </div>
-          <FilterSelect label="Prioritas" /><FilterSelect label="Status" /><FilterSelect label="Lokasi" />
+          {/* DROPDOWN STATUS & LOKASI: di mobile sejajar satu sama lain, di desktop sejajar dengan search */}
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <FilterSelect
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "Dalam Proses", label: "Dalam Proses" },
+                { value: "Menunggu Part", label: "Menunggu Suku Cadang" },
+                { value: "Selesai", label: "Selesai" },
+              ]}
+              className="flex-1 md:flex-none"
+            />
+            <FilterSelect
+              label="Lokasi"
+              value={locationFilter}
+              onChange={setLocationFilter}
+              options={locationsList.map((l) => ({ value: l.id, label: l.name }))}
+              className="flex-1 md:flex-none"
+            />
+          </div>
         </div>
+        {/* TOMBOL TAMBAH WORK ORDER: di mobile di bawah filter dropdown, di desktop sejajar dengan search & filter */}
         <button onClick={() => setIsAddModalOpen(true)} className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
           <Plus size={18} /> Buat Work Order
         </button>
@@ -143,6 +194,11 @@ function CorrectiveContent() {
                <AlertCircle size={48} className="text-gray-200 dark:text-gray-700" />
                <p className="text-[#94A3B8] font-bold">Belum ada work order aktif.</p>
             </div>
+          ) : filteredWorkOrders.length === 0 ? (
+            <div className="p-20 text-center flex flex-col items-center gap-4">
+               <AlertCircle size={48} className="text-gray-200 dark:text-gray-700" />
+               <p className="text-[#94A3B8] font-bold">Tidak ada work order yang sesuai dengan pencarian/filter.</p>
+            </div>
           ) : (
             <table className="w-full text-left text-[13px]">
               <thead className="bg-[#F8FAFC] dark:bg-[#0F172A]/50 border-b text-[#475569] dark:text-[#94A3B8] font-bold">
@@ -156,7 +212,7 @@ function CorrectiveContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
-                {workOrders.map((wo) => (
+                {filteredWorkOrders.map((wo) => (
                   <tr key={wo.id} className="hover:bg-gray-50/50 dark:hover:bg-[#0F172A]/50 transition-colors">
                     <td className="px-6 py-5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{wo.id}</td>
                     <td className="px-6 py-5">
@@ -303,10 +359,32 @@ function StatItem({ label, val, color }: any) {
   );
 }
 
-function FilterSelect({ label }: { label: string }) {
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  options: { value: string; label: string }[];
+  className?: string;
+}) {
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] font-bold cursor-pointer hover:border-primary transition-all shadow-sm">
-      <span>{label}</span><ChevronDown size={14} />
+    <div className={`relative flex items-center gap-2 px-4 py-2 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] font-bold cursor-pointer hover:border-primary transition-all shadow-sm ${className}`}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full appearance-none bg-transparent outline-none pr-6 cursor-pointer text-[#475569] dark:text-[#94A3B8] font-bold"
+      >
+        <option value="">{label}</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+      <ChevronDown size={14} className="pointer-events-none absolute right-3" />
     </div>
   );
 }
