@@ -2,9 +2,10 @@
 
 import React, { useState, use, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChevronLeft, Printer, Wrench, Image as ImageIcon,
-  Camera, X, CheckCircle2
+  Camera, X, CheckCircle2, ZoomIn, Trash2
 } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import Badge from "@/components/ui/Badge";
@@ -37,11 +38,28 @@ interface WorkOrder {
   } | null;
 }
 
+interface WorkOrderUpdate {
+  id: string;
+  work_order_id: string;
+  status: string;
+  keterangan: string | null;
+  biaya: number;
+  proof_photo_url: string | null;
+  created_at: string;
+}
+
+// --- FORMAT ANGKA JADI FORMAT RIBUAN ID (TITIK SEBAGAI PEMISAH) ---
+const formatRibuan = (value: number) => (value ? value.toLocaleString("id-ID") : "");
+const parseRibuan = (value: string) => Number(value.replace(/\D/g, "")) || 0;
+
 export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
 
   const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null);
+  const [updates, setUpdates] = useState<WorkOrderUpdate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // --- STATE MODAL PERBARUI STATUS PERBAIKAN ---
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -59,7 +77,6 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
   const [lightboxSrc, setLightboxSrc] = useState("");
 
   const isLocked = workOrder?.status === "Selesai";
-  const hasUpdate = !!workOrder?.updated_at;
 
   const fetchDetail = async () => {
     setIsLoading(true);
@@ -73,8 +90,20 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     setIsLoading(false);
   };
 
+  // --- AMBIL SEMUA RIWAYAT UPDATE PERBAIKAN (BUKAN HANYA YANG TERBARU) ---
+  const fetchUpdates = async () => {
+    const { data } = await supabase
+      .from("work_order_updates")
+      .select("*")
+      .eq("work_order_id", id)
+      .order("created_at", { ascending: false });
+
+    if (data) setUpdates(data as WorkOrderUpdate[]);
+  };
+
   useEffect(() => {
     fetchDetail();
+    fetchUpdates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -127,41 +156,67 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
   const handleSaveUpdate = async (forceStatus?: string) => {
     if (!workOrder) return;
 
-    // --- VALIDASI WAJIB: SEMUA FIELD KECUALI TINDAKAN (TINDAK LANJUT) ---
+    const isFinishing = forceStatus === "Selesai";
+
+    // --- VALIDASI: STATUS WAJIB, FOTO WAJIB UNTUK SETIAP PENYIMPANAN ---
+    if (!updateForm.keterangan.trim()) {
+      alert("Status perbaikan wajib dipilih.");
+      return;
+    }
     if (!photoUrl) {
       alert("Foto bukti perbaikan wajib diunggah.");
       return;
     }
-    if (!updateForm.biaya || updateForm.biaya <= 0) {
-      alert("Biaya yang dikeluarkan wajib diisi.");
+    // --- VALIDASI TAMBAHAN: BIAYA WAJIB DIISI KHUSUS SAAT MENYELESAIKAN PERBAIKAN ---
+    if (isFinishing && (!updateForm.biaya || updateForm.biaya <= 0)) {
+      alert("Biaya yang dikeluarkan wajib diisi untuk menyelesaikan perbaikan.");
       return;
     }
 
     const finalKeterangan = forceStatus || updateForm.keterangan;
 
-    if (forceStatus === "Selesai" && !confirm("Yakin ingin menyelesaikan perbaikan ini?")) {
+    if (isFinishing && !confirm("Yakin ingin menyelesaikan perbaikan ini?")) {
       return;
     }
 
     // --- GABUNGKAN TINDAKAN BARU DENGAN TINDAK LANJUT YANG SUDAH ADA ---
-    let mergedTindakLanjut = workOrder.tindak_lanjut || "";
-    if (updateForm.tindak_lanjut.trim()) {
-      const stamp = new Date().toLocaleString("id-ID");
-      const entry = `[${stamp}] ${updateForm.tindak_lanjut.trim()}`;
-      mergedTindakLanjut = mergedTindakLanjut ? `${mergedTindakLanjut}\n${entry}` : entry;
-    }
+    const stamp = new Date().toLocaleString("id-ID");
+    const entry = `[${stamp}] ${updateForm.tindak_lanjut.trim()}`;
+    const mergedTindakLanjut = workOrder.tindak_lanjut
+      ? `${workOrder.tindak_lanjut}\n${entry}`
+      : entry;
 
     setIsSaving(true);
 
+    const nowIso = new Date().toISOString();
+
+    // --- SIMPAN SEBAGAI RIWAYAT BARU (TIDAK MENIMPA UPDATE SEBELUMNYA) ---
+    const { error: historyError } = await supabase.from("work_order_updates").insert([{
+      work_order_id: id,
+      status: finalKeterangan,
+      keterangan: updateForm.tindak_lanjut.trim(),
+      biaya: updateForm.biaya || 0,
+      proof_photo_url: photoUrl,
+      created_at: nowIso,
+    }]);
+
+    if (historyError) {
+      alert("Gagal menyimpan riwayat pembaruan perbaikan: " + historyError.message);
+      setIsSaving(false);
+      return;
+    }
+
+    // --- PERBARUI SNAPSHOT TERBARU DI WORK ORDER (STATUS, TOTAL BIAYA, FOTO TERAKHIR) ---
+    const totalBiayaBaru = (workOrder.actual_cost || 0) + (updateForm.biaya || 0);
     const updatePayload: any = {
       status: finalKeterangan,
       tindak_lanjut: mergedTindakLanjut,
-      actual_cost: updateForm.biaya,
+      actual_cost: totalBiayaBaru,
       proof_photo_url: photoUrl,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     };
-    if (finalKeterangan === "Selesai") {
-      updatePayload.completed_at = new Date().toISOString();
+    if (isFinishing) {
+      updatePayload.completed_at = nowIso;
     }
 
     const { error } = await supabase.from("work_orders").update(updatePayload).eq("id", id);
@@ -173,7 +228,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     }
 
     // --- KEMBALIKAN STATUS ASET KE BEROPERASI SAAT PERBAIKAN SELESAI ---
-    if (finalKeterangan === "Selesai") {
+    if (isFinishing) {
       await supabase.from("assets").update({ status: "Beroperasi" }).eq("id", workOrder.asset_id);
     }
 
@@ -181,6 +236,30 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     setIsUpdateModalOpen(false);
     resetUpdateForm();
     fetchDetail();
+    fetchUpdates();
+  };
+
+  // --- HAPUS WORK ORDER DARI DATABASE ---
+  const handleDeleteWorkOrder = async () => {
+    if (!workOrder) return;
+    if (!confirm("Yakin ingin menghapus work order ini secara permanen? Semua riwayat perbaikan yang terkait juga akan terhapus.")) {
+      return;
+    }
+
+    setIsDeleting(true);
+
+    // --- HAPUS RIWAYAT TERKAIT TERLEBIH DAHULU (JAGA-JAGA JIKA TIDAK ADA CASCADE DI DATABASE) ---
+    await supabase.from("work_order_updates").delete().eq("work_order_id", id);
+
+    const { error } = await supabase.from("work_orders").delete().eq("id", id);
+
+    if (error) {
+      alert("Gagal menghapus work order: " + error.message);
+      setIsDeleting(false);
+      return;
+    }
+
+    router.push("/pemeliharaan/korektif");
   };
 
   const openLightbox = (src: string | null) => {
@@ -262,52 +341,67 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      {/* 3. CARD UPDATE PERBAIKAN (MUNCUL SETELAH ADA PEMBARUAN) */}
-      {hasUpdate && (
-        <div className="bg-white dark:bg-[#1E293B] p-8 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-6">
-          <div className="flex items-center justify-between border-b border-gray-100 dark:border-[#334155] pb-4">
-            <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-lg flex items-center gap-2">
-              <Wrench size={18} className="text-[#0D9488]" /> Update Perbaikan
-            </h3>
-            <Badge status={workOrder.status} />
-          </div>
+      {/* 3. RIWAYAT UPDATE PERBAIKAN (SEMUA UPDATE TETAP TAMPIL, BUKAN HANYA TERBARU) */}
+      {updates.length > 0 && (
+        <div className="flex flex-col gap-4">
+          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-lg flex items-center gap-2 px-1">
+            <Wrench size={18} className="text-[#0D9488]" /> Riwayat Update Perbaikan
+            <span className="text-xs font-bold text-[#94A3B8]">({updates.length})</span>
+          </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="flex flex-col gap-5">
-              <RowItem
-                label="Tanggal Update"
-                value={workOrder.updated_at ? new Date(workOrder.updated_at).toLocaleString("id-ID") : "-"}
-              />
-              <RowItem
-                label="Biaya Dikeluarkan"
-                value={`Rp ${(workOrder.actual_cost || 0).toLocaleString("id-ID")}`}
-              />
-              {workOrder.completed_at && (
-                <RowItem
-                  label="Selesai Pada"
-                  value={new Date(workOrder.completed_at).toLocaleString("id-ID")}
-                />
-              )}
-            </div>
+          {updates.map((u, index) => (
+            <div
+              key={u.id}
+              className="bg-white dark:bg-[#1E293B] p-8 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-6"
+            >
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-[#334155] pb-4">
+                <h4 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-sm">
+                  Update #{updates.length - index} — {new Date(u.created_at).toLocaleString("id-ID")}
+                </h4>
+                <Badge status={u.status} />
+              </div>
 
-            <div className="flex flex-col gap-2">
-              <span className="text-xs font-bold text-[#94A3B8] uppercase flex items-center gap-1">
-                <ImageIcon size={14} /> Foto Bukti Perbaikan
-              </span>
-              {workOrder.proof_photo_url ? (
-                <img
-                  src={workOrder.proof_photo_url}
-                  onClick={() => openLightbox(workOrder.proof_photo_url)}
-                  className="w-full aspect-video object-cover rounded-xl border border-gray-200 dark:border-[#334155] cursor-zoom-in"
-                  alt="Bukti Perbaikan"
-                />
-              ) : (
-                <div className="w-full aspect-video rounded-xl border border-dashed border-gray-200 dark:border-[#334155] flex items-center justify-center text-[#94A3B8] text-xs italic">
-                  Belum ada foto
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs font-bold text-[#94A3B8] uppercase">Keterangan</span>
+                    <p className="text-sm text-[#475569] dark:text-[#94A3B8] leading-relaxed whitespace-pre-line">
+                      {u.keterangan || "-"}
+                    </p>
+                  </div>
+                  <RowItem label="Biaya Dikeluarkan" value={`Rp ${(u.biaya || 0).toLocaleString("id-ID")}`} />
                 </div>
-              )}
+
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-bold text-[#94A3B8] uppercase flex items-center gap-1">
+                    <ImageIcon size={14} /> Foto Bukti Perbaikan
+                  </span>
+                  {u.proof_photo_url ? (
+                    <div className="relative group w-full">
+                      <img
+                        src={u.proof_photo_url}
+                        onClick={() => openLightbox(u.proof_photo_url)}
+                        className="w-full aspect-video object-cover rounded-xl border border-gray-200 dark:border-[#334155] cursor-zoom-in"
+                        alt="Bukti Perbaikan"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => openLightbox(u.proof_photo_url)}
+                        className="absolute bottom-2 right-2 p-2 bg-black/60 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                        title="Perbesar foto"
+                      >
+                        <ZoomIn size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full aspect-video rounded-xl border border-dashed border-gray-200 dark:border-[#334155] flex items-center justify-center text-[#94A3B8] text-xs italic">
+                      Belum ada foto
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       )}
 
@@ -316,25 +410,29 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
-              Tindakan Perbaikan (Tindak Lanjut)
+              Keterangan Perbaikan
             </label>
             <textarea
               rows={3}
               value={updateForm.tindak_lanjut}
               onChange={(e) => setUpdateForm({ ...updateForm, tindak_lanjut: e.target.value })}
-              placeholder="Isi jika belum ada instruksi perbaikan, atau tambahkan catatan perbaikan lanjutan..."
+              placeholder="Jelaskan tindakan atau perkembangan perbaikan yang dilakukan... (Opsional)"
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none bg-white dark:bg-[#0F172A] dark:text-white font-medium"
             />
-            <span className="text-[11px] text-[#94A3B8] italic">Opsional — boleh dikosongkan jika tidak ada tambahan.</span>
+            <span className="text-[11px] text-[#94A3B8] italic">Opsional. Tambahkan catatan pendukung jika diperlukan.</span>
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Keterangan</label>
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
+              Status <span className="text-red-500">*</span>
+            </label>
             <select
+              required
               value={updateForm.keterangan}
               onChange={(e) => setUpdateForm({ ...updateForm, keterangan: e.target.value })}
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white"
             >
+              <option value="">-- Pilih Status --</option>
               <option value="Dalam Proses">Dalam Proses</option>
               <option value="Menunggu Part">Menunggu Suku Cadang</option>
               <option value="Selesai">Selesai</option>
@@ -342,7 +440,9 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Foto Bukti Perbaikan</label>
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
+              Foto Bukti Perbaikan <span className="text-red-500">*</span>
+            </label>
             <input
               type="file"
               ref={fileInputRef}
@@ -352,7 +452,17 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
             />
             <div className="flex items-center gap-3">
               {photoUrl && (
-                <img src={photoUrl} className="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-[#334155]" alt="Pratinjau Foto Bukti" />
+                <div className="relative group">
+                  <img src={photoUrl} className="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-[#334155]" alt="Pratinjau Foto Bukti" />
+                  <button
+                    type="button"
+                    onClick={() => openLightbox(photoUrl)}
+                    title="Lihat resolusi asli"
+                    className="absolute -top-2 -right-2 p-1.5 bg-[#0D9488] text-white rounded-full shadow-md hover:bg-teal-700 transition-all"
+                  >
+                    <ZoomIn size={12} />
+                  </button>
+                </div>
               )}
               <button
                 type="button"
@@ -364,17 +474,25 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
                 {isUploadingPhoto ? "Mengunggah..." : photoUrl ? "Ganti Foto" : "Unggah Foto"}
               </button>
             </div>
+            {photoUrl && (
+              <span className="text-[11px] text-[#94A3B8] italic">Klik ikon kaca pembesar untuk melihat foto dalam resolusi asli.</span>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Biaya yang Dikeluarkan (Rp)</label>
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
+              Biaya yang Dikeluarkan (Rp)
+              {updateForm.keterangan === "Selesai" && <span className="text-red-500"> *</span>}
+            </label>
             <input
-              type="number"
-              value={updateForm.biaya === 0 ? "" : updateForm.biaya}
-              onChange={(e) => setUpdateForm({ ...updateForm, biaya: e.target.value === "" ? 0 : parseInt(e.target.value) })}
+              type="text"
+              inputMode="numeric"
+              value={formatRibuan(updateForm.biaya)}
+              onChange={(e) => setUpdateForm({ ...updateForm, biaya: parseRibuan(e.target.value) })}
               placeholder="0"
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white font-bold"
             />
+            <span className="text-[11px] text-[#94A3B8] italic">Wajib diisi saat menyelesaikan perbaikan.</span>
           </div>
 
           <div className="flex flex-col gap-3 mt-4">
@@ -417,6 +535,24 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
           </button>
         </div>
       )}
+
+      {/* 5. HAPUS WORK ORDER (PALING BAWAH) */}
+      <div className="bg-white dark:bg-[#1E293B] p-8 rounded-2xl border border-dashed border-red-200 dark:border-red-900/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h3 className="font-bold text-red-600 text-sm">Hapus Work Order</h3>
+          <p className="text-xs text-[#94A3B8]">
+            Tindakan ini akan menghapus work order beserta seluruh riwayat perbaikannya secara permanen dari database.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={isDeleting}
+          onClick={handleDeleteWorkOrder}
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+        >
+          <Trash2 size={16} /> {isDeleting ? "Menghapus..." : "Hapus Work Order"}
+        </button>
+      </div>
     </div>
   );
 }
