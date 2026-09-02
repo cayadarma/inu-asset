@@ -22,6 +22,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
   // --- STATE DATA ---
   const [asset, setAsset] = useState<any>(null);
   const [damageReports, setDamageReports] = useState<any[]>([]);
+  const [maintenanceReports, setMaintenanceReports] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"gangguan" | "pemeliharaan">("gangguan");
 
@@ -61,16 +62,29 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
     const from = (currentPage - 1) * itemsPerPage;
     const to = from + itemsPerPage - 1;
 
-    // Ambil Data Laporan dengan Range
-    const { data: reportData, count } = await supabase
-      .from("damage_reports")
-      .select("*", { count: 'exact' }) // 'exact' untuk menghitung total data di DB
-      .eq("asset_id", id)
-      .order("created_at", { ascending: false })
-      .range(from, to);
-    
-    if (reportData) setDamageReports(reportData);
-    if (count !== null) setTotalCount(count);
+    if (activeTab === "pemeliharaan") {
+      // --- AMBIL RIWAYAT PEMELIHARAAN PENCEGAHAN DARI HALAMAN PEMELIHARAAN PENCEGAHAN ---
+      const { data: maintenanceData, count } = await supabase
+        .from("maintenance_schedules")
+        .select("id, scheduled_date, status, operator_name, completed_at", { count: "exact" })
+        .eq("asset_id", id)
+        .order("scheduled_date", { ascending: false })
+        .range(from, to);
+
+      if (maintenanceData) setMaintenanceReports(maintenanceData);
+      if (count !== null) setTotalCount(count);
+    } else {
+      // Ambil Data Laporan dengan Range
+      const { data: reportData, count } = await supabase
+        .from("damage_reports")
+        .select("*", { count: 'exact' }) // 'exact' untuk menghitung total data di DB
+        .eq("asset_id", id)
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (reportData) setDamageReports(reportData);
+      if (count !== null) setTotalCount(count);
+    }
 
     setIsLoading(false);
   };
@@ -199,7 +213,45 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                 />
               </>
             ) : <div className="p-20 text-center text-[#94A3B8] italic font-medium">Belum ada riwayat gangguan.</div>
-          ) : <div className="p-20 text-center text-[#94A3B8] italic font-medium">Riwayat pemeliharaan pencegahan akan tampil di sini.</div>}
+          ) : (
+            maintenanceReports.length > 0 ? (
+              <>
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-[#F1F5F9] dark:bg-[#0F172A]/50 border-b text-[#475569] dark:text-[#94A3B8] font-bold uppercase text-[11px] tracking-widest">
+                    <tr><th className="px-6 py-4">Tanggal Jadwal</th><th className="px-6 py-4">Operator</th><th className="px-6 py-4">Selesai Pada</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-center">Aksi</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
+                    {maintenanceReports.map((sch, i) => (
+                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-colors">
+                        <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8]">
+                          {sch.scheduled_date ? new Date(sch.scheduled_date + "T00:00:00").toLocaleDateString('id-ID') : "-"}
+                        </td>
+                        <td className="px-6 py-5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{sch.operator_name || "-"}</td>
+                        <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8]">
+                          {sch.completed_at ? new Date(sch.completed_at).toLocaleDateString('id-ID') : "-"}
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <Badge status={sch.status} />
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                           <Link href={`/pemeliharaan/checklist/${sch.id}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all">
+                              <Eye size={20} />
+                           </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <Pagination
+                  currentPage={currentPage}
+                  totalCount={totalCount}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={(page) => setCurrentPage(page)}
+                />
+              </>
+            ) : <div className="p-20 text-center text-[#94A3B8] italic font-medium">Belum ada riwayat pemeliharaan pencegahan.</div>
+          )}
         </div>
       </div>
 

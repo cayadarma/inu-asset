@@ -82,10 +82,19 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // --- SET JUDUL TAB BROWSER JADI NAMA ASET, BUKAN UUID ---
+  // --- PERBAIKAN: SET JUDUL TAB & UPDATE URL UNTUK BREADCRUMB ---
   useEffect(() => {
     if (schedule?.assets?.name) {
+      // 1. Update Judul Browser
       document.title = `Pemeliharaan — ${schedule.assets.name}`;
+
+      // 2. Update URL Query Params agar Navbar menampilkan Nama Aset, bukan UUID
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("name") !== schedule.assets.name) {
+        url.searchParams.set("name", schedule.assets.name);
+        // Menggunakan replaceState agar tidak mengganggu fungsi 'Back' tombol browser
+        window.history.replaceState({}, "", url.toString());
+      }
     }
   }, [schedule?.assets?.name]);
 

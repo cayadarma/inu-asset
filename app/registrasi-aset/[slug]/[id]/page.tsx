@@ -22,7 +22,8 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
 
   // --- STATE DATA ---
   const [asset, setAsset] = useState<any>(null);
-  const [damageHistory, setDamageHistory] = useState<any[]>([]); 
+  const [damageHistory, setDamageHistory] = useState<any[]>([]);
+  const [maintenanceHistory, setMaintenanceHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"pemeliharaan" | "kerusakan">("pemeliharaan");
   
@@ -47,6 +48,12 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     setIsLoading(true);
     const { data: assetData } = await supabase.from("assets").select("*").eq("id", id).maybeSingle();
     const { data: historyData } = await supabase.from("damage_reports").select("*").eq("asset_id", id).order("created_at", { ascending: false });
+    // --- AMBIL RIWAYAT PEMELIHARAAN PENCEGAHAN DARI HALAMAN PEMELIHARAAN PENCEGAHAN ---
+    const { data: maintenanceData } = await supabase
+      .from("maintenance_schedules")
+      .select("id, scheduled_date, status, operator_name, completed_at")
+      .eq("asset_id", id)
+      .order("scheduled_date", { ascending: false });
 
     if (assetData) {
       setAsset(assetData);
@@ -54,6 +61,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       setEditImagePreview(assetData.image_url);
     }
     if (historyData) setDamageHistory(historyData);
+    if (maintenanceData) setMaintenanceHistory(maintenanceData);
     setIsLoading(false);
   };
 
@@ -215,7 +223,25 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                        <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${locationNameFromUrl}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">Detail</Link>
                     </div>
                  )) : <p className="p-10 text-center text-secondary italic">Tidak ada riwayat.</p>
-               ) : <p className="p-10 text-center text-secondary italic">Data pemeliharaan pencegahan.</p>}
+               ) : (
+                 maintenanceHistory.length > 0 ? maintenanceHistory.map((sch, i) => (
+                    <div key={i} className="flex justify-between items-center p-6 border-b border-gray-50 dark:border-[#334155] last:border-0 hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-all group">
+                       <div className="flex flex-col gap-1">
+                          <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px] group-hover:text-[#0D9488] transition-colors">
+                            {sch.scheduled_date ? new Date(sch.scheduled_date + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-"}
+                          </span>
+                          <span className="text-xs text-[#94A3B8] font-medium">
+                            Operator: {sch.operator_name || "-"}
+                            {sch.completed_at ? ` • Selesai: ${new Date(sch.completed_at).toLocaleDateString("id-ID")}` : ""}
+                          </span>
+                       </div>
+                       <div className="flex items-center gap-3">
+                          <Badge status={sch.status} />
+                          <Link href={`/pemeliharaan/checklist/${sch.id}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">Detail</Link>
+                       </div>
+                    </div>
+                 )) : <p className="p-10 text-center text-secondary italic">Belum ada riwayat pemeliharaan pencegahan.</p>
+               )}
             </div>
           </div>
         </div>

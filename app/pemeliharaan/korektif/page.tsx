@@ -287,7 +287,7 @@ function CorrectiveContent() {
                   />
                </div>
                <div className="flex flex-col gap-2">
-                  <label className="text-sm text-[#0F172A] dark:text-white uppercase tracking-wider">Pelaksana (OLEH)</label>
+                  <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Pelaksana (OLEH)</label>
                   <input 
                     type="text" 
                     placeholder="Contoh: Veri Guna, Yan Adi Guna" 

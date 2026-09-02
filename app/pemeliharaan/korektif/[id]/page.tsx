@@ -158,7 +158,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
 
     const isFinishing = forceStatus === "Selesai";
 
-    // --- VALIDASI: STATUS WAJIB, FOTO WAJIB UNTUK SETIAP PENYIMPANAN ---
+    // --- VALIDASI: FOTO WAJIB UNTUK SETIAP PENYIMPANAN, STATUS WAJIB DIISI ---
     if (!updateForm.keterangan.trim()) {
       alert("Status perbaikan wajib dipilih.");
       return;
@@ -178,13 +178,6 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     if (isFinishing && !confirm("Yakin ingin menyelesaikan perbaikan ini?")) {
       return;
     }
-
-    // --- GABUNGKAN TINDAKAN BARU DENGAN TINDAK LANJUT YANG SUDAH ADA ---
-    const stamp = new Date().toLocaleString("id-ID");
-    const entry = `[${stamp}] ${updateForm.tindak_lanjut.trim()}`;
-    const mergedTindakLanjut = workOrder.tindak_lanjut
-      ? `${workOrder.tindak_lanjut}\n${entry}`
-      : entry;
 
     setIsSaving(true);
 
@@ -207,10 +200,13 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     }
 
     // --- PERBARUI SNAPSHOT TERBARU DI WORK ORDER (STATUS, TOTAL BIAYA, FOTO TERAKHIR) ---
+    // CATATAN: "tindak_lanjut" SENGAJA TIDAK DIUBAH DI SINI, AGAR "TINDAKAN PERBAIKAN"
+    // DI DETAIL WORK ORDER TETAP SEPERTI SAAT WORK ORDER DIBUAT DAN TIDAK IKUT
+    // MENUMPUK TANGGAL/JAM + KETERANGAN DARI SETIAP UPDATE. RIWAYAT KETERANGAN PER
+    // UPDATE SUDAH DITAMPILKAN LENGKAP DI BAGIAN "RIWAYAT UPDATE PERBAIKAN".
     const totalBiayaBaru = (workOrder.actual_cost || 0) + (updateForm.biaya || 0);
     const updatePayload: any = {
       status: finalKeterangan,
-      tindak_lanjut: mergedTindakLanjut,
       actual_cost: totalBiayaBaru,
       proof_photo_url: photoUrl,
       updated_at: nowIso,
@@ -416,10 +412,10 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
               rows={3}
               value={updateForm.tindak_lanjut}
               onChange={(e) => setUpdateForm({ ...updateForm, tindak_lanjut: e.target.value })}
-              placeholder="Jelaskan tindakan atau perkembangan perbaikan yang dilakukan... (Opsional)"
+              placeholder="Jelaskan tindakan atau perkembangan perbaikan yang dilakukan..."
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none bg-white dark:bg-[#0F172A] dark:text-white font-medium"
             />
-            <span className="text-[11px] text-[#94A3B8] italic">Opsional. Tambahkan catatan pendukung jika diperlukan.</span>
+            <span className="text-[11px] text-[#94A3B8] italic">Opsional - dapat dikosongkan jika tidak ada keterangan tambahan.</span>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -427,12 +423,10 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
               Status <span className="text-red-500">*</span>
             </label>
             <select
-              required
               value={updateForm.keterangan}
               onChange={(e) => setUpdateForm({ ...updateForm, keterangan: e.target.value })}
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white"
             >
-              <option value="">-- Pilih Status --</option>
               <option value="Dalam Proses">Dalam Proses</option>
               <option value="Menunggu Part">Menunggu Suku Cadang</option>
               <option value="Selesai">Selesai</option>

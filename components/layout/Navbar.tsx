@@ -29,10 +29,19 @@ function Breadcrumbs() {
         const isLast = index === paths.length - 1;
         const isHiddenOnMobile = !isLast && index < paths.length - 1;
 
+        // Default: Ubah slug "registrasi-aset" jadi "Registrasi Aset"
         let label = path.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-        if (index === 1 && nameFromUrl) label = nameFromUrl.toUpperCase();
-        if (index === 2 && assetName) label = assetName.toUpperCase();
-        if (index === 3 && issueTitle) label = issueTitle.toUpperCase();
+
+        // Override label jika ada parameter nama di URL
+        if (paths[0] === "pemeliharaan" && paths[1] === "checklist" && index === 2 && nameFromUrl) {
+          label = nameFromUrl.toUpperCase();
+        } else if (paths[0] === "registrasi-aset" && index === 2 && nameFromUrl) {
+          label = nameFromUrl.toUpperCase();
+        } else if (index === 2 && assetName) {
+          label = assetName.toUpperCase();
+        } else if (index === 3 && issueTitle) {
+          label = issueTitle.toUpperCase();
+        }
 
         const params = [];
         if (nameFromUrl) params.push(`name=${nameFromUrl}`);
