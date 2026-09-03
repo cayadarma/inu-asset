@@ -227,7 +227,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.type}</td>
                     <td className="px-6 py-5 text-center"><Badge status={asset.status} /></td>
                     <td className="px-6 py-5 text-center">
-                      <Link href={`/registrasi-aset/${locationId}/${asset.id}?name=${realLocationName}`} className="p-2 inline-block text-[#64748B] hover:text-primary transition-all">
+                      <Link href={`/registrasi-aset/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] hover:text-primary transition-all">
                         <Eye size={18} />
                       </Link>
                     </td>
@@ -285,7 +285,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
              <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">Pilih Foto (.jpg, .png, .jpeg, .heic, .webp)</button>
              <div className="flex flex-col gap-3 mt-auto pt-10">
                 <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">Simpan Aset</button>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="w-full bg-[#EF4444] text-white py-4 rounded-xl font-bold text-sm shadow-md">Batalkan</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-4 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
              </div>
           </div>
         </form>

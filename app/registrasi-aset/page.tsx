@@ -84,7 +84,7 @@ export default function RegistrasiAsetPage() {
               key={loc.id}
               className="group relative bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm hover:border-primary transition-all p-6 flex items-center justify-between"
             >
-              <Link href={`/registrasi-aset/${loc.id}?name=${loc.name}`} className="flex items-center gap-6 flex-1">
+              <Link href={`/registrasi-aset/${loc.id}?name=${encodeURIComponent(loc.name)}`} className="flex items-center gap-6 flex-1">
                 <div className="w-12 h-12 bg-[#CCFBF1] dark:bg-[#115E59]/30 rounded-lg flex items-center justify-center text-[#0D9488]">
                   <MapPin size={24} />
                 </div>
@@ -94,8 +94,8 @@ export default function RegistrasiAsetPage() {
                 </div>
               </Link>
 
-              {/* ACTION BUTTONS (MUNCUL SAAT HOVER) */}
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* ACTION BUTTONS (SELALU TERLIHAT, TIDAK PERLU HOVER) */}
+              <div className="flex items-center gap-2">
                 <button 
                   onClick={() => { setSelectedLoc(loc); setNewLocName(loc.name); setIsModalOpen(true); }}
                   className="p-2.5 bg-gray-50 dark:bg-[#0F172A] text-secondary dark:text-[#94A3B8] rounded-xl hover:text-primary transition-all border border-transparent hover:border-primary/20"
@@ -135,7 +135,7 @@ export default function RegistrasiAsetPage() {
             />
           </div>
           <div className="flex gap-3">
-             <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 text-secondary dark:text-[#94A3B8] font-bold text-sm">Batalkan</button>
+             <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-secondary dark:text-[#94A3B8] font-bold text-sm hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
              <button type="submit" className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">
                 {selectedLoc ? "Simpan Perubahan" : "Simpan Lokasi"}
              </button>

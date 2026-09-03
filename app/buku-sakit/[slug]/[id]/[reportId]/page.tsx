@@ -56,7 +56,7 @@ export default function FinalReportDetailPage({ params }: { params: Promise<{ sl
       
       {/* 1. TOMBOL KEMBALI KE RIWAYAT ASET (Sesuai Navigasi Anda) */}
       <Link 
-        href={`/buku-sakit/${slug}/${id}?name=${locName}`} 
+        href={`/buku-sakit/${slug}/${id}?name=${encodeURIComponent(locName)}&assetName=${encodeURIComponent(searchParams.get("assetName") || "")}`} 
         className="flex items-center gap-2 text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:text-[#0D9488] transition-all w-fit group"
       >
         <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> 

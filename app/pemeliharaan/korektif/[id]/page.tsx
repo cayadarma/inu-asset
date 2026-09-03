@@ -158,9 +158,9 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
 
     const isFinishing = forceStatus === "Selesai";
 
-    // --- VALIDASI: FOTO WAJIB UNTUK SETIAP PENYIMPANAN, STATUS WAJIB DIISI ---
-    if (!updateForm.keterangan.trim()) {
-      alert("Status perbaikan wajib dipilih.");
+    // --- VALIDASI: KETERANGAN & FOTO WAJIB UNTUK SETIAP PENYIMPANAN ---
+    if (!updateForm.tindak_lanjut.trim()) {
+      alert("Keterangan perbaikan wajib diisi.");
       return;
     }
     if (!photoUrl) {
@@ -406,7 +406,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
-              Keterangan Perbaikan
+              Keterangan Perbaikan <span className="text-red-500">*</span>
             </label>
             <textarea
               rows={3}
@@ -415,13 +415,11 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
               placeholder="Jelaskan tindakan atau perkembangan perbaikan yang dilakukan..."
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none bg-white dark:bg-[#0F172A] dark:text-white font-medium"
             />
-            <span className="text-[11px] text-[#94A3B8] italic">Opsional - dapat dikosongkan jika tidak ada keterangan tambahan.</span>
+            <span className="text-[11px] text-[#94A3B8] italic">Wajib diisi setiap kali menyimpan pembaruan perbaikan.</span>
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
-              Status <span className="text-red-500">*</span>
-            </label>
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Status</label>
             <select
               value={updateForm.keterangan}
               onChange={(e) => setUpdateForm({ ...updateForm, keterangan: e.target.value })}
@@ -509,7 +507,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
             <button
               type="button"
               onClick={() => { setIsUpdateModalOpen(false); resetUpdateForm(); }}
-              className="text-[#475569] dark:text-[#94A3B8] text-sm font-bold hover:underline text-center transition-all"
+              className="w-full py-4 border border-gray-200 dark:border-[#334155] rounded-xl text-[#475569] dark:text-[#94A3B8] text-sm font-bold hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all"
             >
               Batalkan
             </button>

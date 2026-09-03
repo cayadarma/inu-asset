@@ -193,7 +193,7 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.specification}</td>
                     <td className="px-6 py-5 text-center"><Badge status={asset.status} /></td>
                     <td className="px-6 py-5 text-center">
-                      <Link href={`/buku-sakit/${locationId}/${asset.id}?name=${realLocationName}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all"><Eye size={20} /></Link>
+                      <Link href={`/buku-sakit/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all"><Eye size={20} /></Link>
                     </td>
                   </tr>
                 ))}

@@ -403,7 +403,7 @@ function MaintenanceContent() {
           </div>
 
           <div className="flex gap-3 pt-2">
-             <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 text-secondary dark:text-[#94A3B8] font-bold text-sm">Batalkan</button>
+             <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-secondary dark:text-[#94A3B8] font-bold text-sm hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
              <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all disabled:opacity-60">
                 {isSaving ? "Menyimpan..." : "Simpan Agenda"}
              </button>

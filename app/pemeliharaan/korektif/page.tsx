@@ -237,7 +237,7 @@ function CorrectiveContent() {
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Penerbitan Work Order">
         <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
           <div className="lg:col-span-2 flex flex-col gap-5">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Kode Aset (KODE)</label>
                 <select required value={formData.asset_id} onChange={e => setFormData({...formData, asset_id: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white">
@@ -251,7 +251,7 @@ function CorrectiveContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Kategori</label>
                 <select value={formData.kategori} onChange={e => setFormData({...formData, kategori: e.target.value})} className="w-full p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none dark:text-white">
@@ -275,7 +275,7 @@ function CorrectiveContent() {
             </div>
 
             {/* BAGIAN PENGAWAS & PELAKSANA (SEKARANG KETIK MANUAL SESUAI PERMINTAAN) */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <div className="flex flex-col gap-2">
                   <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Pengawas (PENGAWAS)</label>
                   <input 
@@ -287,7 +287,7 @@ function CorrectiveContent() {
                   />
                </div>
                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Pelaksana (OLEH)</label>
+                  <label className="text-sm text-[#0F172A] dark:text-white uppercase tracking-wider">Pelaksana (OLEH)</label>
                   <input 
                     type="text" 
                     placeholder="Contoh: Veri Guna, Yan Adi Guna" 
@@ -332,7 +332,7 @@ function CorrectiveContent() {
             
             <div className="flex flex-col gap-3 mt-auto pt-6">
               <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all active:scale-95">Terbitkan Work Order</button>
-              <button type="button" onClick={() => setIsAddModalOpen(false)} className="text-[#475569] dark:text-[#94A3B8] text-sm font-bold hover:underline text-center transition-all">Batalkan</button>
+              <button type="button" onClick={() => setIsAddModalOpen(false)} className="w-full py-4 border border-gray-200 dark:border-[#334155] rounded-xl text-[#475569] dark:text-[#94A3B8] text-sm font-bold hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
             </div>
           </div>
         </form>

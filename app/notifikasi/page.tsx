@@ -98,7 +98,7 @@ export default function NotificationPage() {
           notifications.map((notif) => (
             <div key={notif.id} className="group relative">
               <Link 
-                href={`/buku-sakit/${notif.assets?.location_id}/${notif.asset_id}/${notif.id}?name=${notif.assets?.locations?.name}&assetName=${encodeURIComponent(notif.assets?.name)}&issueTitle=${encodeURIComponent(notif.issue_title)}`}
+                href={`/buku-sakit/${notif.assets?.location_id}/${notif.asset_id}/${notif.id}?name=${encodeURIComponent(notif.assets?.locations?.name || "")}&assetName=${encodeURIComponent(notif.assets?.name || "")}&issueTitle=${encodeURIComponent(notif.issue_title)}`}
                 className="block bg-white dark:bg-[#1E293B] p-5 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm hover:border-[#0D9488] transition-all"
               >
                 <div className="flex items-start gap-5 pr-12">

@@ -38,7 +38,7 @@ export default function BukuSakitPage() {
         {isLoading ? <div className="p-10 text-center">Memuat...</div> : locations.map((loc) => (
           <Link 
             key={loc.id}
-            href={`/buku-sakit/${loc.id}?name=${loc.name}`} // PENTING: Mengirim nama
+            href={`/buku-sakit/${loc.id}?name=${encodeURIComponent(loc.name)}`} // PENTING: Mengirim nama
             className="group p-6 bg-white dark:bg-[#1E293B] rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm hover:border-primary flex items-center justify-between transition-all"
           >
             <div className="flex items-start gap-6">

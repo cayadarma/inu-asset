@@ -162,7 +162,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                 </div>
             </div>
         </div>
-        <Link href={`/registrasi-aset/${slug}/${id}?name=${locationName}`} className="px-5 py-2 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-white hover:bg-gray-50 dark:hover:bg-[#0F172A]">Lihat Profil Aset</Link>
+        <Link href={`/registrasi-aset/${slug}/${id}?name=${encodeURIComponent(locationName)}&assetName=${encodeURIComponent(asset?.name || "")}`} className="px-5 py-2 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-white hover:bg-gray-50 dark:hover:bg-[#0F172A]">Lihat Profil Aset</Link>
       </div>
 
       {/* 3. TABEL RECORD */}
@@ -195,7 +195,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                           <span className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-black rounded uppercase">{report.urgency || 'Sedang'}</span>
                         </td>
                         <td className="px-6 py-5 text-center">
-                           <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${locationName}&assetName=${asset?.name}&issueTitle=${report.issue_title}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all">
+                           <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${encodeURIComponent(locationName)}&assetName=${encodeURIComponent(asset?.name || "")}&issueTitle=${encodeURIComponent(report.issue_title)}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all">
                               <Eye size={20} />
                            </Link>
                         </td>

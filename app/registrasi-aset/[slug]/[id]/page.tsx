@@ -220,7 +220,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                           <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px] group-hover:text-[#0D9488] transition-colors">{report.issue_title}</span>
                           <span className="text-xs text-[#94A3B8] font-medium">{new Date(report.created_at).toLocaleDateString()} • Pelapor: {report.reporter_name}</span>
                        </div>
-                       <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${locationNameFromUrl}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">Detail</Link>
+                       <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${encodeURIComponent(locationNameFromUrl)}&assetName=${encodeURIComponent(asset?.name || "")}&issueTitle=${encodeURIComponent(report.issue_title)}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">Detail</Link>
                     </div>
                  )) : <p className="p-10 text-center text-secondary italic">Tidak ada riwayat.</p>
                ) : (
@@ -296,7 +296,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
              <button type="button" onClick={() => editFileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins">Ganti Foto</button>
              <div className="flex flex-col gap-3 mt-auto pt-4">
                 <button type="submit" className="w-full bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700">Simpan Perubahan</button>
-                <button type="button" onClick={() => { setIsEditModalOpen(false); setEditImagePreview(asset.image_url); setIsNewTypeEdit(false); }} className="w-full bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm">Batal</button>
+                <button type="button" onClick={() => { setIsEditModalOpen(false); setEditImagePreview(asset.image_url); setIsNewTypeEdit(false); }} className="w-full py-3.5 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
              </div>
           </div>
         </form>
@@ -308,7 +308,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center"><AlertTriangle size={32} /></div>
            <p className="dark:text-white font-poppins text-lg">Yakin hapus permanen <span className="font-bold text-red-600">{asset.name}</span>?</p>
            <div className="flex gap-4 w-full">
-              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 border border-gray-200 rounded-xl font-bold text-secondary">Batal</button>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
               <button onClick={handleDelete} className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold shadow-md">Ya, Hapus</button>
            </div>
         </div>
