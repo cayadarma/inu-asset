@@ -158,9 +158,9 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
 
     const isFinishing = forceStatus === "Selesai";
 
-    // --- VALIDASI: KETERANGAN & FOTO WAJIB UNTUK SETIAP PENYIMPANAN ---
-    if (!updateForm.tindak_lanjut.trim()) {
-      alert("Keterangan perbaikan wajib diisi.");
+    // --- VALIDASI: STATUS & FOTO WAJIB UNTUK SETIAP PENYIMPANAN ---
+    if (!updateForm.keterangan) {
+      alert("Status perbaikan wajib dipilih.");
       return;
     }
     if (!photoUrl) {
@@ -406,7 +406,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
-              Keterangan Perbaikan <span className="text-red-500">*</span>
+              Keterangan Perbaikan
             </label>
             <textarea
               rows={3}
@@ -415,16 +415,18 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
               placeholder="Jelaskan tindakan atau perkembangan perbaikan yang dilakukan..."
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none bg-white dark:bg-[#0F172A] dark:text-white font-medium"
             />
-            <span className="text-[11px] text-[#94A3B8] italic">Wajib diisi setiap kali menyimpan pembaruan perbaikan.</span>
+            <span className="text-[11px] text-[#94A3B8] italic">Tambahkan jika ada tambahan perbaikan atau catatan perbaikan.</span>
           </div>
 
           <div className="flex flex-col gap-2">
             <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Status</label>
             <select
+              required
               value={updateForm.keterangan}
               onChange={(e) => setUpdateForm({ ...updateForm, keterangan: e.target.value })}
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white"
             >
+              <option value="" disabled>Pilih status perbaikan</option>
               <option value="Dalam Proses">Dalam Proses</option>
               <option value="Menunggu Part">Menunggu Suku Cadang</option>
               <option value="Selesai">Selesai</option>

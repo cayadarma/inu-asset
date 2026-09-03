@@ -12,27 +12,55 @@ import { Box, Banknote, ShieldCheck, PlayCircle, Wrench, AlertCircle } from "luc
 
 export default function Home() {
   // 2. Perbaikan State (Menambahkan active, maintenance, dan broken)
-  const [counts, setCounts] = useState({ 
-    total: 0, 
+  const [counts, setCounts] = useState({
+    total: 0,
     active: 0,
     maintenance: 0,
     broken: 0,
-    cost: "Rp 847.5 M", 
-    availability: "94.2%" 
+    cost: "Rp 847.5 M",
+    availability: "0%",
   });
 
   useEffect(() => {
     async function getStats() {
       const { data } = await supabase.from("assets").select("status");
-      if (data) {
-        setCounts(prev => ({ 
-          ...prev, 
-          total: data.length,
-          active: data.filter(a => a.status === 'Beroperasi').length,
-          maintenance: data.filter(a => a.status === 'Pemeliharaan').length,
-          broken: data.filter(a => a.status === 'Rusak' || a.status === 'Perbaikan').length,
-        }));
-      }
+      if (!data) return;
+
+      const total = data.length;
+      const active = data.filter((a) => a.status === "Beroperasi").length;
+      const maintenance = data.filter((a) => a.status === "Pemeliharaan").length;
+      const perbaikan = data.filter((a) => a.status === "Perbaikan").length;
+      const rusak = data.filter((a) => a.status === "Rusak").length;
+
+      // --- ASSET AVAILABILITY: HANYA STATUS "BEROPERASI" & "PEMELIHARAAN" YANG DIHITUNG TERSEDIA ---
+      // Status "Rusak" dan "Perbaikan" TIDAK dihitung sebagai tersedia.
+      const availabilityPct = total > 0 ? ((active + maintenance) / total) * 100 : 0;
+
+      setCounts((prev) => ({
+        ...prev,
+        total,
+        active,
+        maintenance,
+        broken: rusak + perbaikan,
+        availability: `${availabilityPct.toFixed(1)}%`,
+      }));
+
+      // --- CATAT "POTRET" STATUS ASET HARI INI UNTUK GRAFIK TREN ---
+      // Di-upsert (insert atau update jika sudah ada) berdasarkan snapshot_date,
+      // supaya selalu mencerminkan kondisi terbaru pada hari berjalan.
+      const today = new Date().toISOString().slice(0, 10); // format YYYY-MM-DD
+      await supabase.from("asset_status_snapshots").upsert(
+        [{
+          snapshot_date: today,
+          beroperasi: active,
+          pemeliharaan: maintenance,
+          perbaikan: perbaikan,
+          rusak: rusak,
+          total: total,
+          updated_at: new Date().toISOString(),
+        }],
+        { onConflict: "snapshot_date" }
+      );
     }
     getStats();
   }, []);

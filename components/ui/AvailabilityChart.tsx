@@ -23,22 +23,55 @@ const data = [
   { name: "Des", beroperasi: 1240, pemeliharaan: 110, perbaikan: 30, rusak: 12 },
 ];
 
+// --- DAFTAR TAHUN & BULAN UNTUK FILTER (STATIS, MENGIKUTI DATA DUMMY) ---
+const yearOptions = [2022, 2023, 2024, 2025];
+const monthOptions = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+const todayStr = new Date().toISOString().slice(0, 10);
+
 export default function AvailabilityChart() {
   const [location, setLocation] = useState("Semua Lokasi");
   const [period, setPeriod] = useState("Bulanan");
 
+  // --- STATE KHUSUS PER JENIS PERIODE ---
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(monthOptions[new Date().getMonth()]);
+  const [selectedWeekDate, setSelectedWeekDate] = useState(todayStr); // acuan tanggal, minggu dimulai hari Minggu
+  const [selectedDay, setSelectedDay] = useState(todayStr);
+  const [customStart, setCustomStart] = useState(todayStr);
+  const [customEnd, setCustomEnd] = useState(todayStr);
+
+  // --- HITUNG TANGGAL AWAL MINGGU (HARI MINGGU) DARI TANGGAL ACUAN ---
+  const getWeekStart = (dateStr: string) => {
+    const date = new Date(dateStr + "T00:00:00");
+    const day = date.getDay(); // 0 = Minggu
+    date.setDate(date.getDate() - day);
+    return date;
+  };
+  const getWeekEnd = (dateStr: string) => {
+    const start = getWeekStart(dateStr);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return end;
+  };
+  const formatTanggal = (d: Date) =>
+    d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+
   return (
-    <div className="bg-white dark:bg-[#1E293B] p-8 rounded-[32px] border border-gray-100 dark:border-[#334155] shadow-sm h-[500px] flex flex-col gap-8 transition-all duration-300">
+    <div className="bg-white dark:bg-[#1E293B] p-8 rounded-[32px] border border-gray-100 dark:border-[#334155] shadow-sm min-h-[500px] flex flex-col gap-8 transition-all duration-300">
       
-      {/* 1. HEADER & DUAL FILTERS */}
+      {/* 1. HEADER & FILTERS */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-col gap-1">
           <h3 className="text-[11px] font-black text-[#94A3B8] uppercase tracking-[0.2em]">Tren Ketersediaan Aset</h3>
-          <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Monitoring Status Bulanan</p>
+          <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Monitoring Status {period}</p>
         </div>
 
-        <div className="flex flex-wrap gap-3 w-full md:w-auto">
-          {/* Filter Tempat */}
+        <div className="flex flex-wrap gap-3 w-full md:w-auto items-center">
+          {/* Filter Tempat (TETAP DIPERTAHANKAN) */}
           <div className="relative flex-1 md:flex-none">
             <select 
               value={location}
@@ -53,7 +86,7 @@ export default function AvailabilityChart() {
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
           </div>
 
-          {/* Filter Tanggal */}
+          {/* Filter Jenis Periode */}
           <div className="relative flex-1 md:flex-none">
             <select 
               value={period}
@@ -64,15 +97,96 @@ export default function AvailabilityChart() {
               <option>Mingguan</option>
               <option>Bulanan</option>
               <option>Tahunan</option>
+              <option>Custom</option>
             </select>
             <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
           </div>
+
+          {/* --- INPUT TAMBAHAN SESUAI JENIS PERIODE YANG DIPILIH --- */}
+
+          {/* TAHUNAN: pilih tahun */}
+          {period === "Tahunan" && (
+            <div className="relative flex-1 md:flex-none">
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="w-full appearance-none pl-4 pr-9 py-2.5 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
+              >
+                {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+            </div>
+          )}
+
+          {/* BULANAN: pilih bulan */}
+          {period === "Bulanan" && (
+            <div className="relative flex-1 md:flex-none">
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="w-full appearance-none pl-4 pr-9 py-2.5 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
+              >
+                {monthOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+            </div>
+          )}
+
+          {/* MINGGUAN: pilih tanggal, minggu dimulai hari Minggu */}
+          {period === "Mingguan" && (
+            <input
+              type="date"
+              value={selectedWeekDate}
+              onChange={(e) => setSelectedWeekDate(e.target.value)}
+              className="py-2.5 px-4 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
+            />
+          )}
+
+          {/* HARIAN: pilih tanggal */}
+          {period === "Harian" && (
+            <input
+              type="date"
+              value={selectedDay}
+              onChange={(e) => setSelectedDay(e.target.value)}
+              className="py-2.5 px-4 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
+            />
+          )}
+
+          {/* CUSTOM: pilih tanggal "dari" dan "sampai" */}
+          {period === "Custom" && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customStart}
+                max={customEnd}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="py-2.5 px-4 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
+              />
+              <span className="text-[#94A3B8] text-xs font-bold">s/d</span>
+              <input
+                type="date"
+                value={customEnd}
+                min={customStart}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="py-2.5 px-4 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 2. AREA GRAFIK (4 SEKTOR) */}
-      <div className="flex-1 w-full -ml-4">
+      {/* KETERANGAN RENTANG YANG SEDANG DIPILIH (SUPAYA JELAS APA YANG SEDANG DILIHAT) */}
+      <div className="text-xs font-bold text-[#0D9488] -mt-4">
+        {period === "Tahunan" && `Menampilkan tahun ${selectedYear}`}
+        {period === "Bulanan" && `Menampilkan bulan ${selectedMonth}`}
+        {period === "Mingguan" && `Menampilkan minggu ${formatTanggal(getWeekStart(selectedWeekDate))} — ${formatTanggal(getWeekEnd(selectedWeekDate))}`}
+        {period === "Harian" && `Menampilkan tanggal ${formatTanggal(new Date(selectedDay + "T00:00:00"))}`}
+        {period === "Custom" && `Menampilkan ${formatTanggal(new Date(customStart + "T00:00:00"))} s/d ${formatTanggal(new Date(customEnd + "T00:00:00"))}`}
+      </div>
+
+      {/* 2. AREA GRAFIK (4 SEKTOR) — DATA DUMMY TETAP DIPERTAHANKAN */}
+      <div className="h-[320px] w-full -ml-4">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
