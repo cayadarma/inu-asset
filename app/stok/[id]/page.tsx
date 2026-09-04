@@ -48,7 +48,7 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
 
   // --- MODAL SESUAIKAN STOK ---
   const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
-  const [adjustForm, setAdjustForm] = useState({ type: "Masuk", qty: 0, reference: "", note: "" });
+  const [adjustForm, setAdjustForm] = useState({ type: "Masuk", qty: 0, reference: new Date().toISOString().slice(0, 10), note: "" });
 
   // --- MODAL EDIT INFO SUPPLIER ---
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
@@ -92,7 +92,9 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
     if (item?.name) document.title = `Stok — ${item.name}`;
   }, [item?.name]);
 
-  const resetAdjustForm = () => setAdjustForm({ type: "Masuk", qty: 0, reference: "", note: "" });
+  const todayDateStr = () => new Date().toISOString().slice(0, 10);
+
+  const resetAdjustForm = () => setAdjustForm({ type: "Masuk", qty: 0, reference: todayDateStr(), note: "" });
 
   // --- SIMPAN PENYESUAIAN STOK (CATAT PERGERAKAN + UPDATE QTY) ---
   const handleAdjustSubmit = async (e: React.FormEvent) => {
@@ -105,6 +107,10 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
     }
     if (adjustForm.type === "Keluar" && adjustForm.qty > item.qty) {
       alert(`Stok tidak mencukupi. Stok saat ini hanya ${item.qty} ${item.unit}.`);
+      return;
+    }
+    if (!adjustForm.reference) {
+      alert("Tanggal masuk/keluar wajib diisi.");
       return;
     }
 
@@ -227,15 +233,16 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
             <table className="w-full text-left text-sm">
               <thead className="bg-white dark:bg-[#1E293B] border-b text-[#94A3B8] font-bold uppercase text-[11px]">
                 <tr>
-                  <th className="px-6 py-4">Tanggal</th>
+                  <th className="px-6 py-4">Dicatat Pada</th>
                   <th className="px-6 py-4">Tipe</th>
                   <th className="px-6 py-4">Jumlah</th>
-                  <th className="px-6 py-4">Referensi</th>
+                  <th className="px-6 py-4">Tanggal Masuk/Keluar</th>
+                  <th className="px-6 py-4">Catatan</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-[#334155]">
                 {movements.length === 0 ? (
-                  <tr><td colSpan={4} className="px-6 py-10 text-center text-[#94A3B8] italic">Belum ada riwayat pergerakan stok.</td></tr>
+                  <tr><td colSpan={5} className="px-6 py-10 text-center text-[#94A3B8] italic">Belum ada riwayat pergerakan stok.</td></tr>
                 ) : (
                   movements.map((move) => (
                     <tr key={move.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
@@ -250,9 +257,13 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
                       <td className={`px-6 py-4 font-black ${move.type === "Masuk" ? "text-[#10B981]" : "text-[#EF4444]"}`}>
                         {move.type === "Masuk" ? "+" : "-"}{move.qty} {item.unit}
                       </td>
-                      <td className="px-6 py-4">
-                        <p className="font-bold text-[#0D9488]">{move.reference || "-"}</p>
-                        {move.note && <p className="text-[11px] text-[#94A3B8]">{move.note}</p>}
+                      <td className="px-6 py-4 font-bold text-[#0D9488]">
+                        {move.reference
+                          ? new Date(move.reference).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
+                          : "-"}
+                      </td>
+                      <td className="px-6 py-4 text-[#475569] dark:text-[#94A3B8]">
+                        {move.note || "-"}
                       </td>
                     </tr>
                   ))
@@ -319,12 +330,12 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
             />
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Referensi</label>
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Tanggal {adjustForm.type === "Keluar" ? "Keluar" : "Masuk"} <span className="text-red-500">*</span></label>
             <input
-              type="text"
+              required
+              type="date"
               value={adjustForm.reference}
               onChange={(e) => setAdjustForm({ ...adjustForm, reference: e.target.value })}
-              placeholder="Contoh: WO-2024-0042 / PO-2024-0102"
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white"
             />
           </div>

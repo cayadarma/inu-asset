@@ -1,27 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { 
-  ChevronDown, User, Mail, Shield, Globe, Bell, 
-  Database, Trash2, Image as ImageIcon, Plus, 
-  UserPlus, Pencil, Users, X
+  ChevronDown, User, Globe, Bell
 } from "lucide-react";
-import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { useTheme } from "../../context/ThemeContext";
-import { supabase } from "@/lib/supabase";
 
 export default function SettingsPage() {
   const { isDarkMode, toggleTheme } = useTheme();
 
   // --- STATE DATA ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
-  const [staffList, setStaffList] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // State Form Staff
-  const [staffForm, setStaffForm] = useState({ id: "", name: "", role: "Teknisi" });
 
   // State Switch Notifikasi
   const [switches, setSwitches] = useState({
@@ -30,46 +20,6 @@ export default function SettingsPage() {
     notifStock: true,
     notifReport: false,
   });
-
-  // --- LOGIKA CRUD STAFF ---
-
-  // 1. Ambil Data Staff
-  const fetchStaff = async () => {
-    setIsLoading(true);
-    const { data } = await supabase.from("staff").select("*").order("name", { ascending: true });
-    if (data) setStaffList(data);
-    setIsLoading(false);
-  };
-
-  useEffect(() => {
-    fetchStaff();
-  }, []);
-
-  // 2. Simpan atau Update Staff
-  const handleSaveStaff = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!staffForm.name) return;
-
-    if (staffForm.id) {
-      // Update
-      await supabase.from("staff").update({ name: staffForm.name, role: staffForm.role }).eq("id", staffForm.id);
-    } else {
-      // Insert
-      await supabase.from("staff").insert([{ name: staffForm.name, role: staffForm.role }]);
-    }
-
-    setStaffForm({ id: "", name: "", role: "Teknisi" });
-    setIsStaffModalOpen(false);
-    fetchStaff();
-  };
-
-  // 3. Hapus Staff
-  const handleDeleteStaff = async (id: string) => {
-    if (confirm("Hapus personil ini dari tim?")) {
-      await supabase.from("staff").delete().eq("id", id);
-      fetchStaff();
-    }
-  };
 
   const toggleNotif = (key: keyof typeof switches) => {
     setSwitches((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -80,7 +30,7 @@ export default function SettingsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pengaturan Sistem</h1>
-        <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Kelola data tim, preferensi sistem, dan keamanan</p>
+        <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Kelola preferensi sistem dan keamanan</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -139,36 +89,6 @@ export default function SettingsPage() {
 
         {/* KOLOM KANAN */}
         <div className="flex flex-col gap-8">
-          {/* MANAJEMEN STAFF (POIN BARU) */}
-          <div className="bg-white dark:bg-[#1E293B] p-8 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-6">
-            <div className="flex justify-between items-center">
-               <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base flex items-center gap-2">
-                  <Users size={18} className="text-[#0D9488]" /> Manajemen Staff & Tim
-               </h3>
-               <button 
-                onClick={() => { setStaffForm({id:"", name:"", role:"Teknisi"}); setIsStaffModalOpen(true); }}
-                className="p-2 bg-[#0D9488] text-white rounded-lg hover:bg-teal-700 transition-all"
-               >
-                 <UserPlus size={18} />
-               </button>
-            </div>
-            
-            <div className="flex flex-col gap-3">
-               {isLoading ? <p className="text-center py-4 text-sm text-[#94A3B8]">Memuat...</p> : staffList.map((s) => (
-                  <div key={s.id} className="flex justify-between items-center p-4 bg-[#F8FAFC] dark:bg-[#0F172A] rounded-xl border border-gray-100 dark:border-[#334155] group">
-                     <div className="flex flex-col">
-                        <span className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{s.name}</span>
-                        <span className="text-[11px] text-[#94A3B8] font-bold uppercase tracking-wider">{s.role}</span>
-                     </div>
-                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setStaffForm(s); setIsStaffModalOpen(true); }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"><Pencil size={14} /></button>
-                        <button onClick={() => handleDeleteStaff(s.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Trash2 size={14} /></button>
-                     </div>
-                  </div>
-               ))}
-            </div>
-          </div>
-
           {/* Konfigurasi Notifikasi */}
           <div className="bg-white dark:bg-[#1E293B] p-8 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-8">
             <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base flex items-center gap-2">
@@ -206,36 +126,6 @@ export default function SettingsPage() {
                 <button type="submit" className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold text-sm shadow-md">Simpan Perubahan</button>
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-3 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] rounded-xl font-bold text-sm">Batal</button>
               </div>
-           </div>
-        </form>
-      </Modal>
-
-      {/* MODAL MANAJEMEN STAFF */}
-      <Modal isOpen={isStaffModalOpen} onClose={() => setIsStaffModalOpen(false)} title={staffForm.id ? "Edit Personil" : "Tambah Personil Baru"}>
-        <form onSubmit={handleSaveStaff} className="flex flex-col gap-5 text-left">
-           <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Nama Lengkap</label>
-              <input 
-                type="text" required value={staffForm.name} 
-                onChange={e => setStaffForm({...staffForm, name: e.target.value})}
-                placeholder="Contoh: Veri Guna" 
-                className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-[#0D9488] dark:text-white" 
-              />
-           </div>
-           <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Jabatan / Role</label>
-              <select 
-                value={staffForm.role} 
-                onChange={e => setStaffForm({...staffForm, role: e.target.value})}
-                className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-[#0D9488] dark:text-white"
-              >
-                <option value="Teknisi">Pegawai</option>
-                <option value="Pengawas">Operator</option>
-              </select>
-           </div>
-           <div className="flex gap-3 mt-4">
-              <button type="submit" className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold text-sm shadow-md">Simpan Data</button>
-              <button type="button" onClick={() => setIsStaffModalOpen(false)} className="flex-1 py-3 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] text-[#475569] rounded-xl font-bold text-sm">Batal</button>
            </div>
         </form>
       </Modal>

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Search, ChevronDown, Eye, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, ChevronDown, Eye } from "lucide-react";
 import Link from "next/link";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
@@ -32,9 +32,6 @@ export default function StockPage() {
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);
 
   // --- STATE FILTER ---
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,16 +50,6 @@ export default function StockPage() {
     supplier_name: "",
   });
   const [isSaving, setIsSaving] = useState(false);
-
-  // --- STATE FORM EDIT ---
-  const [editForm, setEditForm] = useState({
-    name: "",
-    category: "",
-    qty: 0,
-    unit: "Pcs",
-    min_stock: 5,
-    supplier_name: "",
-  });
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -131,70 +118,6 @@ export default function StockPage() {
     } else {
       setIsAddModalOpen(false);
       setAddForm({ id: "", name: "", category: "", qty: 0, unit: "Pcs", min_stock: 5, supplier_name: "" });
-      fetchData();
-    }
-    setIsSaving(false);
-  };
-
-  // --- BUKA MODAL EDIT ---
-  const openEditModal = (item: StockItem) => {
-    setSelectedItem(item);
-    setEditForm({
-      name: item.name,
-      category: item.category || "",
-      qty: item.qty,
-      unit: item.unit,
-      min_stock: item.min_stock,
-      supplier_name: item.supplier_name || "",
-    });
-    setIsEditModalOpen(true);
-  };
-
-  // --- SIMPAN PERUBAHAN EDIT ---
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedItem) return;
-    setIsSaving(true);
-
-    const { error } = await supabase.from("stock_items").update({
-      name: editForm.name.trim(),
-      category: editForm.category.trim() || null,
-      qty: editForm.qty,
-      unit: editForm.unit,
-      min_stock: editForm.min_stock,
-      supplier_name: editForm.supplier_name.trim() || null,
-      updated_at: new Date().toISOString(),
-    }).eq("id", selectedItem.id);
-
-    if (error) {
-      alert("Gagal menyimpan perubahan: " + error.message);
-    } else {
-      setIsEditModalOpen(false);
-      setSelectedItem(null);
-      fetchData();
-    }
-    setIsSaving(false);
-  };
-
-  // --- BUKA MODAL HAPUS ---
-  const openDeleteModal = (item: StockItem) => {
-    setSelectedItem(item);
-    setIsDeleteModalOpen(true);
-  };
-
-  // --- HAPUS ITEM STOK (BESERTA RIWAYAT PERGERAKANNYA) ---
-  const handleDelete = async () => {
-    if (!selectedItem) return;
-    setIsSaving(true);
-
-    await supabase.from("stock_movements").delete().eq("stock_item_id", selectedItem.id);
-    const { error } = await supabase.from("stock_items").delete().eq("id", selectedItem.id);
-
-    if (error) {
-      alert("Gagal menghapus item: " + error.message);
-    } else {
-      setIsDeleteModalOpen(false);
-      setSelectedItem(null);
       fetchData();
     }
     setIsSaving(false);
@@ -276,13 +199,7 @@ export default function StockPage() {
                     </td>
                     <td className="px-6 py-5">
                       <div className="flex justify-center gap-3">
-                        <Link href={`/stok/${item.id}`} className="text-[#64748B] hover:text-[#0D9488] transition-colors"><Eye size={18} /></Link>
-                        <button onClick={() => openEditModal(item)} className="text-[#64748B] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors">
-                          <Pencil size={16} />
-                        </button>
-                        <button onClick={() => openDeleteModal(item)} className="text-[#64748B] hover:text-red-600 transition-colors">
-                          <Trash2 size={16} />
-                        </button>
+                        <Link href={`/stok/${item.id}`} className="text-[#64748B] hover:text-[#0D9488] transition-colors" title="Lihat Detail"><Eye size={18} /></Link>
                       </div>
                     </td>
                   </tr>
@@ -379,94 +296,6 @@ export default function StockPage() {
         </form>
       </Modal>
 
-      {/* 6. MODAL EDIT ITEM STOK */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Edit Item: ${selectedItem?.id || ""}`}>
-        <form onSubmit={handleEditSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-          <div className="md:col-span-2 flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Nama Item</label>
-            <input
-              required
-              type="text"
-              value={editForm.name}
-              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-              className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm font-bold outline-none focus:border-primary dark:text-white"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Kategori</label>
-            <input
-              type="text"
-              value={editForm.category}
-              onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-              className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm outline-none focus:border-primary dark:text-white"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Satuan</label>
-            <select
-              value={editForm.unit}
-              onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
-              className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm outline-none focus:border-primary cursor-pointer font-medium dark:text-white"
-            >
-              <option>Pcs</option><option>Set</option><option>Can</option><option>Drum</option><option>Box</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Update Stok (Saat Ini)</label>
-            <div className="relative">
-              <input
-                type="number"
-                min={0}
-                value={editForm.qty}
-                onChange={(e) => setEditForm({ ...editForm, qty: Number(e.target.value) })}
-                className="w-full p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F1F5F9] dark:bg-[#0F172A] text-sm font-black outline-none focus:border-primary text-[#0D9488]"
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-[#94A3B8]">{editForm.unit}</span>
-            </div>
-            <span className="text-[11px] text-[#94A3B8] italic">Untuk mencatat riwayat masuk/keluar, gunakan tombol "Sesuaikan Stok" di halaman detail item.</span>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Ambang Batas "Menipis"</label>
-            <input
-              type="number"
-              min={0}
-              value={editForm.min_stock}
-              onChange={(e) => setEditForm({ ...editForm, min_stock: Number(e.target.value) })}
-              className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm outline-none focus:border-primary dark:text-white"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Supplier</label>
-            <input
-              type="text"
-              value={editForm.supplier_name}
-              onChange={(e) => setEditForm({ ...editForm, supplier_name: e.target.value })}
-              className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm outline-none focus:border-primary dark:text-white"
-            />
-          </div>
-          <div className="md:col-span-2 flex gap-3 mt-4">
-            <button type="button" disabled={isSaving} onClick={() => setIsEditModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batal</button>
-            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold hover:bg-teal-700 shadow-md transition-all disabled:opacity-50">
-              {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* 7. MODAL KONFIRMASI HAPUS */}
-      <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Konfirmasi Hapus Item">
-        <div className="flex flex-col gap-6 text-left">
-          <p className="text-sm text-[#475569] dark:text-[#94A3B8]">
-            Yakin ingin menghapus item <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">{selectedItem?.name}</span> ({selectedItem?.id})? Seluruh riwayat pergerakan stok item ini juga akan ikut terhapus secara permanen.
-          </p>
-          <div className="flex gap-3">
-            <button type="button" disabled={isSaving} onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batal</button>
-            <button type="button" disabled={isSaving} onClick={handleDelete} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-md transition-all disabled:opacity-50">
-              {isSaving ? "Menghapus..." : "Ya, Hapus"}
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
