@@ -39,3 +39,10 @@ body {
 .dark input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(0.8);
 }
+
+/* Matikan ikon mata bawaan browser (Edge/IE) pada input password,
+   supaya tidak dobel dengan ikon mata custom di form login */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+    display: none;
+}

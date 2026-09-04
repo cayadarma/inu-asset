@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
-import { ChevronDown, User, Globe, Bell, Check, LoaderCircle } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { ChevronDown, User, Globe, Bell, Check, LoaderCircle, Camera, ZoomIn } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import { useTheme } from "../../context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { resolveAvatarUrl, hashPassword } from "@/lib/auth";
 import { Lang } from "@/lib/i18n/dictionary";
+import imageCompression from "browser-image-compression";
 
 type NotifKey = "notifEmail" | "notifMaint" | "notifStock" | "notifReport";
 
@@ -18,8 +20,22 @@ export default function SettingsPage() {
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: user?.name || "", email: user?.email || "" });
+  const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [toastMsg, setToastMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // --- State penyesuaian ukuran foto (zoom/crop persegi sebelum upload) ---
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
+  const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
+  const [zoom, setZoom] = useState(1);
+  const pendingFileRef = useRef<File | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const CROP_BOX = 240; // ukuran kotak pratinjau (px)
+  const OUTPUT_SIZE = 480; // ukuran hasil akhir foto (px)
 
   const switches = user?.notification_settings || {
     notifEmail: true,
@@ -33,16 +49,137 @@ export default function SettingsPage() {
     setTimeout(() => setToastMsg(null), 2500);
   };
 
-  // --- Simpan Profil ---
+  // --- Pilih Foto: buka modal penyesuaian ukuran dulu ---
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    try {
+      if (file.name.toLowerCase().endsWith(".heic")) {
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      }
+
+      pendingFileRef.current = file;
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+        setRawImageSrc(objectUrl);
+        setZoom(1);
+        setIsAdjustOpen(true);
+      };
+      img.src = objectUrl;
+    } catch (err: any) {
+      showToast("error", t("settings.saveFailed"));
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // Skala tampilan (cover) dikali zoom, dipakai baik untuk pratinjau maupun render canvas akhir
+  const getDisplayScale = (boxSize: number) => {
+    if (!naturalSize.w || !naturalSize.h) return 1;
+    const baseScale = Math.max(boxSize / naturalSize.w, boxSize / naturalSize.h);
+    return baseScale * zoom;
+  };
+
+  // --- Terapkan penyesuaian ukuran: render ke canvas persegi, lalu upload ---
+  const handleApplyAdjust = async () => {
+    if (!rawImageSrc || !user || !pendingFileRef.current) return;
+
+    setIsUploadingPhoto(true);
+    try {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = reject;
+        img.src = rawImageSrc;
+      });
+
+      const canvas = canvasRef.current;
+      if (!canvas) throw new Error("Canvas tidak tersedia");
+      canvas.width = OUTPUT_SIZE;
+      canvas.height = OUTPUT_SIZE;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Konteks canvas tidak tersedia");
+
+      const scale = getDisplayScale(OUTPUT_SIZE);
+      const drawW = naturalSize.w * scale;
+      const drawH = naturalSize.h * scale;
+      const dx = (OUTPUT_SIZE - drawW) / 2;
+      const dy = (OUTPUT_SIZE - drawH) / 2;
+
+      ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+      ctx.drawImage(img, dx, dy, drawW, drawH);
+
+      const blob: Blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Gagal memproses gambar"))), "image/jpeg", 0.9);
+      });
+
+      const croppedFile = new File([blob], `avatar-${Date.now()}.jpg`, { type: "image/jpeg" });
+      const compressedFile = await imageCompression(croppedFile, { maxSizeMB: 0.4, maxWidthOrHeight: 600, useWebWorker: true });
+
+      const fileName = `${Date.now()}-avatar-${user.id}`;
+      const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, compressedFile);
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+
+      const { error: dbError } = await supabase.from("users").update({ avatar_url: publicUrl }).eq("id", user.id);
+      if (dbError) throw dbError;
+
+      const updatedUser = { ...user, avatar_url: publicUrl };
+      setUser(updatedUser);
+      localStorage.setItem("inu_asset_session", JSON.stringify(updatedUser));
+      setPreviewUrl(publicUrl);
+      setIsAdjustOpen(false);
+      if (rawImageSrc) URL.revokeObjectURL(rawImageSrc);
+      setRawImageSrc(null);
+      showToast("success", t("settings.saved"));
+    } catch (err: any) {
+      showToast("error", t("settings.saveFailed"));
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleCancelAdjust = () => {
+    if (rawImageSrc) URL.revokeObjectURL(rawImageSrc);
+    setRawImageSrc(null);
+    setIsAdjustOpen(false);
+  };
+
+  // --- Simpan Profil (nama, email, dan password baru jika diisi) ---
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    // Validasi password baru (jika diisi)
+    if (passwordForm.newPassword || passwordForm.confirmPassword) {
+      if (passwordForm.newPassword.length < 6) {
+        showToast("error", t("settings.passwordTooShort"));
+        return;
+      }
+      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+        showToast("error", t("settings.passwordMismatch"));
+        return;
+      }
+    }
+
     setIsSavingProfile(true);
 
-    const { error } = await supabase
-      .from("users")
-      .update({ name: profileForm.name, email: profileForm.email })
-      .eq("id", user.id);
+    const updatePayload: Record<string, any> = {
+      name: profileForm.name,
+      email: profileForm.email,
+    };
+
+    if (passwordForm.newPassword) {
+      updatePayload.password_hash = await hashPassword(passwordForm.newPassword);
+    }
+
+    const { error } = await supabase.from("users").update(updatePayload).eq("id", user.id);
 
     setIsSavingProfile(false);
 
@@ -54,6 +191,7 @@ export default function SettingsPage() {
     const updatedUser = { ...user, name: profileForm.name, email: profileForm.email };
     setUser(updatedUser);
     localStorage.setItem("inu_asset_session", JSON.stringify(updatedUser));
+    setPasswordForm({ newPassword: "", confirmPassword: "" });
     setIsEditModalOpen(false);
     showToast("success", t("settings.saved"));
   };
@@ -117,7 +255,7 @@ export default function SettingsPage() {
             <div className="flex items-center gap-6">
               <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-[#F1F5F9] dark:border-[#334155] shadow-sm">
                 <img
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.avatar_seed || "Felix"}`}
+                  src={resolveAvatarUrl(user)}
                   alt="Profile"
                   className="w-full h-full object-cover"
                 />
@@ -136,6 +274,8 @@ export default function SettingsPage() {
             <button
               onClick={() => {
                 setProfileForm({ name: user?.name || "", email: user?.email || "" });
+                setPasswordForm({ newPassword: "", confirmPassword: "" });
+                setPreviewUrl(null);
                 setIsEditModalOpen(true);
               }}
               className="w-fit px-6 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155] transition-all"
@@ -214,13 +354,39 @@ export default function SettingsPage() {
       <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={t("settings.editProfile")}>
         <form onSubmit={handleSaveProfile} className="grid grid-cols-1 md:grid-cols-3 gap-10 text-left">
           <div className="md:col-span-1 flex flex-col gap-4 items-center">
-            <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-[#F8FAFC] shadow-md bg-gray-100 flex items-center justify-center">
-              <img
-                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.avatar_seed || "Felix"}`}
-                alt="Profile"
-                className="w-full h-full object-cover"
+            <div className="relative w-32 h-32">
+              <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-[#F8FAFC] shadow-md bg-gray-100 flex items-center justify-center">
+                <img
+                  src={previewUrl || resolveAvatarUrl(user)}
+                  alt="Profile"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              {isUploadingPhoto && (
+                <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
+                  <LoaderCircle size={24} className="animate-spin text-white" />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingPhoto}
+                className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-[#0D9488] text-white flex items-center justify-center shadow-md hover:bg-[#0B7A70] transition-all disabled:opacity-60"
+                title={t("settings.changePhoto")}
+              >
+                <Camera size={16} />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.heic,.webp"
+                onChange={handlePhotoSelect}
+                className="hidden"
               />
             </div>
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs font-bold text-[#0D9488]">
+              {t("settings.changePhoto")}
+            </button>
           </div>
           <div className="md:col-span-2 flex flex-col gap-5">
             <div className="flex flex-col gap-2">
@@ -242,6 +408,34 @@ export default function SettingsPage() {
                 className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-[#0D9488] dark:text-white"
               />
             </div>
+
+            <div className="h-[1px] bg-gray-100 dark:bg-[#334155] w-full"></div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("settings.newPassword")}</label>
+              <span className="text-xs text-[#94A3B8]">{t("settings.newPasswordDesc")}</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              <input
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
+                placeholder={t("settings.newPassword")}
+                autoComplete="new-password"
+                className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-[#0D9488] dark:text-white"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <input
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                placeholder={t("settings.confirmPassword")}
+                autoComplete="new-password"
+                className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-[#0D9488] dark:text-white"
+              />
+            </div>
+
             <div className="flex gap-3 mt-6">
               <button
                 type="submit"
@@ -262,6 +456,68 @@ export default function SettingsPage() {
           </div>
         </form>
       </Modal>
+
+      {/* MODAL PENYESUAIAN UKURAN FOTO */}
+      <Modal isOpen={isAdjustOpen} onClose={handleCancelAdjust} title={t("settings.adjustPhoto")}>
+        <div className="flex flex-col items-center gap-6">
+          <div
+            className="rounded-full overflow-hidden border-4 border-[#F1F5F9] dark:border-[#334155] bg-gray-100 relative"
+            style={{ width: CROP_BOX, height: CROP_BOX }}
+          >
+            {rawImageSrc && naturalSize.w > 0 && (
+              <img
+                src={rawImageSrc}
+                alt="Pratinjau"
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: "50%",
+                  width: naturalSize.w * getDisplayScale(CROP_BOX),
+                  height: naturalSize.h * getDisplayScale(CROP_BOX),
+                  transform: "translate(-50%, -50%)",
+                  maxWidth: "none",
+                }}
+              />
+            )}
+          </div>
+
+          <div className="w-full flex items-center gap-3">
+            <ZoomIn size={18} className="text-[#94A3B8] flex-shrink-0" />
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.05}
+              value={zoom}
+              onChange={(e) => setZoom(parseFloat(e.target.value))}
+              className="w-full accent-[#0D9488]"
+            />
+          </div>
+
+          <div className="flex gap-3 w-full">
+            <button
+              type="button"
+              onClick={handleApplyAdjust}
+              disabled={isUploadingPhoto}
+              className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {isUploadingPhoto && <LoaderCircle size={16} className="animate-spin" />}
+              {t("settings.save")}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelAdjust}
+              disabled={isUploadingPhoto}
+              className="flex-1 py-3 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] rounded-xl font-bold text-sm"
+            >
+              {t("settings.cancel")}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Canvas tersembunyi untuk merender hasil crop */}
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 }

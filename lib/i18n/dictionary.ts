@@ -56,6 +56,12 @@ export const dictionary = {
     "settings.saveFailed": "Gagal menyimpan perubahan",
     "settings.role.administrator": "Administrator",
     "settings.role.operator": "Operator",
+    "settings.newPassword": "Kata Sandi Baru",
+    "settings.newPasswordDesc": "Kosongkan jika tidak ingin mengganti kata sandi",
+    "settings.confirmPassword": "Konfirmasi Kata Sandi Baru",
+    "settings.passwordMismatch": "Konfirmasi kata sandi tidak cocok",
+    "settings.passwordTooShort": "Kata sandi minimal 6 karakter",
+    "settings.adjustPhoto": "Sesuaikan Ukuran Foto",
 
     // Notifikasi
     "notif.title": "Pusat Notifikasi",
@@ -119,6 +125,12 @@ export const dictionary = {
     "settings.saveFailed": "Failed to save changes",
     "settings.role.administrator": "Administrator",
     "settings.role.operator": "Operator",
+    "settings.newPassword": "New Password",
+    "settings.newPasswordDesc": "Leave blank to keep your current password",
+    "settings.confirmPassword": "Confirm New Password",
+    "settings.passwordMismatch": "Password confirmation does not match",
+    "settings.passwordTooShort": "Password must be at least 6 characters",
+    "settings.adjustPhoto": "Adjust Photo Size",
 
     "notif.title": "Notification Center",
     "notif.subtitle": "You have {count} new messages",

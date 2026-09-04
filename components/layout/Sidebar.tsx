@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "../../context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
+import { resolveAvatarUrl } from "@/lib/auth";
 import { 
   LayoutDashboard, Box, HeartPulse, Wrench, Package, 
   CircleDollarSign, FileText, Settings, X, Sun, Moon, LogOut
@@ -74,11 +75,18 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         </div>
 
         <div className="pt-6 border-t border-gray-100 dark:border-[#334155] flex items-center gap-3">
-          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.avatar_seed || "Felix"}`} alt="Avatar" className="w-11 h-11 rounded-full border-2 border-gray-50 dark:border-[#334155] flex-shrink-0" />
-          <div className="flex flex-col min-w-0 flex-1">
-            <span className="text-[14px] font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate">{user?.name || "-"}</span>
-            <span className="text-[11px] text-[#94A3B8] italic truncate capitalize">{user?.role}</span>
-          </div>
+          <Link
+            href="/pengaturan"
+            onClick={() => setIsOpen(false)}
+            className="flex items-center gap-3 min-w-0 flex-1 rounded-xl hover:bg-gray-50 dark:hover:bg-[#334155] transition-all p-1.5 -m-1.5"
+            title={t("menu.pengaturan")}
+          >
+            <img src={resolveAvatarUrl(user)} alt="Avatar" className="w-11 h-11 rounded-full border-2 border-gray-50 dark:border-[#334155] flex-shrink-0 object-cover" />
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-[14px] font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate">{user?.name || "-"}</span>
+              <span className="text-[11px] text-[#94A3B8] italic truncate capitalize">{user?.role}</span>
+            </div>
+          </Link>
           <button
             onClick={logout}
             title={t("menu.logout")}

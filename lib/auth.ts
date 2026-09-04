@@ -10,6 +10,7 @@ export interface SessionUser {
   email: string | null;
   role: Role;
   avatar_seed: string;
+  avatar_url: string | null;
   language: "id" | "en";
   notification_settings: {
     notifEmail: boolean;
@@ -34,7 +35,7 @@ export async function login(
   const { data, error } = await supabase
     .from("users")
     .select("*")
-    .eq("username", username.trim().toLowerCase())
+    .eq("username", username.trim())
     .maybeSingle();
 
   if (error) return { error: "Gagal terhubung ke database." };
@@ -50,6 +51,7 @@ export async function login(
     email: data.email,
     role: data.role,
     avatar_seed: data.avatar_seed || "Felix",
+    avatar_url: data.avatar_url || null,
     language: data.language || "id",
     notification_settings: data.notification_settings || {
       notifEmail: true,
@@ -87,4 +89,10 @@ export function saveSession(user: SessionUser) {
   if (typeof window !== "undefined") {
     localStorage.setItem(SESSION_KEY, JSON.stringify(user));
   }
+}
+
+// Foto profil asli (jika sudah upload) atau avatar generik sebagai fallback
+export function resolveAvatarUrl(user: Pick<SessionUser, "avatar_url" | "avatar_seed"> | null | undefined) {
+  if (user?.avatar_url) return user.avatar_url;
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.avatar_seed || "Felix"}`;
 }
