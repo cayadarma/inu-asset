@@ -37,7 +37,7 @@ export default function LoginPage() {
     <div className="min-h-screen w-full flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0F172A] font-poppins p-4">
       <div className="w-full max-w-[420px] bg-white dark:bg-[#1E293B] rounded-3xl shadow-xl border border-gray-100 dark:border-[#334155] p-8 md:p-10 flex flex-col gap-8">
         <div className="flex flex-col items-center gap-3 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-[#CCFBF1] dark:bg-[#115E59]/30 flex items-center justify-center overflow-hidden">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden">
             <Image src="/CROP_Logo_INU_UPDATE_2024.png" alt="Logo" width={40} height={40} className="object-contain" />
           </div>
           <div>
