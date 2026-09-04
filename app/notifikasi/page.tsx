@@ -5,14 +5,29 @@ import { supabase } from "@/lib/supabase";
 import { Bell, AlertTriangle, ChevronRight, Clock, Box, Check, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation"; // 1. Tambahkan router
+import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 
 export default function NotificationPage() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const { t } = useLanguage();
+  const { user } = useAuth();
+
+  // Laporan kerusakan (Buku Sakit) masuk kategori notifikasi "Pemeliharaan"
+  const maintNotifOn = user?.notification_settings?.notifMaint ?? true;
 
   const fetchNotifications = async () => {
     setIsLoading(true);
+
+    if (!maintNotifOn) {
+      // Kategori notifikasi ini dimatikan user di Pengaturan
+      setNotifications([]);
+      setIsLoading(false);
+      return;
+    }
+
     // 2. MODIFIKASI: Pastikan query mengambil data paling fresh
     const { data, error } = await supabase
       .from("damage_reports")
@@ -35,7 +50,8 @@ export default function NotificationPage() {
 
   useEffect(() => {
     fetchNotifications();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maintNotifOn]);
 
   const markAsRead = async (id: string) => {
     // 3. Update database
@@ -75,24 +91,24 @@ export default function NotificationPage() {
         <div className="flex items-center gap-4">
           <div className="p-3 bg-[#0D9488]/10 text-[#0D9488] rounded-2xl"><Bell size={28} /></div>
           <div>
-            <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pusat Notifikasi</h1>
-            <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Anda memiliki {notifications.length} pesan baru</p>
+            <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("notif.title")}</h1>
+            <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">{t("notif.subtitle", { count: notifications.length })}</p>
           </div>
         </div>
         {notifications.length > 0 && (
           <button onClick={clearAll} className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-all">
-            <Trash2 size={18} /> Bersihkan Semua
+            <Trash2 size={18} /> {t("notif.clearAll")}
           </button>
         )}
       </div>
 
       <div className="flex flex-col gap-3">
         {isLoading ? (
-          <div className="p-20 text-center dark:text-white">Memuat...</div>
+          <div className="p-20 text-center dark:text-white">{t("notif.loading")}</div>
         ) : notifications.length === 0 ? (
           <div className="bg-white dark:bg-[#1E293B] p-20 rounded-3xl border border-dashed border-gray-200 dark:border-[#334155] text-[#94A3B8] dark:text-gray text-center flex flex-col items-center gap-4">
              <Bell size={48} className="text-[#94A3B8] dark:text-gray" />
-             <p className="text-secondary font-medium italic">Tidak ada notifikasi baru.</p>
+             <p className="text-secondary font-medium italic">{!maintNotifOn ? t("notif.disabledHint") : t("notif.empty")}</p>
           </div>
         ) : (
           notifications.map((notif) => (
@@ -108,10 +124,10 @@ export default function NotificationPage() {
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded uppercase">{notif.urgency?.split(' ')[0]}</span>
-                      <span className="text-[11px] text-[#94A3B8] font-bold uppercase tracking-widest">Laporan Baru</span>
+                      <span className="text-[11px] text-[#94A3B8] font-bold uppercase tracking-widest">{t("notif.newReport")}</span>
                     </div>
                     <h3 className="text-[16px] font-bold text-[#0F172A] dark:text-[#F8FAFC] group-hover:text-[#0D9488] transition-colors">{notif.issue_title}</h3>
-                    <p className="text-sm text-[#475569] dark:text-[#94A3B8]">Aset: <span className="font-bold">{notif.assets?.name}</span> | Lokasi: <span className="uppercase">{notif.assets?.locations?.name}</span></p>
+                    <p className="text-sm text-[#475569] dark:text-[#94A3B8]">{t("notif.asset")}: <span className="font-bold">{notif.assets?.name}</span> | {t("notif.location")}: <span className="uppercase">{notif.assets?.locations?.name}</span></p>
                     <p className="text-[11px] text-[#94A3B8] mt-1 italic"><Clock size={12} className="inline mr-1"/> {new Date(notif.created_at).toLocaleString('id-ID')}</p>
                   </div>
                 </div>

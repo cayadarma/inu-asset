@@ -4,10 +4,12 @@ import Image from "next/image";
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTheme } from "../../context/ThemeContext"; // Import Theme
+import { useTheme } from "../../context/ThemeContext";
+import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 import { 
   LayoutDashboard, Box, HeartPulse, Wrench, Package, 
-  CircleDollarSign, FileText, Settings, X, Sun, Moon 
+  CircleDollarSign, FileText, Settings, X, Sun, Moon, LogOut
 } from "lucide-react";
 
 interface SidebarProps {
@@ -17,17 +19,19 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const pathname = usePathname();
-  const { isDarkMode, toggleTheme } = useTheme(); // Gunakan Theme
+  const { isDarkMode, toggleTheme } = useTheme();
+  const { t } = useLanguage();
+  const { user, logout } = useAuth();
 
   const menuItems = [
-    { name: "Dashboard", icon: <LayoutDashboard size={20} />, href: "/" },
-    { name: "Registrasi Aset", icon: <Box size={20} />, href: "/registrasi-aset" },
-    { name: "Buku Sakit", icon: <HeartPulse size={20} />, href: "/buku-sakit" },
-    { name: "Pemeliharaan", icon: <Wrench size={20} />, href: "/pemeliharaan" },
-    { name: "Stok", icon: <Package size={20} />, href: "/stok" },
-    { name: "Analisis Biaya", icon: <CircleDollarSign size={20} />, href: "/analisis-biaya" },
-    { name: "Laporan", icon: <FileText size={20} />, href: "/laporan" },
-    { name: "Pengaturan", icon: <Settings size={20} />, href: "/pengaturan" },
+    { name: t("menu.dashboard"), icon: <LayoutDashboard size={20} />, href: "/" },
+    { name: t("menu.registrasiAset"), icon: <Box size={20} />, href: "/registrasi-aset" },
+    { name: t("menu.bukuSakit"), icon: <HeartPulse size={20} />, href: "/buku-sakit" },
+    { name: t("menu.pemeliharaan"), icon: <Wrench size={20} />, href: "/pemeliharaan" },
+    { name: t("menu.stok"), icon: <Package size={20} />, href: "/stok" },
+    { name: t("menu.analisisBiaya"), icon: <CircleDollarSign size={20} />, href: "/analisis-biaya" },
+    { name: t("menu.laporan"), icon: <FileText size={20} />, href: "/laporan" },
+    { name: t("menu.pengaturan"), icon: <Settings size={20} />, href: "/pengaturan" },
   ];
 
   return (
@@ -51,7 +55,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
               className="w-full flex items-center justify-between p-3 bg-[#F1F5F9] dark:bg-[#0F172A] rounded-xl border border-gray-100 dark:border-[#334155] transition-all"
             >
               <span className="text-sm font-bold text-[#475569] dark:text-[#94A3B8]">
-                {isDarkMode ? "Mode Gelap" : "Mode Terang"}
+                {isDarkMode ? t("menu.modeGelap") : t("menu.modeTerang")}
               </span>
               {isDarkMode ? <Moon size={18} className="text-yellow-300" /> : <Sun size={18} className="text-orange-500" />}
             </button>
@@ -61,7 +65,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             {menuItems.map((item) => {
               const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
               return (
-                <Link key={item.name} href={item.href} onClick={() => setIsOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive ? "bg-[#CCFBF1] dark:bg-[#115E59] text-[#0D9488] dark:text-[#CCFBF1] font-semibold" : "text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]"}`}>
+                <Link key={item.href} href={item.href} onClick={() => setIsOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive ? "bg-[#CCFBF1] dark:bg-[#115E59] text-[#0D9488] dark:text-[#CCFBF1] font-semibold" : "text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]"}`}>
                   {item.icon} <span className="text-[14px]">{item.name}</span>
                 </Link>
               );
@@ -70,11 +74,18 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         </div>
 
         <div className="pt-6 border-t border-gray-100 dark:border-[#334155] flex items-center gap-3">
-          <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="Avatar" className="w-11 h-11 rounded-full border-2 border-gray-50 dark:border-[#334155]" />
-          <div className="flex flex-col">
-            <span className="text-[14px] font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate">Administrator</span>
-            <span className="text-[11px] text-[#94A3B8] italic truncate">admin@inuasset.co.id</span>
+          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.avatar_seed || "Felix"}`} alt="Avatar" className="w-11 h-11 rounded-full border-2 border-gray-50 dark:border-[#334155] flex-shrink-0" />
+          <div className="flex flex-col min-w-0 flex-1">
+            <span className="text-[14px] font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate">{user?.name || "-"}</span>
+            <span className="text-[11px] text-[#94A3B8] italic truncate capitalize">{user?.role}</span>
           </div>
+          <button
+            onClick={logout}
+            title={t("menu.logout")}
+            className="p-2 text-[#94A3B8] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-all flex-shrink-0"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
       </aside>
     </>

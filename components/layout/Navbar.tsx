@@ -5,18 +5,31 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Sun, Moon, Bell, Menu } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "../../context/ThemeContext";
+import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+
+const MODULE_LABEL_KEYS: Record<string, string> = {
+  "registrasi-aset": "menu.registrasiAset",
+  "buku-sakit": "menu.bukuSakit",
+  pemeliharaan: "menu.pemeliharaan",
+  stok: "menu.stok",
+  "analisis-biaya": "menu.analisisBiaya",
+  laporan: "menu.laporan",
+  pengaturan: "menu.pengaturan",
+};
 
 function Breadcrumbs() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { t } = useLanguage();
 
   const nameFromUrl = searchParams.get("name");
   const assetName = searchParams.get("assetName");
   const issueTitle = searchParams.get("issueTitle");
 
   if (pathname === "/") {
-    return <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">Dashboard</span>;
+    return <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("dashboard.title")}</span>;
   }
 
   const paths = pathname.split("/").filter((p) => p !== "");
@@ -38,6 +51,11 @@ function Breadcrumbs() {
         let label = decodeURIComponent(path)
           .replace(/-/g, " ")
           .replace(/\b\w/g, (l) => l.toUpperCase());
+
+        // Terjemahkan label modul root sesuai bahasa aktif
+        if (index === 0 && MODULE_LABEL_KEYS[path]) {
+          label = t(MODULE_LABEL_KEYS[path] as any);
+        }
 
         // --- OVERRIDE UUID MENJADI NAMA ASLI BERDASARKAN HIERARKI ---
         const rootModule = paths[0];
@@ -96,10 +114,18 @@ function Breadcrumbs() {
 
 export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { isDarkMode, toggleTheme } = useTheme();
+  const { user } = useAuth();
   const [notifCount, setNotifCount] = useState(0);
 
   useEffect(() => {
+    // Notifikasi kerusakan aset (Buku Sakit) dianggap kategori "Pemeliharaan"
+    const maintNotifOn = user?.notification_settings?.notifMaint ?? true;
+
     const getInitialCount = async () => {
+      if (!maintNotifOn) {
+        setNotifCount(0);
+        return;
+      }
       const { count } = await supabase
         .from("damage_reports")
         .select("*", { count: "exact", head: true })
@@ -118,7 +144,7 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user?.notification_settings?.notifMaint]);
 
   return (
     <header className="h-[72px] bg-white dark:bg-[#1E293B] border-b border-gray-100 dark:border-[#334155] px-4 md:px-8 flex justify-between items-center sticky top-0 z-40 transition-all font-poppins">

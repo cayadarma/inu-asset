@@ -9,8 +9,10 @@ import MaintenanceSummary from "../components/ui/MaintenanceSummary";
 import RecentActivity from "../components/ui/RecentActivity"; 
 // 1. Perbaikan Import Ikon
 import { Box, Banknote, ShieldCheck, PlayCircle, Wrench, AlertCircle } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function Home() {
+  const { t } = useLanguage();
   // 2. Perbaikan State (Menambahkan active, maintenance, dan broken)
   const [counts, setCounts] = useState({
     total: 0,
@@ -70,8 +72,8 @@ export default function Home() {
       
       {/* HEADER */}
       <div>
-        <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Dashboard Overview</h1>
-        <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Pemantauan kesehatan aset dan progres perbaikan teknis</p>
+        <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("dashboard.overview")}</h1>
+        <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">{t("dashboard.overviewDesc")}</p>
       </div>
 
       {/* BARIS 1: KPI UTAMA */}
