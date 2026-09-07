@@ -24,7 +24,7 @@ export default function LoginPage() {
     const result = await login(username, password);
 
     if (result.error || !result.user) {
-      setError(result.error || "Login gagal.");
+      setError("username atau password salah!");
       setIsLoading(false);
       return;
     }
@@ -34,7 +34,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0F172A] font-poppins p-4">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#F8FAFC] dark:bg-[#0F172A] font-poppins p-4">
       <div className="w-full max-w-[420px] bg-white dark:bg-[#1E293B] rounded-3xl shadow-xl border border-gray-100 dark:border-[#334155] p-8 md:p-10 flex flex-col gap-8">
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden">
@@ -106,6 +106,10 @@ export default function LoginPage() {
           </button>
         </form>
       </div>
+
+      <p className="mt-6 text-center text-[11px] text-[#94A3B8]">
+        © {new Date().getFullYear()} ITDC Nusantara Utilitas · Developed by Cahya Darma Wedari
+      </p>
     </div>
   );
 }

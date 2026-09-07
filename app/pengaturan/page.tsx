@@ -25,6 +25,7 @@ export default function SettingsPage() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [toastMsg, setToastMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // --- State penyesuaian ukuran foto (zoom/crop persegi sebelum upload) ---
@@ -75,6 +76,7 @@ export default function SettingsPage() {
       showToast("error", t("settings.saveFailed"));
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
   };
 
@@ -369,7 +371,7 @@ export default function SettingsPage() {
               )}
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => cameraInputRef.current?.click()}
                 disabled={isUploadingPhoto}
                 className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-[#0D9488] text-white flex items-center justify-center shadow-md hover:bg-[#0B7A70] transition-all disabled:opacity-60"
                 title={t("settings.changePhoto")}
@@ -379,14 +381,28 @@ export default function SettingsPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".jpg,.jpeg,.png,.heic,.webp"
+                accept="image/*,.heic"
+                onChange={handlePhotoSelect}
+                className="hidden"
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
                 onChange={handlePhotoSelect}
                 className="hidden"
               />
             </div>
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs font-bold text-[#0D9488]">
-              {t("settings.changePhoto")}
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs font-bold text-[#0D9488]">
+                {t("settings.changePhoto")}
+              </button>
+              <span className="text-[#CBD5E1]">·</span>
+              <button type="button" onClick={() => cameraInputRef.current?.click()} className="text-xs font-bold text-[#0D9488]">
+                Kamera
+              </button>
+            </div>
           </div>
           <div className="md:col-span-2 flex flex-col gap-5">
             <div className="flex flex-col gap-2">

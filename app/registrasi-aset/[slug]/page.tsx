@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, use, useEffect, useRef } from "react";
-import { Search, Plus, Eye, ChevronLeft, ChevronRight, Image as ImageIcon, ChevronDown, X } from "lucide-react";
+import { Search, Plus, Eye, ChevronLeft, ChevronRight, Image as ImageIcon, ChevronDown, X, Camera as CameraIcon } from "lucide-react";
 import imageCompression from 'browser-image-compression';
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -37,6 +37,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // STATE PAGINATION
   const [currentPage, setCurrentPage] = useState(1);
@@ -281,8 +282,12 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
               <div className={`w-full aspect-square bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 dark:border-[#334155] overflow-hidden relative ${imagePreview ? 'cursor-zoom-in' : ''}`} onClick={() => imagePreview && setIsPreviewFullOpen(true)}>
                 {imagePreview ? <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /> : <><ImageIcon size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Preview Foto</span></>}
               </div>
-             <input type="file" className="hidden" ref={fileInputRef} onChange={handleImageChange} accept=".jpg,.jpeg,.png,.svg,.heic" />
-             <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">Pilih Foto (.jpg, .png, .jpeg, .heic, .webp)</button>
+             <input type="file" className="hidden" ref={fileInputRef} onChange={handleImageChange} accept="image/*,.heic" />
+             <input type="file" className="hidden" ref={cameraInputRef} onChange={handleImageChange} accept="image/*" capture="environment" />
+             <div className="flex gap-2">
+               <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">Pilih dari Galeri</button>
+               <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all"><CameraIcon size={14} /> Kamera</button>
+             </div>
              <div className="flex flex-col gap-3 mt-auto pt-10">
                 <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">Simpan Aset</button>
                 <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-4 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>

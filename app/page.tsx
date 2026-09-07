@@ -73,7 +73,6 @@ export default function Home() {
       {/* HEADER */}
       <div>
         <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("dashboard.overview")}</h1>
-        <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">{t("dashboard.overviewDesc")}</p>
       </div>
 
       {/* BARIS 1: KPI UTAMA */}
@@ -83,6 +82,7 @@ export default function Home() {
           value={counts.total.toLocaleString()} 
           description="Unit terdaftar di database" 
           icon={<Box size={20} />} 
+          href="/registrasi-aset/semua"
         />
         <StatCard 
           title="Biaya Pemeliharaan" 

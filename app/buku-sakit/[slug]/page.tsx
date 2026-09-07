@@ -2,7 +2,7 @@
 
 import React, { useState, use, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ChevronLeft, Search, Eye, Plus, ChevronDown, Calendar, User, Image as LucideImage, X, AlertCircle } from "lucide-react";
+import { ChevronLeft, Search, Eye, Plus, ChevronDown, Calendar, User, Image as LucideImage, X, AlertCircle, Camera as CameraIcon } from "lucide-react";
 import imageCompression from 'browser-image-compression';
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
@@ -37,6 +37,7 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // STATE PAGINATION
   const [currentPage, setCurrentPage] = useState(1);
@@ -234,7 +235,11 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
               {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <><LucideImage size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Upload Foto</span></>}
             </div>
             <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/*" />
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">Pilih Foto (.jpg, .png, .jpeg, .heic, .webp)</button>
+            <input type="file" ref={cameraInputRef} onChange={handleImageChange} className="hidden" accept="image/*" capture="environment" />
+            <div className="flex gap-2">
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">Pilih dari Galeri</button>
+              <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white"><CameraIcon size={14} /> Kamera</button>
+            </div>
             <div className="flex flex-col gap-3 mt-auto pt-6">
               <button type="submit" disabled={isLoading} className={`w-full py-4 rounded-xl font-bold text-sm shadow-md transition-all ${isLoading ? "bg-gray-400" : "bg-[#EF4444] text-white"}`}>Kirim Laporan</button>
               <button type="button" onClick={() => setIsBrokenModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">Batal</button>

@@ -3,10 +3,12 @@
 import React, { useState, useEffect } from "react";
 import { ChevronRight, MapPin, Plus, Pencil, Trash2, AlertTriangle, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Modal from "@/components/ui/Modal";
 
 export default function RegistrasiAsetPage() {
+  const router = useRouter();
   const [locations, setLocations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -15,6 +17,9 @@ export default function RegistrasiAsetPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedLoc, setSelectedLoc] = useState<any>(null); // Untuk Edit/Hapus
   const [newLocName, setNewLocName] = useState("");
+
+  // --- STATE UNTUK TOGGLE TOMBOL EDIT/HAPUS ---
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchLocations = async () => {
     setIsLoading(true);
@@ -79,40 +84,55 @@ export default function RegistrasiAsetPage() {
         {isLoading ? (
           <div className="p-10 text-center text-[#94A3B8]">Memuat lokasi...</div>
         ) : (
-          locations.map((loc) => (
-            <div 
+          locations.map((loc) => {
+            const isExpanded = expandedId === loc.id;
+            return (
+            <div
               key={loc.id}
-              className="group relative bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm hover:border-primary transition-all p-6 flex items-center justify-between"
+              onClick={() => router.push(`/registrasi-aset/${loc.id}?name=${encodeURIComponent(loc.name)}`)}
+              className="group relative bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm hover:border-primary transition-all p-6 flex items-center justify-between cursor-pointer"
             >
-              <Link href={`/registrasi-aset/${loc.id}?name=${encodeURIComponent(loc.name)}`} className="flex items-center gap-6 flex-1">
-                <div className="w-12 h-12 bg-[#CCFBF1] dark:bg-[#115E59]/30 rounded-lg flex items-center justify-center text-[#0D9488]">
+              <div className="flex items-center gap-6 flex-1 min-w-0">
+                <div className="w-12 h-12 bg-[#CCFBF1] dark:bg-[#115E59]/30 rounded-lg flex items-center justify-center text-[#0D9488] flex-shrink-0">
                   <MapPin size={24} />
                 </div>
-                <div className="flex flex-col text-left">
-                  <span className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC] uppercase tracking-tight">{loc.name}</span>
+                <div className="flex flex-col text-left min-w-0">
+                  <span className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC] uppercase tracking-tight truncate">{loc.name}</span>
                   <span className="text-sm font-medium text-[#64748B] dark:text-[#94A3B8]">Klik untuk manajemen aset</span>
                 </div>
-              </Link>
+              </div>
 
-              {/* ACTION BUTTONS (SELALU TERLIHAT, TIDAK PERLU HOVER) */}
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => { setSelectedLoc(loc); setNewLocName(loc.name); setIsModalOpen(true); }}
-                  className="p-2.5 bg-gray-50 dark:bg-[#0F172A] text-secondary dark:text-[#94A3B8] rounded-xl hover:text-primary transition-all border border-transparent hover:border-primary/20"
+              {/* TOMBOL EDIT & HAPUS: MUNCUL SETELAH CHEVRON DIKLIK */}
+              <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className={`flex items-center gap-2 overflow-hidden transition-all duration-200 ${
+                    isExpanded ? "max-w-[120px] opacity-100 mr-2" : "max-w-0 opacity-0"
+                  }`}
                 >
-                  <Pencil size={18} />
-                </button>
-                <button 
-                  onClick={() => { setSelectedLoc(loc); setIsDeleteModalOpen(true); }}
-                  className="p-2.5 bg-red-50 dark:bg-red-950/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all border border-transparent"
+                  <button
+                    onClick={() => { setSelectedLoc(loc); setNewLocName(loc.name); setIsModalOpen(true); }}
+                    className="p-2.5 bg-gray-50 dark:bg-[#0F172A] text-secondary dark:text-[#94A3B8] rounded-xl hover:text-primary transition-all border border-transparent hover:border-primary/20"
+                  >
+                    <Pencil size={18} />
+                  </button>
+                  <button
+                    onClick={() => { setSelectedLoc(loc); setIsDeleteModalOpen(true); }}
+                    className="p-2.5 bg-red-50 dark:bg-red-950/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all border border-transparent"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+                <button
+                  onClick={() => setExpandedId(isExpanded ? null : loc.id)}
+                  className={`p-2 rounded-full transition-all ${isExpanded ? "bg-gray-100 dark:bg-[#334155]" : "hover:bg-gray-100 dark:hover:bg-[#334155]"}`}
+                  title={isExpanded ? "Sembunyikan aksi" : "Tampilkan aksi"}
                 >
-                  <Trash2 size={18} />
+                  <ChevronRight size={20} className={`text-[#94A3B8] transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
                 </button>
-                <div className="w-[1px] h-8 bg-gray-100 dark:bg-[#334155] mx-2"></div>
-                <ChevronRight className="text-[#94A3B8]" />
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 

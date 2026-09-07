@@ -403,7 +403,7 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
                           ref={(el) => { fileInputRefs.current[item.id] = el; }}
                           onChange={(e) => handlePhotoChange(item, e)}
                           className="hidden"
-                          accept=".jpg,.jpeg,.png,.heic,.webp"
+                          accept="image/*,.heic"
                           disabled={isLocked}
                         />
                         <button

@@ -3,7 +3,7 @@
 import React, { useState, use, useEffect, useRef } from "react";
 import { 
   ChevronLeft, Edit3, Trash2, Calendar, MapPin, Tag, 
-  Image as LucideImage, ChevronDown, Wrench, AlertTriangle, X 
+  Image as LucideImage, ChevronDown, Wrench, AlertTriangle, X, Camera as CameraIcon 
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -42,6 +42,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
+  const editCameraInputRef = useRef<HTMLInputElement>(null);
 
   // --- AMBIL DATA DARI DB ---
   const fetchDetail = async () => {
@@ -293,7 +294,11 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                 <img src={editImagePreview || "https://placehold.co/400x400"} alt="Preview" className="w-full h-full object-cover" />
              </div>
              <input type="file" ref={editFileInputRef} onChange={handleEditImageChange} className="hidden" accept="image/*" />
-             <button type="button" onClick={() => editFileInputRef.current?.click()} className="w-fit px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins">Ganti Foto</button>
+             <input type="file" ref={editCameraInputRef} onChange={handleEditImageChange} className="hidden" accept="image/*" capture="environment" />
+             <div className="flex gap-2">
+               <button type="button" onClick={() => editFileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins">Ganti Foto</button>
+               <button type="button" onClick={() => editCameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins"><CameraIcon size={14} /> Kamera</button>
+             </div>
              <div className="flex flex-col gap-3 mt-auto pt-4">
                 <button type="submit" className="w-full bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700">Simpan Perubahan</button>
                 <button type="button" onClick={() => { setIsEditModalOpen(false); setEditImagePreview(asset.image_url); setIsNewTypeEdit(false); }} className="w-full py-3.5 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>

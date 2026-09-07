@@ -65,6 +65,11 @@ function Breadcrumbs() {
           label = nameFromUrl.toUpperCase();
         }
 
+        // 1b. Kasus khusus: halaman "Seluruh Aset" (lintas lokasi)
+        if (rootModule === "registrasi-aset" && index === 1 && paths[1] === "semua") {
+          label = "Seluruh Aset";
+        }
+
         // 2. Level Aset (index === 2) untuk registrasi-aset & buku-sakit
         else if ((rootModule === "registrasi-aset" || rootModule === "buku-sakit") && index === 2 && assetName) {
           label = assetName.toUpperCase();

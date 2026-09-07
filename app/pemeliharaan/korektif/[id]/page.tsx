@@ -72,6 +72,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
   const [photoUrl, setPhotoUrl] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState("");
@@ -442,7 +443,15 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
               ref={fileInputRef}
               onChange={handlePhotoChange}
               className="hidden"
-              accept=".jpg,.jpeg,.png,.heic,.webp"
+              accept="image/*,.heic"
+            />
+            <input
+              type="file"
+              ref={cameraInputRef}
+              onChange={handlePhotoChange}
+              className="hidden"
+              accept="image/*"
+              capture="environment"
             />
             <div className="flex items-center gap-3">
               {photoUrl && (
@@ -458,15 +467,26 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
                   </button>
                 </div>
               )}
-              <button
-                type="button"
-                disabled={isUploadingPhoto}
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-2.5 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Camera size={16} />
-                {isUploadingPhoto ? "Mengunggah..." : photoUrl ? "Ganti Foto" : "Unggah Foto"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isUploadingPhoto}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ImageIcon size={16} />
+                  {isUploadingPhoto ? "Mengunggah..." : photoUrl ? "Ganti Foto" : "Pilih dari Galeri"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isUploadingPhoto}
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Camera size={16} />
+                  Kamera
+                </button>
+              </div>
             </div>
             {photoUrl && (
               <span className="text-[11px] text-[#94A3B8] italic">Klik ikon kaca pembesar untuk melihat foto dalam resolusi asli.</span>
