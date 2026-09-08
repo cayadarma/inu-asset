@@ -19,6 +19,8 @@ interface StockItem {
   supplier_name: string | null;
   supplier_contact: string | null;
   supplier_address: string | null;
+  photo_url: string | null;
+  purchase_price: number | null;
 }
 
 interface StockMovement {
@@ -31,6 +33,20 @@ interface StockMovement {
   photo_url: string | null;
   created_at: string;
 }
+
+// --- HITUNG TOTAL PEMBELIAN AWAL DAN SELURUH RIWAYAT MASUK ---
+const getTotalPurchaseValue = (item: StockItem, movements: StockMovement[]) => {
+  const initialQty = item.qty - movements.reduce(
+    (sum, movement) => sum + (movement.type === "Masuk" ? movement.qty : -movement.qty),
+    0,
+  );
+  const initialPurchaseValue = (item.purchase_price || 0) * initialQty;
+  const incomingPurchaseValue = movements
+    .filter((movement) => movement.type === "Masuk" && movement.unit_price)
+    .reduce((sum, movement) => sum + (movement.unit_price || 0) * movement.qty, 0);
+
+  return initialPurchaseValue + incomingPurchaseValue;
+};
 
 // --- HITUNG STATUS STOK (SAMA DENGAN HALAMAN DAFTAR STOK) ---
 const getStockStatus = (item: StockItem) => {
@@ -67,6 +83,15 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [supplierForm, setSupplierForm] = useState({ supplier_name: "", supplier_contact: "", supplier_address: "" });
 
+  // --- MODAL EDIT ITEM (NAMA, FOTO, HARGA PEMBELIAN) ---
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [isItemPhotoModalOpen, setIsItemPhotoModalOpen] = useState(false);
+  const [itemForm, setItemForm] = useState({ name: "" });
+  const [itemPhotoFile, setItemPhotoFile] = useState<File | null>(null);
+  const [itemPhotoPreview, setItemPhotoPreview] = useState<string | null>(null);
+  const itemFileInputRef = useRef<HTMLInputElement>(null);
+  const itemCameraInputRef = useRef<HTMLInputElement>(null);
+
   // --- MODAL HAPUS ITEM ---
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -90,6 +115,9 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
         supplier_name: itemData.supplier_name || "",
         supplier_contact: itemData.supplier_contact || "",
         supplier_address: itemData.supplier_address || "",
+      });
+      setItemForm({
+        name: itemData.name || "",
       });
     }
     if (movementData) setMovements(movementData as StockMovement[]);
@@ -235,6 +263,82 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
     setIsSaving(false);
   };
 
+  // --- PILIH FOTO ITEM (SAAT EDIT ITEM) ---
+  const handleItemPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      if (file.name.toLowerCase().endsWith(".heic")) {
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      }
+      if (itemPhotoPreview) URL.revokeObjectURL(itemPhotoPreview);
+      setItemPhotoFile(file);
+      setItemPhotoPreview(URL.createObjectURL(file));
+    } catch (err) {
+      alert("Gagal memproses foto. Coba file lain.");
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveItemPhoto = () => {
+    if (itemPhotoPreview) URL.revokeObjectURL(itemPhotoPreview);
+    setItemPhotoFile(null);
+    setItemPhotoPreview(null);
+  };
+
+  const openItemModal = () => {
+    if (!item) return;
+    setItemForm({ name: item.name });
+    setItemPhotoFile(null);
+    setItemPhotoPreview(null);
+    setIsItemModalOpen(true);
+  };
+
+  // --- SIMPAN EDIT ITEM (NAMA, FOTO, HARGA PEMBELIAN) ---
+  const handleItemSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!item) return;
+    if (!itemForm.name.trim()) {
+      alert("Nama item wajib diisi.");
+      return;
+    }
+    setIsSaving(true);
+
+    let photoUrl = item.photo_url;
+    if (itemPhotoFile) {
+      try {
+        const compressedFile = await imageCompression(itemPhotoFile, { maxSizeMB: 0.5, maxWidthOrHeight: 800, useWebWorker: true });
+        const fileName = `${Date.now()}-stok-${item.id}`;
+        const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, compressedFile);
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+        photoUrl = publicUrl;
+      } catch (err: any) {
+        alert("Gagal mengunggah foto: " + err.message);
+        setIsSaving(false);
+        return;
+      }
+    }
+
+    const { error } = await supabase.from("stock_items").update({
+      name: itemForm.name.trim(),
+      photo_url: photoUrl,
+      updated_at: new Date().toISOString(),
+    }).eq("id", item.id);
+
+    if (error) {
+      alert("Gagal menyimpan perubahan item: " + error.message);
+    } else {
+      setIsItemModalOpen(false);
+      handleRemoveItemPhoto();
+      fetchDetail();
+    }
+    setIsSaving(false);
+  };
+
   // --- HAPUS ITEM STOK DARI DATABASE ---
   const handleDeleteItem = async () => {
     if (!item) return;
@@ -268,15 +372,32 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
 
       {/* INFO CARD UTAMA */}
       <div className="bg-white dark:bg-[#1E293B] p-6 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{item.name}</h2>
-            <Badge status={getStockStatus(item)} />
-          </div>
-          <div className="flex flex-wrap gap-4 text-sm text-[#64748B] dark:text-[#94A3B8]">
-            <span>Kode: <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">{item.id}</span></span>
-            <span>Kategori: <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">{item.category || "-"}</span></span>
-            <span>Stok Saat Ini: <span className="font-bold text-[#0D9488]">{item.qty} {item.unit}</span></span>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => item.photo_url && setIsItemPhotoModalOpen(true)}
+            className={`w-16 h-16 rounded-xl overflow-hidden bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] flex items-center justify-center flex-shrink-0 ${item.photo_url ? "cursor-zoom-in" : "cursor-default"}`}
+          >
+            {item.photo_url ? (
+              <img src={item.photo_url} alt={item.name} className="w-full h-full object-cover" />
+            ) : (
+              <Package size={24} className="text-[#94A3B8]" />
+            )}
+          </button>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{item.name}</h2>
+              <Badge status={getStockStatus(item)} />
+              <button onClick={openItemModal} className="text-[#64748B] hover:text-[#0D9488] transition-colors" title="Edit Item">
+                <Pencil size={16} />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-4 text-sm text-[#64748B] dark:text-[#94A3B8]">
+              <span>Kode: <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">{item.id}</span></span>
+              <span>Kategori: <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">{item.category || "-"}</span></span>
+              <span>Stok Saat Ini: <span className="font-bold text-[#0D9488]">{item.qty} {item.unit}</span></span>
+              <span>Total Pembelian: <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">{getTotalPurchaseValue(item, movements) > 0 ? `Rp ${getTotalPurchaseValue(item, movements).toLocaleString("id-ID")}` : "-"}</span></span>
+            </div>
           </div>
         </div>
         <button
@@ -286,6 +407,17 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
           Sesuaikan Stok
         </button>
       </div>
+
+      {/* MODAL ZOOM FOTO ITEM */}
+      <Modal isOpen={isItemPhotoModalOpen} onClose={() => setIsItemPhotoModalOpen(false)} title={item.name}>
+        {item.photo_url && (
+          <img
+            src={item.photo_url}
+            alt={item.name}
+            className="w-full max-h-[70vh] object-contain rounded-xl"
+          />
+        )}
+      </Modal>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* KIRI: RIWAYAT PERGERAKAN */}
@@ -477,6 +609,61 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
           </div>
           <div className="flex gap-3 mt-2">
             <button type="button" disabled={isSaving} onClick={() => { setIsAdjustModalOpen(false); resetAdjustForm(); }} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batal</button>
+            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold hover:bg-teal-700 shadow-md transition-all disabled:opacity-50">
+              {isSaving ? "Menyimpan..." : "Simpan"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL EDIT ITEM (NAMA, FOTO, HARGA PEMBELIAN) */}
+      <Modal isOpen={isItemModalOpen} onClose={() => { setIsItemModalOpen(false); handleRemoveItemPhoto(); }} title="Edit Item Stok">
+        <form onSubmit={handleItemSubmit} className="flex flex-col gap-5 text-left">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Foto Item</label>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-xl overflow-hidden bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] flex items-center justify-center flex-shrink-0 relative">
+                {itemPhotoPreview ? (
+                  <img src={itemPhotoPreview} alt="Pratinjau" className="w-full h-full object-cover" />
+                ) : item.photo_url ? (
+                  <img src={item.photo_url} alt={item.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Package size={22} className="text-[#94A3B8]" />
+                )}
+                {itemPhotoPreview && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveItemPhoto}
+                    className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 text-white rounded-full flex items-center justify-center"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input type="file" ref={itemFileInputRef} onChange={handleItemPhotoSelect} className="hidden" accept="image/*,.heic" />
+                <input type="file" ref={itemCameraInputRef} onChange={handleItemPhotoSelect} className="hidden" accept="image/*" capture="environment" />
+                <button type="button" onClick={() => itemFileInputRef.current?.click()} className="px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">
+                  Pilih dari Galeri
+                </button>
+                <button type="button" onClick={() => itemCameraInputRef.current?.click()} className="flex items-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">
+                  <CameraIcon size={14} /> Kamera
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Nama Item <span className="text-red-500">*</span></label>
+            <input
+              required
+              type="text"
+              value={itemForm.name}
+              onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+              className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white"
+            />
+          </div>
+          <div className="flex gap-3 mt-2">
+            <button type="button" disabled={isSaving} onClick={() => { setIsItemModalOpen(false); handleRemoveItemPhoto(); }} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batal</button>
             <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold hover:bg-teal-700 shadow-md transition-all disabled:opacity-50">
               {isSaving ? "Menyimpan..." : "Simpan"}
             </button>

@@ -19,6 +19,7 @@ interface StockItem {
   supplier_contact: string | null;
   supplier_address: string | null;
   photo_url: string | null;
+  purchase_price: number | null;
   created_at: string;
 }
 
@@ -50,6 +51,7 @@ export default function StockPage() {
     unit: "Pcs",
     min_stock: 5,
     supplier_name: "",
+    purchase_price: 0,
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -101,7 +103,7 @@ export default function StockPage() {
   const totalSuppliers = supplierOptions.length;
 
   const resetAddForm = () => {
-    setAddForm({ id: "", name: "", category: "", qty: 0, unit: "Pcs", min_stock: 5, supplier_name: "" });
+    setAddForm({ id: "", name: "", category: "", qty: 0, unit: "Pcs", min_stock: 5, supplier_name: "", purchase_price: 0 });
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoFile(null);
     setPhotoPreview(null);
@@ -175,6 +177,7 @@ export default function StockPage() {
       unit: addForm.unit || "Pcs",
       min_stock: addForm.min_stock || 5,
       supplier_name: addForm.supplier_name.trim() || null,
+      purchase_price: addForm.purchase_price > 0 ? addForm.purchase_price : null,
       photo_url: photoUrl,
     }]);
 
@@ -395,6 +398,25 @@ export default function StockPage() {
               placeholder="Nama perusahaan supplier"
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm outline-none focus:border-primary dark:text-white"
             />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Harga per Unit</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-[#94A3B8]">Rp</span>
+              <input
+                type="number"
+                min={0}
+                value={addForm.purchase_price === 0 ? "" : addForm.purchase_price}
+                onChange={(e) => setAddForm({ ...addForm, purchase_price: e.target.value === "" ? 0 : Number(e.target.value) })}
+                placeholder="0"
+                className="w-full pl-10 pr-3 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm outline-none focus:border-primary dark:text-white font-bold"
+              />
+            </div>
+            {addForm.purchase_price > 0 && addForm.qty > 0 && (
+              <p className="text-xs text-[#94A3B8]">
+                Total pembelian: <span className="font-bold text-[#0D9488]">Rp {(addForm.purchase_price * addForm.qty).toLocaleString("id-ID")}</span>
+              </p>
+            )}
           </div>
           <div className="md:col-span-2 flex gap-3 mt-4">
             <button type="button" disabled={isSaving} onClick={() => { setIsAddModalOpen(false); resetAddForm(); }} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batalkan</button>

@@ -17,9 +17,6 @@ interface CostTransaction {
 
 const formatRupiah = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
 
-const monthLabel = (isoDate: string) =>
-  new Date(isoDate).toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
-
 export default function CostAnalysisPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<CostTransaction[]>([]);
@@ -28,6 +25,9 @@ export default function CostAnalysisPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  // --- FILTER TAHUN UNTUK CHART TREN BULANAN ---
+  const [chartYear, setChartYear] = useState(new Date().getFullYear());
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -48,13 +48,50 @@ export default function CostAnalysisPage() {
       href: `/pemeliharaan/korektif/${wo.id}`,
     }));
 
-    // 2. BIAYA PEMBELIAN STOK (dari pergerakan stok tipe "Masuk" yang ada harga per unit)
+    // 2. BIAYA PEMBELIAN STOK
+    // 2a. Ambil semua item stok (untuk hitung nilai pembelian awal, sama seperti di halaman detail stok)
+    const { data: stockItems } = await supabase
+      .from("stock_items")
+      .select("id, name, qty, purchase_price, created_at");
+
+    // 2b. Ambil semua pergerakan stok tipe "Masuk" yang punya harga per unit
     const { data: movements } = await supabase
       .from("stock_movements")
-      .select("id, stock_item_id, qty, unit_price, created_at, reference, stock_items(name)")
+      .select("id, stock_item_id, type, qty, unit_price, created_at, reference, stock_items(name)")
       .eq("type", "Masuk")
       .not("unit_price", "is", null);
 
+
+    // Perlu SEMUA pergerakan (masuk & keluar) per item untuk menghitung qty awal, bukan hanya yang masuk & berharga
+    const { data: allMovementsForQty } = await supabase
+      .from("stock_movements")
+      .select("stock_item_id, type, qty");
+
+    const netQtyByItem = new Map<string, number>();
+    (allMovementsForQty || []).forEach((m: any) => {
+      const delta = m.type === "Masuk" ? m.qty : -m.qty;
+      netQtyByItem.set(m.stock_item_id, (netQtyByItem.get(m.stock_item_id) || 0) + delta);
+    });
+
+    // 2c. Nilai pembelian awal per item (qty awal x harga per unit di data item)
+    const initialStokTx: CostTransaction[] = (stockItems || [])
+      .map((item: any): CostTransaction | null => {
+        const initialQty = item.qty - (netQtyByItem.get(item.id) || 0);
+        const initialValue = (item.purchase_price || 0) * initialQty;
+        if (initialValue <= 0) return null;
+        return {
+          id: `stok-awal-${item.id}`,
+          date: item.created_at,
+          category: "Pembelian Stok" as const,
+          description: `${item.name} (Stok Awal — ${initialQty} unit)`,
+          location: null,
+          amount: initialValue,
+          href: `/stok/${item.id}`,
+        };
+      })
+      .filter((tx): tx is CostTransaction => tx !== null);
+
+    // 2d. Nilai pembelian dari seluruh riwayat pergerakan "Masuk"
     const stokTx: CostTransaction[] = (movements || []).map((m: any) => ({
       id: `mv-${m.id}`,
       date: m.reference || m.created_at,
@@ -65,7 +102,7 @@ export default function CostAnalysisPage() {
       href: `/stok/${m.stock_item_id}`,
     }));
 
-    const all = [...perbaikanTx, ...stokTx].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const all = [...perbaikanTx, ...initialStokTx, ...stokTx].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setTransactions(all);
     setIsLoading(false);
   };
@@ -89,22 +126,51 @@ export default function CostAnalysisPage() {
   const pctPerbaikan = totalKeseluruhan > 0 ? Math.round((totalPerbaikan / totalKeseluruhan) * 100) : 0;
   const pctStok = totalKeseluruhan > 0 ? Math.round((totalStok / totalKeseluruhan) * 100) : 0;
 
-  // --- GRAFIK TREN BULANAN (6 bulan terakhir berdasarkan data yang ada) ---
-  const monthlyChart = useMemo(() => {
-    const map = new Map<string, { perbaikan: number; stok: number; label: string; sortKey: string }>();
-    filteredTx.forEach((tx) => {
-      const d = new Date(tx.date);
-      const sortKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const label = monthLabel(tx.date);
-      if (!map.has(sortKey)) map.set(sortKey, { perbaikan: 0, stok: 0, label, sortKey });
-      const entry = map.get(sortKey)!;
-      if (tx.category === "Perbaikan") entry.perbaikan += tx.amount;
-      else entry.stok += tx.amount;
+  // --- GRAFIK TREN BULANAN (12 BULAN, JAN-DES, TAHUN YANG DIPILIH) ---
+  const bulanLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+  // --- DAFTAR TAHUN YANG TERSEDIA UNTUK DROPDOWN FILTER TAHUN ---
+  // Rentang kontinu dari tahun tertua sampai tahun terbaru yang ada di data (termasuk tahun berjalan),
+  // supaya tahun yang datanya kosong di tengah (mis. 2019) tetap muncul di pilihan, bukan hilang.
+  const availableYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    let minYear = currentYear;
+    let maxYear = currentYear;
+    transactions.forEach((tx) => {
+      const y = new Date(tx.date).getFullYear();
+      if (isNaN(y)) return;
+      if (y < minYear) minYear = y;
+      if (y > maxYear) maxYear = y;
     });
-    return Array.from(map.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey)).slice(-6);
-  }, [filteredTx]);
+    const years: number[] = [];
+    for (let y = maxYear; y >= minYear; y--) years.push(y);
+    return years;
+  }, [transactions]);
+
+  const monthlyChart = useMemo(() => {
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      perbaikan: 0,
+      stok: 0,
+      label: bulanLabels[i],
+      sortKey: `${chartYear}-${String(i + 1).padStart(2, "0")}`,
+    }));
+
+    // Chart menampilkan tahun yang dipilih secara penuh; hanya filter kategori yang berlaku, bukan filter tanggal
+    transactions
+      .filter((tx) => !categoryFilter || tx.category === categoryFilter)
+      .forEach((tx) => {
+        const d = new Date(tx.date);
+        if (d.getFullYear() !== chartYear) return;
+        const monthIndex = d.getMonth();
+        if (tx.category === "Perbaikan") months[monthIndex].perbaikan += tx.amount;
+        else months[monthIndex].stok += tx.amount;
+      });
+
+    return months;
+  }, [transactions, categoryFilter, chartYear]);
 
   const maxMonthly = Math.max(1, ...monthlyChart.map((m) => m.perbaikan + m.stok));
+  const CHART_HEIGHT_PX = 200;
 
   return (
     <div className="flex flex-col gap-8 pb-10 font-poppins text-left">
@@ -181,11 +247,25 @@ export default function CostAnalysisPage() {
 
       {/* ROW 2: GRAFIK TREN BULANAN */}
       <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col min-h-[380px]">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
           <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base">Tren Biaya Bulanan</h3>
-          <div className="flex items-center gap-4 text-[11px] font-bold">
-            <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#E28E00] inline-block"></span> Perbaikan</span>
-            <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] inline-block"></span> Pembelian Stok</span>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <select
+                value={chartYear}
+                onChange={(e) => setChartYear(Number(e.target.value))}
+                className="appearance-none pl-4 pr-9 py-2 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] font-bold cursor-pointer outline-none focus:border-primary"
+              >
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+            </div>
+            <div className="flex items-center gap-4 text-[11px] font-bold">
+              <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#E28E00] inline-block"></span> Perbaikan</span>
+              <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] inline-block"></span> Pembelian Stok</span>
+            </div>
           </div>
         </div>
         {isLoading ? (
@@ -194,24 +274,28 @@ export default function CostAnalysisPage() {
           <div className="flex-1 flex items-center justify-center text-[#94A3B8] text-sm italic">Belum ada data biaya untuk ditampilkan.</div>
         ) : (
           <div className="flex-1 flex items-end justify-between gap-4 h-[220px] pt-4 border-b border-gray-50 dark:border-[#334155] pb-2">
-            {monthlyChart.map((data) => (
-              <div key={data.sortKey} className="flex-1 h-full flex flex-col justify-end items-center gap-3 group">
-                <div className="w-full flex flex-col justify-end h-full relative">
-                  <div
-                    style={{ height: `${(data.stok / maxMonthly) * 100}%` }}
-                    className="w-full bg-[#3B82F6] rounded-t-sm hover:opacity-80 transition-all"
-                  />
-                  <div
-                    style={{ height: `${(data.perbaikan / maxMonthly) * 100}%` }}
-                    className="w-full bg-[#E28E00] hover:opacity-80 transition-all"
-                  />
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#0F172A] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 font-bold">
-                    {formatRupiah(data.perbaikan + data.stok)}
+            {monthlyChart.map((data) => {
+              const stokHeight = Math.round((data.stok / maxMonthly) * CHART_HEIGHT_PX);
+              const perbaikanHeight = Math.round((data.perbaikan / maxMonthly) * CHART_HEIGHT_PX);
+              return (
+                <div key={data.sortKey} className="flex-1 flex flex-col justify-end items-center gap-3 group">
+                  <div className="w-full flex flex-col justify-end relative" style={{ height: CHART_HEIGHT_PX }}>
+                    <div
+                      style={{ height: `${stokHeight}px` }}
+                      className="w-full bg-[#3B82F6] rounded-t-sm hover:opacity-80 transition-all"
+                    />
+                    <div
+                      style={{ height: `${perbaikanHeight}px` }}
+                      className="w-full bg-[#E28E00] hover:opacity-80 transition-all"
+                    />
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#0F172A] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 font-bold">
+                      {formatRupiah(data.perbaikan + data.stok)}
+                    </div>
                   </div>
+                  <span className="text-[12px] text-[#94A3B8] font-bold">{data.label}</span>
                 </div>
-                <span className="text-[12px] text-[#94A3B8] font-bold">{data.label}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
