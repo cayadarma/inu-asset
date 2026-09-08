@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, use, useEffect } from "react";
+import React, { useState, use, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Building2, User, Trash2, Pencil } from "lucide-react";
+import { ChevronLeft, Building2, User, Trash2, Pencil, Camera as CameraIcon, Package, X, Eye } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
+import imageCompression from "browser-image-compression";
 
 interface StockItem {
   id: string;
@@ -24,8 +25,10 @@ interface StockMovement {
   id: string;
   type: "Masuk" | "Keluar";
   qty: number;
+  unit_price: number | null;
   reference: string | null;
   note: string | null;
+  photo_url: string | null;
   created_at: string;
 }
 
@@ -48,7 +51,17 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
 
   // --- MODAL SESUAIKAN STOK ---
   const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
-  const [adjustForm, setAdjustForm] = useState({ type: "Masuk", qty: 0, reference: new Date().toISOString().slice(0, 10), note: "" });
+  const [adjustForm, setAdjustForm] = useState({ type: "Masuk", qty: 0, unit_price: 0, reference: new Date().toISOString().slice(0, 10), note: "" });
+
+  // --- FOTO PERGERAKAN STOK (OPSIONAL, SAAT SESUAIKAN STOK) ---
+  const [movePhotoFile, setMovePhotoFile] = useState<File | null>(null);
+  const [movePhotoPreview, setMovePhotoPreview] = useState<string | null>(null);
+  const moveFileInputRef = useRef<HTMLInputElement>(null);
+  const moveCameraInputRef = useRef<HTMLInputElement>(null);
+
+  // --- MODAL DETAIL PERGERAKAN (LIHAT FOTO) ---
+  const [isMovementDetailOpen, setIsMovementDetailOpen] = useState(false);
+  const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
 
   // --- MODAL EDIT INFO SUPPLIER ---
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
@@ -94,7 +107,40 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
 
   const todayDateStr = () => new Date().toISOString().slice(0, 10);
 
-  const resetAdjustForm = () => setAdjustForm({ type: "Masuk", qty: 0, reference: todayDateStr(), note: "" });
+  const resetAdjustForm = () => {
+    setAdjustForm({ type: "Masuk", qty: 0, unit_price: 0, reference: todayDateStr(), note: "" });
+    if (movePhotoPreview) URL.revokeObjectURL(movePhotoPreview);
+    setMovePhotoFile(null);
+    setMovePhotoPreview(null);
+    if (moveFileInputRef.current) moveFileInputRef.current.value = "";
+    if (moveCameraInputRef.current) moveCameraInputRef.current.value = "";
+  };
+
+  // --- PILIH FOTO PERGERAKAN STOK (GALERI / KAMERA) ---
+  const handleMovePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      if (file.name.toLowerCase().endsWith(".heic")) {
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      }
+      if (movePhotoPreview) URL.revokeObjectURL(movePhotoPreview);
+      setMovePhotoFile(file);
+      setMovePhotoPreview(URL.createObjectURL(file));
+    } catch (err) {
+      alert("Gagal memproses foto. Coba file lain.");
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveMovePhoto = () => {
+    if (movePhotoPreview) URL.revokeObjectURL(movePhotoPreview);
+    setMovePhotoFile(null);
+    setMovePhotoPreview(null);
+  };
 
   // --- SIMPAN PENYESUAIAN STOK (CATAT PERGERAKAN + UPDATE QTY) ---
   const handleAdjustSubmit = async (e: React.FormEvent) => {
@@ -116,12 +162,30 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
 
     setIsSaving(true);
 
+    let photoUrl: string | null = null;
+    if (movePhotoFile) {
+      try {
+        const compressedFile = await imageCompression(movePhotoFile, { maxSizeMB: 0.5, maxWidthOrHeight: 800, useWebWorker: true });
+        const fileName = `${Date.now()}-mutasi-${item.id}`;
+        const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, compressedFile);
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+        photoUrl = publicUrl;
+      } catch (err: any) {
+        alert("Gagal mengunggah foto: " + err.message);
+        setIsSaving(false);
+        return;
+      }
+    }
+
     const { error: moveError } = await supabase.from("stock_movements").insert([{
       stock_item_id: item.id,
       type: adjustForm.type,
       qty: adjustForm.qty,
+      unit_price: adjustForm.type === "Masuk" && adjustForm.unit_price > 0 ? adjustForm.unit_price : null,
       reference: adjustForm.reference.trim() || null,
       note: adjustForm.note.trim() || null,
+      photo_url: photoUrl,
     }]);
 
     if (moveError) {
@@ -238,11 +302,12 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
                   <th className="px-6 py-4">Jumlah</th>
                   <th className="px-6 py-4">Tanggal Masuk/Keluar</th>
                   <th className="px-6 py-4">Catatan</th>
+                  <th className="px-6 py-4 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-[#334155]">
                 {movements.length === 0 ? (
-                  <tr><td colSpan={5} className="px-6 py-10 text-center text-[#94A3B8] italic">Belum ada riwayat pergerakan stok.</td></tr>
+                  <tr><td colSpan={6} className="px-6 py-10 text-center text-[#94A3B8] italic">Belum ada riwayat pergerakan stok.</td></tr>
                 ) : (
                   movements.map((move) => (
                     <tr key={move.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
@@ -264,6 +329,15 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
                       </td>
                       <td className="px-6 py-4 text-[#475569] dark:text-[#94A3B8]">
                         {move.note || "-"}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => { setSelectedMovement(move); setIsMovementDetailOpen(true); }}
+                          className="text-[#64748B] hover:text-[#0D9488] transition-colors inline-flex"
+                          title="Lihat Detail"
+                        >
+                          <Eye size={18} />
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -329,6 +403,27 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white font-bold"
             />
           </div>
+          {adjustForm.type === "Masuk" && (
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Harga per Unit</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-[#94A3B8]">Rp</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={adjustForm.unit_price === 0 ? "" : adjustForm.unit_price}
+                  onChange={(e) => setAdjustForm({ ...adjustForm, unit_price: e.target.value === "" ? 0 : Number(e.target.value) })}
+                  placeholder="0"
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white font-bold"
+                />
+              </div>
+              {adjustForm.unit_price > 0 && adjustForm.qty > 0 && (
+                <p className="text-xs text-[#94A3B8]">
+                  Total pembelian: <span className="font-bold text-[#0D9488]">Rp {(adjustForm.unit_price * adjustForm.qty).toLocaleString("id-ID")}</span>
+                </p>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Tanggal {adjustForm.type === "Keluar" ? "Keluar" : "Masuk"} <span className="text-red-500">*</span></label>
             <input
@@ -348,6 +443,37 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
               placeholder="Keterangan tambahan (opsional)"
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none bg-white dark:bg-[#0F172A] dark:text-white"
             />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Foto Bukti (opsional)</label>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-xl overflow-hidden bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] flex items-center justify-center flex-shrink-0 relative">
+                {movePhotoPreview ? (
+                  <>
+                    <img src={movePhotoPreview} alt="Pratinjau" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={handleRemoveMovePhoto}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 text-white rounded-full flex items-center justify-center"
+                    >
+                      <X size={12} />
+                    </button>
+                  </>
+                ) : (
+                  <Package size={22} className="text-[#94A3B8]" />
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input type="file" ref={moveFileInputRef} onChange={handleMovePhotoSelect} className="hidden" accept="image/*,.heic" />
+                <input type="file" ref={moveCameraInputRef} onChange={handleMovePhotoSelect} className="hidden" accept="image/*" capture="environment" />
+                <button type="button" onClick={() => moveFileInputRef.current?.click()} className="px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">
+                  Pilih dari Galeri
+                </button>
+                <button type="button" onClick={() => moveCameraInputRef.current?.click()} className="flex items-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">
+                  <CameraIcon size={14} /> Kamera
+                </button>
+              </div>
+            </div>
           </div>
           <div className="flex gap-3 mt-2">
             <button type="button" disabled={isSaving} onClick={() => { setIsAdjustModalOpen(false); resetAdjustForm(); }} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batal</button>
@@ -396,6 +522,83 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* MODAL DETAIL PERGERAKAN STOK (FOTO BUKTI) */}
+      <Modal isOpen={isMovementDetailOpen} onClose={() => setIsMovementDetailOpen(false)} title="Detail Pergerakan Stok">
+        {selectedMovement && (
+          <div className="flex flex-col gap-5 text-left">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] text-[#94A3B8] font-bold uppercase">Tipe</span>
+                <span className={`font-black ${selectedMovement.type === "Masuk" ? "text-[#10B981]" : "text-[#EF4444]"}`}>{selectedMovement.type}</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] text-[#94A3B8] font-bold uppercase">Jumlah</span>
+                <span className="font-black text-[#0F172A] dark:text-[#F8FAFC]">
+                  {selectedMovement.type === "Masuk" ? "+" : "-"}{selectedMovement.qty} {item.unit}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] text-[#94A3B8] font-bold uppercase">Tanggal Masuk/Keluar</span>
+                <span className="font-bold text-[#0D9488]">
+                  {selectedMovement.reference
+                    ? new Date(selectedMovement.reference).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
+                    : "-"}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] text-[#94A3B8] font-bold uppercase">Dicatat Pada</span>
+                <span className="font-medium text-[#475569] dark:text-[#94A3B8]">
+                  {new Date(selectedMovement.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                </span>
+              </div>
+              {selectedMovement.type === "Masuk" && selectedMovement.unit_price ? (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] text-[#94A3B8] font-bold uppercase">Harga per Unit</span>
+                    <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">Rp {selectedMovement.unit_price.toLocaleString("id-ID")}</span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] text-[#94A3B8] font-bold uppercase">Total Pembelian</span>
+                    <span className="font-black text-[#0D9488]">Rp {(selectedMovement.unit_price * selectedMovement.qty).toLocaleString("id-ID")}</span>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {selectedMovement.note && (
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] text-[#94A3B8] font-bold uppercase">Catatan</span>
+                <p className="text-sm text-[#475569] dark:text-[#94A3B8]">{selectedMovement.note}</p>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <span className="text-[11px] text-[#94A3B8] font-bold uppercase">Foto Bukti</span>
+              {selectedMovement.photo_url ? (
+                <img
+                  src={selectedMovement.photo_url}
+                  alt="Foto bukti pergerakan stok"
+                  className="w-full max-h-[360px] object-contain rounded-xl border border-gray-100 dark:border-[#334155] bg-[#F8FAFC] dark:bg-[#0F172A]"
+                />
+              ) : (
+                <div className="w-full h-40 rounded-xl border border-dashed border-gray-200 dark:border-[#334155] flex flex-col items-center justify-center gap-2 text-[#94A3B8]">
+                  <Package size={28} />
+                  <span className="text-xs italic">Tidak ada foto untuk pergerakan ini.</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsMovementDetailOpen(false)}
+              className="w-full py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
       </Modal>
 
       {/* MODAL KONFIRMASI HAPUS ITEM */}

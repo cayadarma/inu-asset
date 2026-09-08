@@ -1,145 +1,263 @@
-import React from "react";
-import { Banknote, TrendingUp, ChevronDown } from "lucide-react";
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import { Banknote, Wrench, Package, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+
+interface CostTransaction {
+  id: string;
+  date: string; // ISO date dipakai untuk sorting & grouping bulan
+  category: "Perbaikan" | "Pembelian Stok";
+  description: string;
+  location: string | null;
+  amount: number;
+  href: string;
+}
+
+const formatRupiah = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
+
+const monthLabel = (isoDate: string) =>
+  new Date(isoDate).toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
 
 export default function CostAnalysisPage() {
-  // 1. Data Ringkasan Atas
-  const summary = [
-    { label: "Total Biaya Pemeliharaan", val: "Rp 737.5 M", desc: "Akumulasi 6 bulan terakhir", color: "text-[#0F172A] dark:text-[#F8FAFC]" },
-    { label: "Biaya Pemeliharaan", val: "Rp 312.0 M", desc: "Rutin terjadwal", color: "text-[#0D9488]" },
-    { label: "Biaya Perbaikan", val: "Rp 425.5 M", desc: "Kerusakan darurat", color: "text-[#E28E00]" },
-  ];
+  const [isLoading, setIsLoading] = useState(true);
+  const [transactions, setTransactions] = useState<CostTransaction[]>([]);
 
-  // 2. Data Biaya per Lokasi (Progress Bar)
-  const costByLocation = [
-    { name: "Power Plant", val: "Rp 345.2M", percent: 80 },
-    { name: "ITDC Office", val: "Rp 210.8M", percent: 60 },
-    { name: "Workshop", val: "Rp 142.1M", percent: 45 },
-    { name: "Utility Area", val: "Rp 98.4M", percent: 30 },
-    { name: "Warehouse", val: "Rp 51.0M", percent: 15 },
-  ];
+  // --- FILTER ---
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
-  // 3. Data Grafik Batang Bulanan
-  const monthlyCosts = [
-    { m: "Jan", v: 90 }, { m: "Feb", v: 120 }, { m: "Mar", v: 142 },
-    { m: "Apr", v: 110 }, { m: "Mei", v: 165 }, { m: "Jun", v: 220 },
-    { m: "Jul", v: 165 },
-  ];
+  const fetchData = async () => {
+    setIsLoading(true);
+
+    // 1. BIAYA PERBAIKAN (dari Work Order Korektif yang sudah ada biaya aktual)
+    const { data: workOrders } = await supabase
+      .from("work_orders")
+      .select("id, asset_id, actual_cost, completed_at, created_at, assets(name, locations(name))")
+      .gt("actual_cost", 0);
+
+    const perbaikanTx: CostTransaction[] = (workOrders || []).map((wo: any) => ({
+      id: `wo-${wo.id}`,
+      date: wo.completed_at || wo.created_at,
+      category: "Perbaikan",
+      description: `${wo.asset_id}${wo.assets?.name ? ` — ${wo.assets.name}` : ""}`,
+      location: wo.assets?.locations?.name || null,
+      amount: wo.actual_cost || 0,
+      href: `/pemeliharaan/korektif/${wo.id}`,
+    }));
+
+    // 2. BIAYA PEMBELIAN STOK (dari pergerakan stok tipe "Masuk" yang ada harga per unit)
+    const { data: movements } = await supabase
+      .from("stock_movements")
+      .select("id, stock_item_id, qty, unit_price, created_at, reference, stock_items(name)")
+      .eq("type", "Masuk")
+      .not("unit_price", "is", null);
+
+    const stokTx: CostTransaction[] = (movements || []).map((m: any) => ({
+      id: `mv-${m.id}`,
+      date: m.reference || m.created_at,
+      category: "Pembelian Stok",
+      description: `${m.stock_items?.name || m.stock_item_id} (${m.qty} unit)`,
+      location: null,
+      amount: (m.unit_price || 0) * (m.qty || 0),
+      href: `/stok/${m.stock_item_id}`,
+    }));
+
+    const all = [...perbaikanTx, ...stokTx].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    setTransactions(all);
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const filteredTx = transactions.filter((tx) => {
+    const matchCategory = !categoryFilter || tx.category === categoryFilter;
+    const txDate = tx.date.slice(0, 10);
+    const matchStart = !startDate || txDate >= startDate;
+    const matchEnd = !endDate || txDate <= endDate;
+    return matchCategory && matchStart && matchEnd;
+  });
+
+  // --- RINGKASAN ---
+  const totalPerbaikan = filteredTx.filter((t) => t.category === "Perbaikan").reduce((s, t) => s + t.amount, 0);
+  const totalStok = filteredTx.filter((t) => t.category === "Pembelian Stok").reduce((s, t) => s + t.amount, 0);
+  const totalKeseluruhan = totalPerbaikan + totalStok;
+  const pctPerbaikan = totalKeseluruhan > 0 ? Math.round((totalPerbaikan / totalKeseluruhan) * 100) : 0;
+  const pctStok = totalKeseluruhan > 0 ? Math.round((totalStok / totalKeseluruhan) * 100) : 0;
+
+  // --- GRAFIK TREN BULANAN (6 bulan terakhir berdasarkan data yang ada) ---
+  const monthlyChart = useMemo(() => {
+    const map = new Map<string, { perbaikan: number; stok: number; label: string; sortKey: string }>();
+    filteredTx.forEach((tx) => {
+      const d = new Date(tx.date);
+      const sortKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = monthLabel(tx.date);
+      if (!map.has(sortKey)) map.set(sortKey, { perbaikan: 0, stok: 0, label, sortKey });
+      const entry = map.get(sortKey)!;
+      if (tx.category === "Perbaikan") entry.perbaikan += tx.amount;
+      else entry.stok += tx.amount;
+    });
+    return Array.from(map.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey)).slice(-6);
+  }, [filteredTx]);
+
+  const maxMonthly = Math.max(1, ...monthlyChart.map((m) => m.perbaikan + m.stok));
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 pb-10 font-poppins text-left">
       {/* HEADER & FILTER */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Analisis Biaya</h1>
-          <p className="text-[#475569] dark:text-[#94A3B8] text-sm">Pantau and analisis pengeluaran pemeliharaan aset secara real-time</p>
+          <p className="text-[#475569] dark:text-[#94A3B8] text-sm">Pantau dan analisis pengeluaran perbaikan aset & pembelian stok secara real-time</p>
         </div>
-        <div className="flex gap-3">
-          <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] cursor-pointer">
-            <span>Januari 2024 - Juni 2024</span>
-            <ChevronDown size={16} />
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] cursor-pointer">
-            <span>Semua Lokasi</span>
-            <ChevronDown size={16} />
+        <div className="flex flex-wrap gap-3">
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="px-4 py-2 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] outline-none focus:border-primary"
+          />
+          <span className="self-center text-[#94A3B8] text-sm">s/d</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="px-4 py-2 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] outline-none focus:border-primary"
+          />
+          <div className="relative">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="appearance-none pl-4 pr-9 py-2 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-lg text-sm text-[#475569] dark:text-[#94A3B8] font-bold cursor-pointer outline-none focus:border-primary"
+            >
+              <option value="">Semua Kategori</option>
+              <option value="Perbaikan">Perbaikan</option>
+              <option value="Pembelian Stok">Pembelian Stok</option>
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
           </div>
         </div>
       </div>
 
       {/* ROW 1: SUMMARY CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {summary.map((item) => (
-          <div key={item.label} className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm">
-            <div className="flex justify-between items-start mb-4">
-              <span className="text-[14px] text-[#475569] dark:text-[#94A3B8] font-medium">{item.label}</span>
-              <div className="w-9 h-9 bg-[#CCFBF1] rounded-lg flex items-center justify-center text-[#0D9488]">
-                <Banknote size={20} />
-              </div>
+        <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <span className="text-[14px] text-[#475569] dark:text-[#94A3B8] font-medium">Total Biaya Keseluruhan</span>
+            <div className="w-9 h-9 bg-[#CCFBF1] dark:bg-[#115E59]/30 rounded-lg flex items-center justify-center text-[#0D9488]">
+              <Banknote size={20} />
             </div>
-            <div className={`text-2xl font-bold ${item.color}`}>{item.val}</div>
-            <p className="text-[12px] text-[#94A3B8] mt-1">{item.desc}</p>
           </div>
-        ))}
+          <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{isLoading ? "-" : formatRupiah(totalKeseluruhan)}</div>
+          <p className="text-[12px] text-[#94A3B8] mt-1">Perbaikan + Pembelian Stok</p>
+        </div>
+
+        <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <span className="text-[14px] text-[#475569] dark:text-[#94A3B8] font-medium">Biaya Perbaikan</span>
+            <div className="w-9 h-9 bg-orange-50 dark:bg-orange-950/30 rounded-lg flex items-center justify-center text-[#E28E00]">
+              <Wrench size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-bold text-[#E28E00]">{isLoading ? "-" : formatRupiah(totalPerbaikan)}</div>
+          <p className="text-[12px] text-[#94A3B8] mt-1">{pctPerbaikan}% dari total biaya</p>
+        </div>
+
+        <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <span className="text-[14px] text-[#475569] dark:text-[#94A3B8] font-medium">Biaya Pembelian Stok</span>
+            <div className="w-9 h-9 bg-blue-50 dark:bg-blue-950/30 rounded-lg flex items-center justify-center text-[#3B82F6]">
+              <Package size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-bold text-[#3B82F6]">{isLoading ? "-" : formatRupiah(totalStok)}</div>
+          <p className="text-[12px] text-[#94A3B8] mt-1">{pctStok}% dari total biaya</p>
+        </div>
       </div>
 
-      {/* ROW 2: CHARTS */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        
-        {/* KIRI: Grafik Batang Bulanan */}
-        <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col min-h-[400px]">
-          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] dark:text-[#F8FAFC]mb-10 text-base">Biaya Pemeliharaan Bulanan</h3>
-          <div className="flex-1 flex items-end justify-between gap-4 h-[220px] pt-10 border-b border-gray-50 pb-2">
-            {monthlyCosts.map((data) => (
-              <div key={data.m} className="flex-1 h-full flex flex-col justify-end items-center gap-3 group">
-                <div 
-                  style={{ height: `${(data.v / 250) * 100}%` }} 
-                  className="w-full bg-[#0D9488] rounded-t-md hover:bg-teal-600 transition-all cursor-pointer relative"
-                >
-                   {/* Tooltip Angka */}
-                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#0F172A] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 font-bold">
-                      Rp {data.v}M
-                   </div>
+      {/* ROW 2: GRAFIK TREN BULANAN */}
+      <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col min-h-[380px]">
+        <div className="flex items-center justify-between mb-8">
+          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base">Tren Biaya Bulanan</h3>
+          <div className="flex items-center gap-4 text-[11px] font-bold">
+            <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#E28E00] inline-block"></span> Perbaikan</span>
+            <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] inline-block"></span> Pembelian Stok</span>
+          </div>
+        </div>
+        {isLoading ? (
+          <div className="flex-1 flex items-center justify-center text-[#94A3B8] text-sm">Memuat data...</div>
+        ) : monthlyChart.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-[#94A3B8] text-sm italic">Belum ada data biaya untuk ditampilkan.</div>
+        ) : (
+          <div className="flex-1 flex items-end justify-between gap-4 h-[220px] pt-4 border-b border-gray-50 dark:border-[#334155] pb-2">
+            {monthlyChart.map((data) => (
+              <div key={data.sortKey} className="flex-1 h-full flex flex-col justify-end items-center gap-3 group">
+                <div className="w-full flex flex-col justify-end h-full relative">
+                  <div
+                    style={{ height: `${(data.stok / maxMonthly) * 100}%` }}
+                    className="w-full bg-[#3B82F6] rounded-t-sm hover:opacity-80 transition-all"
+                  />
+                  <div
+                    style={{ height: `${(data.perbaikan / maxMonthly) * 100}%` }}
+                    className="w-full bg-[#E28E00] hover:opacity-80 transition-all"
+                  />
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#0F172A] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 font-bold">
+                    {formatRupiah(data.perbaikan + data.stok)}
+                  </div>
                 </div>
-                <span className="text-[12px] text-[#94A3B8] font-bold">{data.m}</span>
+                <span className="text-[12px] text-[#94A3B8] font-bold">{data.label}</span>
               </div>
             ))}
           </div>
-        </div>
-
-        {/* KANAN: Biaya Berdasarkan Lokasi */}
-        <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col">
-          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] dark:text-[#F8FAFC]mb-8 text-base">Biaya Berdasarkan Lokasi</h3>
-          <div className="flex flex-col gap-6 flex-1 justify-center">
-            {costByLocation.map((loc) => (
-              <div key={loc.name} className="flex flex-col gap-2">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="font-bold text-[#475569] dark:text-[#94A3B8]">{loc.name}</span>
-                  <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">{loc.val}</span>
-                </div>
-                <div className="w-full h-2 bg-[#F1F5F9] rounded-full overflow-hidden">
-                  <div 
-                    style={{ width: `${loc.percent}%` }} 
-                    className="h-full bg-[#0D9488] rounded-full transition-all duration-1000"
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
+        )}
       </div>
 
-      {/* ROW 3: DETAIL TABLE */}
+      {/* ROW 3: TABEL RINCIAN TRANSAKSI */}
       <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-gray-200 dark:border-[#334155] shadow-sm overflow-hidden mb-10">
         <div className="p-6 border-b border-gray-100 dark:border-[#334155]">
-           <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] dark:text-[#F8FAFC]text-base">Biaya Pemeliharaan Per Aset</h3>
+          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base">Rincian Transaksi Biaya</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-[#F8FAFC] dark:bg-[#0F172A] dark:bg-[#0F172A] dark:bg-[#0F172A] border-b text-[#475569] dark:text-[#94A3B8] font-bold">
+            <thead className="bg-[#F8FAFC] dark:bg-[#0F172A] border-b text-[#475569] dark:text-[#94A3B8] font-bold">
               <tr>
-                <th className="px-6 py-4">Nama Aset</th>
+                <th className="px-6 py-4">Tanggal</th>
+                <th className="px-6 py-4">Kategori</th>
+                <th className="px-6 py-4">Deskripsi</th>
                 <th className="px-6 py-4">Lokasi</th>
-                <th className="px-6 py-4">Biaya Pencegahan</th>
-                <th className="px-6 py-4">Biaya Korektif</th>
-                <th className="px-6 py-4">Total Biaya</th>
+                <th className="px-6 py-4 text-right">Jumlah Biaya</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-[#334155] dark:divide-[#334155]">
-              {[
-                { name: "Genset Caterpillar 3516", loc: "ITDC Office", prev: "45M", corr: "120M", total: "165M" },
-                { name: "Chiller York Central #1", loc: "Workshop", prev: "32M", corr: "85M", total: "117M" },
-                { name: "Transformator Schneider", loc: "Utility Area", prev: "18M", corr: "95M", total: "113M" },
-                { name: "Pompa Centrifugal Ebara", loc: "Power Plant", prev: "24M", corr: "65M", total: "89M" },
-                { name: "Compressor Atlas Copco", loc: "Power Plant", prev: "35M", corr: "40M", total: "75M" },
-              ].map((row, i) => (
-                <tr key={i} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50 dark:hover:bg-[#334155]/50 transition-colors">
-                  <td className="px-6 py-4 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{row.name}</td>
-                  <td className="px-6 py-4 text-[#475569] dark:text-[#94A3B8]">{row.loc}</td>
-                  <td className="px-6 py-4 text-[#475569] dark:text-[#94A3B8]">Rp {row.prev}</td>
-                  <td className="px-6 py-4 text-[#475569] dark:text-[#94A3B8]">Rp {row.corr}</td>
-                  <td className="px-6 py-4 font-bold text-[#0D9488]">Rp {row.total}</td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
+              {isLoading ? (
+                <tr><td colSpan={5} className="px-6 py-10 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
+              ) : filteredTx.length === 0 ? (
+                <tr><td colSpan={5} className="px-6 py-10 text-center text-[#94A3B8] italic">Belum ada transaksi biaya pada rentang/kategori ini.</td></tr>
+              ) : (
+                filteredTx.map((tx) => (
+                  <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-colors">
+                    <td className="px-6 py-4 text-[#475569] dark:text-[#94A3B8] font-medium">
+                      {new Date(tx.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${tx.category === "Perbaikan" ? "bg-orange-50 text-[#E28E00]" : "bg-blue-50 text-[#3B82F6]"}`}>
+                        {tx.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <Link href={tx.href} className="font-bold text-[#0F172A] dark:text-[#F8FAFC] hover:text-[#0D9488] transition-colors">
+                        {tx.description}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4 text-[#475569] dark:text-[#94A3B8]">{tx.location || "-"}</td>
+                    <td className="px-6 py-4 text-right font-black text-[#0D9488]">{formatRupiah(tx.amount)}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Search, ChevronDown, Eye } from "lucide-react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { Plus, Search, ChevronDown, Eye, Camera as CameraIcon, Package, X } from "lucide-react";
 import Link from "next/link";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import { supabase } from "@/lib/supabase";
+import imageCompression from "browser-image-compression";
 
 interface StockItem {
   id: string;
@@ -17,6 +18,7 @@ interface StockItem {
   supplier_name: string | null;
   supplier_contact: string | null;
   supplier_address: string | null;
+  photo_url: string | null;
   created_at: string;
 }
 
@@ -50,6 +52,12 @@ export default function StockPage() {
     supplier_name: "",
   });
   const [isSaving, setIsSaving] = useState(false);
+
+  // --- STATE FOTO ITEM (SAAT TAMBAH ITEM) ---
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -92,6 +100,42 @@ export default function StockPage() {
   const outOfStockCount = stockItems.filter((i) => getStockStatus(i) === "Habis").length;
   const totalSuppliers = supplierOptions.length;
 
+  const resetAddForm = () => {
+    setAddForm({ id: "", name: "", category: "", qty: 0, unit: "Pcs", min_stock: 5, supplier_name: "" });
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
+
+  // --- PILIH FOTO ITEM (GALERI / KAMERA) ---
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      if (file.name.toLowerCase().endsWith(".heic")) {
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      }
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+      setPhotoFile(file);
+      setPhotoPreview(URL.createObjectURL(file));
+    } catch (err) {
+      alert("Gagal memproses foto. Coba file lain.");
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+  };
+
   // --- TAMBAH ITEM STOK BARU ---
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,9 +143,29 @@ export default function StockPage() {
       alert("Nama item wajib diisi.");
       return;
     }
+    if (!photoFile) {
+      alert("Foto item wajib diisi.");
+      return;
+    }
     setIsSaving(true);
 
     const newId = addForm.id.trim() || `STK-${Date.now().toString().slice(-6)}`;
+
+    let photoUrl: string | null = null;
+    if (photoFile) {
+      try {
+        const compressedFile = await imageCompression(photoFile, { maxSizeMB: 0.5, maxWidthOrHeight: 800, useWebWorker: true });
+        const fileName = `${Date.now()}-stok-${newId}`;
+        const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, compressedFile);
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+        photoUrl = publicUrl;
+      } catch (err: any) {
+        alert("Gagal mengunggah foto: " + err.message);
+        setIsSaving(false);
+        return;
+      }
+    }
 
     const { error } = await supabase.from("stock_items").insert([{
       id: newId,
@@ -111,13 +175,14 @@ export default function StockPage() {
       unit: addForm.unit || "Pcs",
       min_stock: addForm.min_stock || 5,
       supplier_name: addForm.supplier_name.trim() || null,
+      photo_url: photoUrl,
     }]);
 
     if (error) {
       alert("Gagal menyimpan item: " + error.message);
     } else {
       setIsAddModalOpen(false);
-      setAddForm({ id: "", name: "", category: "", qty: 0, unit: "Pcs", min_stock: 5, supplier_name: "" });
+      resetAddForm();
       fetchData();
     }
     setIsSaving(false);
@@ -189,7 +254,18 @@ export default function StockPage() {
                 filteredItems.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-colors">
                     <td className="px-6 py-5 font-bold text-[#475569] dark:text-[#94A3B8] text-center">{item.id}</td>
-                    <td className="px-6 py-5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{item.name}</td>
+                    <td className="px-6 py-5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg overflow-hidden bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-100 dark:border-[#334155] flex items-center justify-center flex-shrink-0">
+                          {item.photo_url ? (
+                            <img src={item.photo_url} alt={item.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package size={16} className="text-[#94A3B8]" />
+                          )}
+                        </div>
+                        <span>{item.name}</span>
+                      </div>
+                    </td>
                     <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8] font-medium">{item.category || "-"}</td>
                     <td className={`px-6 py-5 font-black text-[14px] ${item.qty === 0 ? "text-red-600" : "text-[#0F172A] dark:text-[#F8FAFC]"}`}>{item.qty}</td>
                     <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8] font-medium">{item.unit}</td>
@@ -211,8 +287,41 @@ export default function StockPage() {
       </div>
 
       {/* 5. MODAL TAMBAH ITEM STOK */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Tambah Item Stok Baru">
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); resetAddForm(); }} title="Tambah Item Stok Baru">
         <form onSubmit={handleAddSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+          {/* FOTO ITEM */}
+          <div className="md:col-span-2 flex flex-col gap-2">
+            <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Item <span className="text-red-500">*</span></label>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-xl overflow-hidden bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] flex items-center justify-center flex-shrink-0 relative">
+                {photoPreview ? (
+                  <>
+                    <img src={photoPreview} alt="Pratinjau" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 text-white rounded-full flex items-center justify-center"
+                    >
+                      <X size={12} />
+                    </button>
+                  </>
+                ) : (
+                  <Package size={24} className="text-[#94A3B8]" />
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input type="file" ref={fileInputRef} onChange={handlePhotoSelect} className="hidden" accept="image/*,.heic" />
+                <input type="file" ref={cameraInputRef} onChange={handlePhotoSelect} className="hidden" accept="image/*" capture="environment" />
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">
+                  Pilih dari Galeri
+                </button>
+                <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">
+                  <CameraIcon size={14} /> Kamera
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="flex flex-col gap-2">
             <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Kode Item</label>
             <input
@@ -288,7 +397,7 @@ export default function StockPage() {
             />
           </div>
           <div className="md:col-span-2 flex gap-3 mt-4">
-            <button type="button" disabled={isSaving} onClick={() => setIsAddModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batalkan</button>
+            <button type="button" disabled={isSaving} onClick={() => { setIsAddModalOpen(false); resetAddForm(); }} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batalkan</button>
             <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold hover:bg-teal-700 shadow-md transition-all disabled:opacity-50">
               {isSaving ? "Menyimpan..." : "Simpan Item"}
             </button>

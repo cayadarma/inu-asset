@@ -19,7 +19,7 @@ export default function Home() {
     active: 0,
     maintenance: 0,
     broken: 0,
-    cost: "Rp 847.5 M",
+    cost: "Rp 0",
     availability: "0%",
   });
 
@@ -46,6 +46,30 @@ export default function Home() {
         broken: rusak + perbaikan,
         availability: `${availabilityPct.toFixed(1)}%`,
       }));
+
+      // --- HITUNG BIAYA PEMELIHARAAN: BIAYA PERBAIKAN + BIAYA PEMBELIAN STOK ---
+      const { data: workOrders } = await supabase
+        .from("work_orders")
+        .select("actual_cost")
+        .gt("actual_cost", 0);
+      const totalPerbaikan = (workOrders || []).reduce((sum, wo) => sum + (wo.actual_cost || 0), 0);
+
+      const { data: movements } = await supabase
+        .from("stock_movements")
+        .select("qty, unit_price")
+        .eq("type", "Masuk")
+        .not("unit_price", "is", null);
+      const totalStok = (movements || []).reduce((sum, m) => sum + (m.unit_price || 0) * (m.qty || 0), 0);
+
+      const totalBiaya = totalPerbaikan + totalStok;
+      const formattedCost =
+        totalBiaya >= 1_000_000_000
+          ? `Rp ${(totalBiaya / 1_000_000_000).toFixed(1)} M`
+          : totalBiaya >= 1_000_000
+          ? `Rp ${(totalBiaya / 1_000_000).toFixed(1)} Jt`
+          : `Rp ${totalBiaya.toLocaleString("id-ID")}`;
+
+      setCounts((prev) => ({ ...prev, cost: formattedCost }));
 
       // --- CATAT "POTRET" STATUS ASET HARI INI UNTUK GRAFIK TREN ---
       // Di-upsert (insert atau update jika sudah ada) berdasarkan snapshot_date,
@@ -87,8 +111,9 @@ export default function Home() {
         <StatCard 
           title="Biaya Pemeliharaan" 
           value={counts.cost} 
-          description="Anggaran tahun berjalan" 
+          description="Biaya perbaikan + pembelian stok" 
           icon={<Banknote size={20} />} 
+          href="/analisis-biaya"
         />
         <StatCard 
           title="Asset Availability" 
