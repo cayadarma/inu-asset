@@ -27,8 +27,8 @@ export default function ReportPreviewPage() {
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center text-white font-black text-2xl">I</div>
             <div>
-              <h2 className="text-xl font-black text-dark tracking-tighter">INU Asset MANAGEMENT</h2>
-              <p className="text-xs text-muted-text">PT. INU Asset Solusindo, Tbk.</p>
+              <h2 className="text-xl font-black text-dark tracking-tighter">INU Asset</h2>
+              <p className="text-xs text-muted-text">PT. ITDC Nusantara Utilitas</p>
             </div>
           </div>
           <div className="text-right">

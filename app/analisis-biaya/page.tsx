@@ -246,11 +246,11 @@ export default function CostAnalysisPage() {
       </div>
 
       {/* ROW 2: GRAFIK TREN BULANAN */}
-      <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col min-h-[380px]">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+      <div className="bg-white dark:bg-[#1E293B] p-4 sm:p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col min-h-[380px]">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 sm:mb-8">
           <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base">Tren Biaya Bulanan</h3>
-          <div className="flex items-center gap-4">
-            <div className="relative">
+          <div className="flex flex-col xs:flex-row sm:items-center gap-3">
+            <div className="relative w-fit">
               <select
                 value={chartYear}
                 onChange={(e) => setChartYear(Number(e.target.value))}
@@ -262,9 +262,9 @@ export default function CostAnalysisPage() {
               </select>
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
             </div>
-            <div className="flex items-center gap-4 text-[11px] font-bold">
-              <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#E28E00] inline-block"></span> Perbaikan</span>
-              <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] inline-block"></span> Pembelian Stok</span>
+            <div className="flex items-center gap-3 sm:gap-4 text-[11px] font-bold">
+              <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#E28E00] inline-block shrink-0"></span> Perbaikan</span>
+              <span className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] inline-block shrink-0"></span> Pembelian Stok</span>
             </div>
           </div>
         </div>
@@ -273,21 +273,22 @@ export default function CostAnalysisPage() {
         ) : monthlyChart.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-[#94A3B8] text-sm italic">Belum ada data biaya untuk ditampilkan.</div>
         ) : (
-          <div className="flex-1 flex items-end justify-between gap-4 h-[220px] pt-4 border-b border-gray-50 dark:border-[#334155] pb-2">
-            {monthlyChart.map((data) => {
-              const stokHeight = Math.round((data.stok / maxMonthly) * CHART_HEIGHT_PX);
-              const perbaikanHeight = Math.round((data.perbaikan / maxMonthly) * CHART_HEIGHT_PX);
-              return (
-                <div key={data.sortKey} className="flex-1 flex flex-col justify-end items-center gap-3 group">
-                  <div className="w-full flex flex-col justify-end relative" style={{ height: CHART_HEIGHT_PX }}>
-                    <div
-                      style={{ height: `${stokHeight}px` }}
-                      className="w-full bg-[#3B82F6] rounded-t-sm hover:opacity-80 transition-all"
-                    />
-                    <div
-                      style={{ height: `${perbaikanHeight}px` }}
-                      className="w-full bg-[#E28E00] hover:opacity-80 transition-all"
-                    />
+          <div className="flex-1 overflow-x-auto">
+            <div className="flex items-end justify-between gap-2 sm:gap-4 h-[220px] pt-4 border-b border-gray-50 dark:border-[#334155] pb-2 min-w-[560px] sm:min-w-0">
+              {monthlyChart.map((data) => {
+                const stokHeight = Math.round((data.stok / maxMonthly) * CHART_HEIGHT_PX);
+                const perbaikanHeight = Math.round((data.perbaikan / maxMonthly) * CHART_HEIGHT_PX);
+                return (
+                  <div key={data.sortKey} className="flex-1 min-w-[36px] flex flex-col justify-end items-center gap-2 sm:gap-3 group">
+                    <div className="w-full flex flex-col justify-end relative" style={{ height: CHART_HEIGHT_PX }}>
+                      <div
+                        style={{ height: `${stokHeight}px` }}
+                        className="w-full bg-[#3B82F6] rounded-t-sm hover:opacity-80 transition-all"
+                      />
+                      <div
+                        style={{ height: `${perbaikanHeight}px` }}
+                        className="w-full bg-[#E28E00] hover:opacity-80 transition-all"
+                      />
                     <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#0F172A] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 font-bold">
                       {formatRupiah(data.perbaikan + data.stok)}
                     </div>
@@ -296,6 +297,7 @@ export default function CostAnalysisPage() {
                 </div>
               );
             })}
+            </div>
           </div>
         )}
       </div>
