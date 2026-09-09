@@ -21,7 +21,6 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempAge, setTempAge] = useState("Pilih tanggal pembelian aset!");
-  const [isPreviewFullOpen, setIsPreviewFullOpen] = useState(false);
 
   // --- STATE FILTER & SEARCH ---
   const [searchQuery, setSearchQuery] = useState("");
@@ -30,14 +29,20 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   
   // --- STATE FORM ---
   const [newAsset, setNewAsset] = useState({
-    id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi"
+    id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: ""
   });
   const [isNewType, setIsNewType] = useState(false);
 
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const MAX_PHOTOS = 5;
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
+  const [paymentProofPreview, setPaymentProofPreview] = useState<string | null>(null);
+  const paymentProofInputRef = useRef<HTMLInputElement>(null);
 
   // STATE PAGINATION
   const [currentPage, setCurrentPage] = useState(1);
@@ -109,6 +114,50 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   });
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const remainingSlots = MAX_PHOTOS - imageFiles.length;
+    if (remainingSlots <= 0) {
+      alert(`Maksimal ${MAX_PHOTOS} foto per aset.`);
+      e.target.value = "";
+      return;
+    }
+    const filesToProcess = files.slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      alert(`Hanya ${remainingSlots} foto yang ditambahkan, karena maksimal ${MAX_PHOTOS} foto per aset.`);
+    }
+
+    setIsLoading(true);
+    try {
+      const newFiles: File[] = [];
+      const newPreviews: string[] = [];
+      for (let file of filesToProcess) {
+        if (file.name.toLowerCase().endsWith(".heic")) {
+          const heic2any = (await import("heic2any")).default;
+          const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+          file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+        }
+        const compressedFile = await imageCompression(file, { maxSizeMB: 0.8, maxWidthOrHeight: 1200, useWebWorker: true });
+        newFiles.push(compressedFile);
+        newPreviews.push(URL.createObjectURL(compressedFile));
+      }
+      setImageFiles((prev) => [...prev, ...newFiles]);
+      setImagePreviews((prev) => [...prev, ...newPreviews]);
+    } catch (error) {
+      console.error("Gagal olah gambar:", error);
+    } finally {
+      setIsLoading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handlePaymentProofChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     let file = e.target.files?.[0];
     if (!file) return;
     setIsLoading(true);
@@ -118,11 +167,11 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
         const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
         file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
       }
-      const compressedFile = await imageCompression(file, { maxSizeMB: 0.8, maxWidthOrHeight: 1200, useWebWorker: true });
-      setImageFile(compressedFile);
-      setImagePreview(URL.createObjectURL(compressedFile));
+      const compressedFile = await imageCompression(file, { maxSizeMB: 0.8, maxWidthOrHeight: 1600, useWebWorker: true });
+      setPaymentProofFile(compressedFile);
+      setPaymentProofPreview(URL.createObjectURL(compressedFile));
     } catch (error) {
-      console.error("Gagal olah gambar:", error);
+      console.error("Gagal olah bukti pembayaran:", error);
     } finally {
       setIsLoading(false);
     }
@@ -130,29 +179,58 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validasi: kalau biaya pembelian diisi, bukti pembayaran wajib ada
+    if (newAsset.purchase_cost && Number(newAsset.purchase_cost) > 0 && !paymentProofFile) {
+      alert("Bukti pembayaran wajib diunggah karena biaya pembelian sudah diisi.");
+      return;
+    }
+
     setIsLoading(true);
 
     if (isNewType && newAsset.type) {
       await supabase.from("asset_types").insert([{ name: newAsset.type }]);
     }
 
-    let finalImageUrl = "";
-    if (imageFile) {
-      const fileName = `${Date.now()}-${imageFile.name}`;
-      const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, imageFile);
+    // Upload semua foto aset (maks 5)
+    const uploadedImageUrls: string[] = [];
+    for (const file of imageFiles) {
+      const fileName = `${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, file);
       if (!uploadError) {
         const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
-        finalImageUrl = publicUrl;
+        uploadedImageUrls.push(publicUrl);
       }
     }
 
-    const { error } = await supabase.from("assets").insert([{ ...newAsset, location_id: locationId, image_url: finalImageUrl }]);
+    // Upload bukti pembayaran (jika ada)
+    let paymentProofUrl = "";
+    if (paymentProofFile) {
+      const fileName = `${Date.now()}-bukti-${paymentProofFile.name}`;
+      const { error: uploadError } = await supabase.storage.from("payment-proofs").upload(fileName, paymentProofFile);
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage.from("payment-proofs").getPublicUrl(fileName);
+        paymentProofUrl = publicUrl;
+      }
+    }
+
+    const { error } = await supabase.from("assets").insert([{
+      ...newAsset,
+      purchase_cost: newAsset.purchase_cost ? Number(newAsset.purchase_cost) : null,
+      location_id: locationId,
+      image_url: uploadedImageUrls[0] || "",
+      image_urls: uploadedImageUrls,
+      payment_proof_url: paymentProofUrl || null,
+    }]);
     
     if (error) alert("Gagal: " + error.message);
     else {
       setIsModalOpen(false);
-      setImagePreview(null);
-      setNewAsset({ id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi" });
+      setImagePreviews([]);
+      setImageFiles([]);
+      setPaymentProofFile(null);
+      setPaymentProofPreview(null);
+      setNewAsset({ id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "" });
       setIsNewType(false);
       fetchAssets();
       fetchTypes();
@@ -272,22 +350,46 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
              <FormInput label="Spesifikasi" placeholder="Detail spek" value={newAsset.specification} onChange={(e: any) => setNewAsset({...newAsset, specification: e.target.value})} />
              <FormInput label="Tanggal Pembelian" type="date" value={newAsset.purchase_date} onChange={(e: any) => { setNewAsset({...newAsset, purchase_date: e.target.value}); setTempAge(calculateAge(e.target.value)); }} />
              <FormInput label="Umur Aset" value={tempAge} disabled />
+             <FormInput label="Biaya Pembelian" type="number" placeholder="Contoh: 5000000" value={newAsset.purchase_cost} onChange={(e: any) => setNewAsset({...newAsset, purchase_cost: e.target.value})} />
+             {newAsset.purchase_cost && Number(newAsset.purchase_cost) > 0 && (
+               <div className="flex flex-col gap-2">
+                  <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Bukti Pembayaran</label>
+                  <div className="w-full aspect-[4/3] bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 dark:border-[#334155] overflow-hidden relative cursor-pointer" onClick={() => paymentProofInputRef.current?.click()}>
+                    {paymentProofPreview ? <img src={paymentProofPreview} alt="Bukti Pembayaran" className="w-full h-full object-cover" /> : <><ImageIcon size={36} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Unggah Bukti Pembayaran</span></>}
+                  </div>
+                  <input type="file" className="hidden" ref={paymentProofInputRef} onChange={handlePaymentProofChange} accept="image/*,.heic" />
+               </div>
+             )}
              <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Lokasi Aset</label>
                 <input type="text" value={realLocationName} disabled className="w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm text-[#94A3B8] font-bold" />
              </div>
           </div>
           <div className="lg:col-span-1 flex flex-col gap-5 text-left">
-             <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Aset</label>
-              <div className={`w-full aspect-square bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 dark:border-[#334155] overflow-hidden relative ${imagePreview ? 'cursor-zoom-in' : ''}`} onClick={() => imagePreview && setIsPreviewFullOpen(true)}>
-                {imagePreview ? <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /> : <><ImageIcon size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Preview Foto</span></>}
-              </div>
-             <input type="file" className="hidden" ref={fileInputRef} onChange={handleImageChange} accept="image/*,.heic" />
+             <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Aset ({imagePreviews.length}/{MAX_PHOTOS})</label>
+             <div className="grid grid-cols-3 gap-2">
+                {imagePreviews.map((src, idx) => (
+                  <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-[#334155] group">
+                    <img src={src} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover cursor-zoom-in" onClick={() => setLightboxImage(src)} />
+                    <button type="button" onClick={() => handleRemoveImage(idx)} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {imagePreviews.length < MAX_PHOTOS && (
+                  <div className="aspect-square bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 dark:border-[#334155]">
+                    <ImageIcon size={24} className="text-[#94A3B8]" />
+                    <span className="text-[9px] font-bold text-[#94A3B8] text-center px-1">Tambah Foto</span>
+                  </div>
+                )}
+             </div>
+             <input type="file" className="hidden" ref={fileInputRef} onChange={handleImageChange} accept="image/*,.heic" multiple />
              <input type="file" className="hidden" ref={cameraInputRef} onChange={handleImageChange} accept="image/*" capture="environment" />
              <div className="flex gap-2">
-               <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all">Pilih dari Galeri</button>
-               <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all"><CameraIcon size={14} /> Kamera</button>
+               <button type="button" disabled={imagePreviews.length >= MAX_PHOTOS} onClick={() => fileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed">Pilih dari Galeri</button>
+               <button type="button" disabled={imagePreviews.length >= MAX_PHOTOS} onClick={() => cameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] dark:border-[#475569] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><CameraIcon size={14} /> Kamera</button>
              </div>
+             <p className="text-[10px] text-[#94A3B8] -mt-3">Maksimal {MAX_PHOTOS} foto per aset.</p>
              <div className="flex flex-col gap-3 mt-auto pt-10">
                 <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">Simpan Aset</button>
                 <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-4 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
@@ -297,9 +399,9 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       </Modal>
 
       {/* Lightbox Foto */}
-      {isPreviewFullOpen && imagePreview && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setIsPreviewFullOpen(false)}>
-          <img src={imagePreview} alt="Full" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+      {lightboxImage && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setLightboxImage(null)}>
+          <img src={lightboxImage} alt="Full" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
         </div>
       )}
     </div>

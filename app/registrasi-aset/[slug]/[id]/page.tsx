@@ -2,7 +2,7 @@
 
 import React, { useState, use, useEffect, useRef } from "react";
 import { 
-  ChevronLeft, Edit3, Trash2, Calendar, MapPin, Tag, 
+  ChevronLeft, ChevronRight, Edit3, Trash2, Calendar, MapPin, Tag, 
   Image as LucideImage, ChevronDown, Wrench, AlertTriangle, X, Camera as CameraIcon 
 } from "lucide-react";
 import Link from "next/link";
@@ -38,11 +38,16 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   const [availableTypes, setAvailableTypes] = useState<any[]>([]);
   const [isNewTypeEdit, setIsNewTypeEdit] = useState(false);
 
-  // --- STATE FOTO EDIT ---
-  const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
-  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  // --- STATE FOTO EDIT (MULTI, MAKS 5) ---
+  const MAX_PHOTOS = 5;
+  const [editExistingUrls, setEditExistingUrls] = useState<string[]>([]);
+  const [editNewFiles, setEditNewFiles] = useState<File[]>([]);
+  const [editNewPreviews, setEditNewPreviews] = useState<string[]>([]);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const editCameraInputRef = useRef<HTMLInputElement>(null);
+
+  // --- STATE CAROUSEL FOTO (TAMPILAN DETAIL) ---
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
 
   // --- AMBIL DATA DARI DB ---
   const fetchDetail = async () => {
@@ -59,7 +64,11 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     if (assetData) {
       setAsset(assetData);
       setEditField(assetData);
-      setEditImagePreview(assetData.image_url);
+      const existingPhotos: string[] = Array.isArray(assetData.image_urls) && assetData.image_urls.length > 0
+        ? assetData.image_urls
+        : (assetData.image_url ? [assetData.image_url] : []);
+      setEditExistingUrls(existingPhotos);
+      setActivePhotoIndex(0);
     }
     if (historyData) setDamageHistory(historyData);
     if (maintenanceData) setMaintenanceHistory(maintenanceData);
@@ -83,28 +92,63 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     setIsLightboxOpen(true);
   };
 
-  // --- LOGIKA OLAH FOTO EDIT (HEIC & COMPRESSION) ---
+  // --- LOGIKA OLAH FOTO EDIT (HEIC & COMPRESSION, MULTI FOTO MAKS 5) ---
   const handleEditImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    let file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const currentTotal = editExistingUrls.length + editNewFiles.length;
+    const remainingSlots = MAX_PHOTOS - currentTotal;
+    if (remainingSlots <= 0) {
+      alert(`Maksimal ${MAX_PHOTOS} foto per aset.`);
+      e.target.value = "";
+      return;
+    }
+    const filesToProcess = files.slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      alert(`Hanya ${remainingSlots} foto yang ditambahkan, karena maksimal ${MAX_PHOTOS} foto per aset.`);
+    }
 
     setIsLoading(true);
     try {
-      if (file.name.toLowerCase().endsWith(".heic")) {
-        const heic2any = (await import("heic2any")).default;
-        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
-        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      const newFiles: File[] = [];
+      const newPreviews: string[] = [];
+      for (let file of filesToProcess) {
+        if (file.name.toLowerCase().endsWith(".heic")) {
+          const heic2any = (await import("heic2any")).default;
+          const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+          file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+        }
+        const compressedFile = await imageCompression(file, { maxSizeMB: 0.8, maxWidthOrHeight: 1200, useWebWorker: true });
+        newFiles.push(compressedFile);
+        newPreviews.push(URL.createObjectURL(compressedFile));
       }
-      const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1200, useWebWorker: true };
-      const compressedFile = await imageCompression(file, options);
-      
-      setEditImageFile(compressedFile);
-      setEditImagePreview(URL.createObjectURL(compressedFile));
+      setEditNewFiles((prev) => [...prev, ...newFiles]);
+      setEditNewPreviews((prev) => [...prev, ...newPreviews]);
     } catch (error) {
       console.error("Gagal olah gambar:", error);
     } finally {
       setIsLoading(false);
+      e.target.value = "";
     }
+  };
+
+  const handleRemoveExistingEditPhoto = (index: number) => {
+    setEditExistingUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemoveNewEditPhoto = (index: number) => {
+    setEditNewFiles((prev) => prev.filter((_, i) => i !== index));
+    setEditNewPreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const resetEditPhotoState = () => {
+    const existingPhotos: string[] = Array.isArray(asset?.image_urls) && asset.image_urls.length > 0
+      ? asset.image_urls
+      : (asset?.image_url ? [asset.image_url] : []);
+    setEditExistingUrls(existingPhotos);
+    setEditNewFiles([]);
+    setEditNewPreviews([]);
   };
 
   // --- FUNGSI UPDATE DATA ---
@@ -117,15 +161,15 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       await supabase.from("asset_types").insert([{ name: editData.type }]);
     }
 
-    let finalImageUrl = asset.image_url;
+    let finalImageUrls = [...editExistingUrls];
 
-    // 2. Upload Foto Baru jika ada
-    if (editImageFile) {
-      const fileName = `${Date.now()}-updated-${id}`;
-      const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, editImageFile);
+    // 2. Upload Foto Baru jika ada (bisa lebih dari 1)
+    for (const file of editNewFiles) {
+      const fileName = `${Date.now()}-updated-${id}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, file);
       if (!uploadError) {
         const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
-        finalImageUrl = publicUrl;
+        finalImageUrls.push(publicUrl);
       }
     }
 
@@ -135,14 +179,16 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       type: editData.type,
       specification: editData.specification,
       status: editData.status,
-      image_url: finalImageUrl
+      image_url: finalImageUrls[0] || "",
+      image_urls: finalImageUrls
     }).eq("id", id);
 
     if (error) alert("Gagal: " + error.message);
     else {
       alert("Berhasil diperbarui!");
       setIsEditModalOpen(false);
-      setEditImageFile(null);
+      setEditNewFiles([]);
+      setEditNewPreviews([]);
       setIsNewTypeEdit(false);
       fetchDetail();
       fetchTypes();
@@ -176,9 +222,66 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
         {/* KOLOM KIRI: VISUAL */}
         <div className="lg:col-span-1 flex flex-col gap-6">
           <div className="bg-white dark:bg-[#1E293B] p-4 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm">
-            <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-gray-100 cursor-zoom-in shadow-inner" onClick={() => openLightbox(asset.image_url)}>
-               <img src={asset.image_url || "https://placehold.co/600x400"} alt="Asset" className="w-full h-full object-cover" />
-            </div>
+            {(() => {
+              const photos: string[] = Array.isArray(asset.image_urls) && asset.image_urls.length > 0
+                ? asset.image_urls
+                : (asset.image_url ? [asset.image_url] : []);
+              const current = photos[activePhotoIndex] || photos[0] || "";
+              return (
+                <>
+                  <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-gray-100 shadow-inner group">
+                    <img
+                      src={current || "https://placehold.co/600x400"}
+                      alt="Asset"
+                      className="w-full h-full object-cover cursor-zoom-in"
+                      onClick={() => openLightbox(current)}
+                    />
+                    {photos.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setActivePhotoIndex((prev) => (prev - 1 + photos.length) % photos.length)}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActivePhotoIndex((prev) => (prev + 1) % photos.length)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 bg-black/40 px-2 py-1 rounded-full">
+                          {photos.map((_, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setActivePhotoIndex(idx)}
+                              className={`w-1.5 h-1.5 rounded-full transition-all ${idx === activePhotoIndex ? "bg-white w-3" : "bg-white/50"}`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {photos.length > 1 && (
+                    <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                      {photos.map((src, idx) => (
+                        <button
+                          type="button"
+                          key={idx}
+                          onClick={() => setActivePhotoIndex(idx)}
+                          className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${idx === activePhotoIndex ? "border-[#0D9488]" : "border-transparent opacity-70"}`}
+                        >
+                          <img src={src} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             <div className="mt-4 flex justify-between items-center px-2">
               <span className="text-sm font-bold text-[#475569] dark:text-[#94A3B8]">Status Sekarang:</span>
               <Badge status={asset.status} />
@@ -249,7 +352,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       </div>
 
       {/* MODAL EDIT ASET (LOGIKA SAMA SEPERTI TAMBAH ASET) */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Informasi Utama Aset">
+      <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); resetEditPhotoState(); setIsNewTypeEdit(false); }} title="Edit Informasi Utama Aset">
         <form onSubmit={handleUpdate} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
           <div className="lg:col-span-2 flex flex-col gap-5">
              <EditField label="Nama Aset" val={editData.name} onChange={(e:any) => setEditField({...editData, name: e.target.value})} />
@@ -286,22 +389,41 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
           </div>
 
           <div className="lg:col-span-1 flex flex-col gap-5">
-             <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Aset</label>
-             <div 
-               className="w-full aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-[#334155] bg-gray-100 cursor-zoom-in"
-               onClick={() => openLightbox(editImagePreview || "")}
-             >
-                <img src={editImagePreview || "https://placehold.co/400x400"} alt="Preview" className="w-full h-full object-cover" />
+             <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Aset ({editExistingUrls.length + editNewFiles.length}/{MAX_PHOTOS})</label>
+             <div className="grid grid-cols-3 gap-2">
+                {editExistingUrls.map((src, idx) => (
+                  <div key={`existing-${idx}`} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-[#334155] group">
+                    <img src={src} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover cursor-zoom-in" onClick={() => openLightbox(src)} />
+                    <button type="button" onClick={() => handleRemoveExistingEditPhoto(idx)} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {editNewPreviews.map((src, idx) => (
+                  <div key={`new-${idx}`} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-[#334155] group">
+                    <img src={src} alt={`Foto baru ${idx + 1}`} className="w-full h-full object-cover cursor-zoom-in" onClick={() => openLightbox(src)} />
+                    <button type="button" onClick={() => handleRemoveNewEditPhoto(idx)} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {(editExistingUrls.length + editNewFiles.length) < MAX_PHOTOS && (
+                  <div className="aspect-square bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 dark:border-[#334155]">
+                    <LucideImage size={24} className="text-[#94A3B8]" />
+                    <span className="text-[9px] font-bold text-[#94A3B8] text-center px-1">Tambah Foto</span>
+                  </div>
+                )}
              </div>
-             <input type="file" ref={editFileInputRef} onChange={handleEditImageChange} className="hidden" accept="image/*" />
+             <input type="file" ref={editFileInputRef} onChange={handleEditImageChange} className="hidden" accept="image/*" multiple />
              <input type="file" ref={editCameraInputRef} onChange={handleEditImageChange} className="hidden" accept="image/*" capture="environment" />
              <div className="flex gap-2">
-               <button type="button" onClick={() => editFileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins">Ganti Foto</button>
-               <button type="button" onClick={() => editCameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins"><CameraIcon size={14} /> Kamera</button>
+               <button type="button" disabled={(editExistingUrls.length + editNewFiles.length) >= MAX_PHOTOS} onClick={() => editFileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins disabled:opacity-40 disabled:cursor-not-allowed">Tambah Foto</button>
+               <button type="button" disabled={(editExistingUrls.length + editNewFiles.length) >= MAX_PHOTOS} onClick={() => editCameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins disabled:opacity-40 disabled:cursor-not-allowed"><CameraIcon size={14} /> Kamera</button>
              </div>
+             <p className="text-[10px] text-[#94A3B8] -mt-3">Maksimal {MAX_PHOTOS} foto per aset.</p>
              <div className="flex flex-col gap-3 mt-auto pt-4">
                 <button type="submit" className="w-full bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700">Simpan Perubahan</button>
-                <button type="button" onClick={() => { setIsEditModalOpen(false); setEditImagePreview(asset.image_url); setIsNewTypeEdit(false); }} className="w-full py-3.5 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
+                <button type="button" onClick={() => { setIsEditModalOpen(false); resetEditPhotoState(); setIsNewTypeEdit(false); }} className="w-full py-3.5 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
              </div>
           </div>
         </form>

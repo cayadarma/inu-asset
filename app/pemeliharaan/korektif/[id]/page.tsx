@@ -30,6 +30,7 @@ interface WorkOrder {
   updated_at: string | null;
   completed_at: string | null;
   created_at: string;
+  is_emergency: boolean;
   assets: {
     name: string;
     type: string;
@@ -286,6 +287,11 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Detail Work Order — {workOrder.id}</h1>
           <Badge status={workOrder.status} />
+          {workOrder.is_emergency && (
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-black bg-red-50 dark:bg-red-900/20 text-[#EF4444] uppercase tracking-wide">
+              ⚡ Perbaikan Mendadak
+            </span>
+          )}
         </div>
         <div className="flex gap-3">
           <button className="px-5 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 flex items-center gap-2">

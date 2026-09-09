@@ -1,19 +1,22 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, Search, ChevronDown, Eye, Calendar, User, Briefcase, DollarSign, AlertCircle } from "lucide-react";
+import { Plus, Search, ChevronDown, Eye, Calendar, User, Briefcase, DollarSign, AlertCircle, Zap, Image as ImageIcon, Camera as CameraIcon } from "lucide-react";
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
+import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
 
 function CorrectiveContent() {
   const searchParams = useSearchParams();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [selectedWO, setSelectedWO] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingEmergency, setIsSavingEmergency] = useState(false);
 
   // --- STATE DATA REAL ---
   const [workOrders, setWorkOrders] = useState<any[]>([]);
@@ -41,6 +44,109 @@ function CorrectiveContent() {
     costService: 0,
     tindak_lanjut: ""
   });
+
+  // --- STATE FORM PERBAIKAN MENDADAK (TANPA WORK ORDER FORMAL DI AWAL) ---
+  const [emergencyForm, setEmergencyForm] = useState({
+    asset_id: "",
+    reporter_name: "",
+    trouble: "",
+    description: "",
+    oleh: "",
+    costPart: 0,
+    costService: 0,
+  });
+  const [emergencyImageFile, setEmergencyImageFile] = useState<File | null>(null);
+  const [emergencyImagePreview, setEmergencyImagePreview] = useState<string | null>(null);
+  const emergencyFileInputRef = useRef<HTMLInputElement>(null);
+  const emergencyCameraInputRef = useRef<HTMLInputElement>(null);
+
+  const resetEmergencyForm = () => {
+    setEmergencyForm({ asset_id: "", reporter_name: "", trouble: "", description: "", oleh: "", costPart: 0, costService: 0 });
+    setEmergencyImageFile(null);
+    setEmergencyImagePreview(null);
+  };
+
+  const handleEmergencyImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+    setIsSavingEmergency(true);
+    try {
+      if (file.name.toLowerCase().endsWith(".heic")) {
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      }
+      const compressedFile = await imageCompression(file, { maxSizeMB: 0.6, maxWidthOrHeight: 1200, useWebWorker: true });
+      setEmergencyImageFile(compressedFile);
+      setEmergencyImagePreview(URL.createObjectURL(compressedFile));
+    } catch (error) {
+      console.error("Gagal olah gambar:", error);
+    } finally {
+      setIsSavingEmergency(false);
+    }
+  };
+
+  // --- SUBMIT PERBAIKAN MENDADAK: OTOMATIS BIKIN 2 RECORD (BUKU SAKIT + WORK ORDER) ---
+  const handleEmergencySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emergencyForm.asset_id) return alert("Pilih aset terlebih dahulu!");
+    if (!emergencyForm.trouble.trim()) return alert("Kejadian/masalah wajib diisi!");
+
+    setIsSavingEmergency(true);
+    try {
+      let finalImageUrl = "";
+      if (emergencyImageFile) {
+        const fileName = `${Date.now()}-emergency-${emergencyForm.asset_id}`;
+        const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, emergencyImageFile);
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+          finalImageUrl = publicUrl;
+        }
+      }
+
+      // 1. Catat otomatis ke Buku Sakit
+      const { error: reportError } = await supabase.from("damage_reports").insert([{
+        asset_id: emergencyForm.asset_id,
+        reporter_name: emergencyForm.reporter_name || emergencyForm.oleh || "Operator",
+        issue_title: emergencyForm.trouble,
+        description: emergencyForm.description,
+        urgency: "Tinggi",
+        image_url: finalImageUrl,
+      }]);
+      if (reportError) throw reportError;
+
+      // 2. Buat Work Order dengan flag is_emergency (status aset langsung "Perbaikan", tanpa menunggu proses)
+      const woId = `WO-EMG-${Date.now().toString().slice(-6)}`;
+      const { error: woError } = await supabase.from("work_orders").insert([{
+        id: woId,
+        tgl: new Date().toISOString().split('T')[0],
+        kategori: "Perbaikan",
+        asset_id: emergencyForm.asset_id,
+        trouble: emergencyForm.trouble,
+        tech_name: emergencyForm.oleh,
+        supervisor: "",
+        priority: "TINGGI",
+        cost_part: emergencyForm.costPart,
+        cost_service: emergencyForm.costService,
+        tindak_lanjut: emergencyForm.description,
+        status: "Dalam Proses",
+        is_emergency: true,
+      }]);
+      if (woError) throw woError;
+
+      // 3. Aset langsung berstatus "Perbaikan" saat itu juga, dari status apa pun sebelumnya
+      await supabase.from("assets").update({ status: "Perbaikan" }).eq("id", emergencyForm.asset_id);
+
+      alert("Perbaikan mendadak berhasil dicatat!");
+      setIsEmergencyModalOpen(false);
+      resetEmergencyForm();
+      fetchData();
+    } catch (err: any) {
+      alert("Gagal: " + (err?.message || "Terjadi kesalahan"));
+    } finally {
+      setIsSavingEmergency(false);
+    }
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -178,10 +284,15 @@ function CorrectiveContent() {
             />
           </div>
         </div>
-        {/* TOMBOL TAMBAH WORK ORDER: di mobile di bawah filter dropdown, di desktop sejajar dengan search & filter */}
-        <button onClick={() => setIsAddModalOpen(true)} className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
-          <Plus size={18} /> Buat Work Order
-        </button>
+        {/* TOMBOL TAMBAH WORK ORDER & PERBAIKAN MENDADAK */}
+        <div className="flex gap-3 w-full md:w-auto">
+          <button onClick={() => setIsEmergencyModalOpen(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#EF4444] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
+            <Zap size={18} /> Perbaikan Mendadak
+          </button>
+          <button onClick={() => setIsAddModalOpen(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
+            <Plus size={18} /> Buat Work Order
+          </button>
+        </div>
       </div>
 
       {/* 4. TABEL */}
@@ -221,7 +332,16 @@ function CorrectiveContent() {
                     </td>
                     <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8] italic truncate max-w-[200px]">"{wo.trouble}"</td>
                     <td className="px-6 py-5 text-[#475569] dark:text-[#F8FAFC] font-bold">{wo.tech_name}</td>
-                    <td className="px-6 py-5 text-center"><Badge status={wo.status} /></td>
+                    <td className="px-6 py-5 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <Badge status={wo.status} />
+                        {wo.is_emergency && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#EF4444] uppercase tracking-wide">
+                            <Zap size={10} /> Mendadak
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-5 text-center">
                       <Link href={`/pemeliharaan/korektif/${wo.id}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all"><Eye size={20}/></Link>
                     </td>
@@ -333,6 +453,95 @@ function CorrectiveContent() {
             <div className="flex flex-col gap-3 mt-auto pt-6">
               <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all active:scale-95">Terbitkan Work Order</button>
               <button type="button" onClick={() => setIsAddModalOpen(false)} className="w-full py-4 border border-gray-200 dark:border-[#334155] rounded-xl text-[#475569] dark:text-[#94A3B8] text-sm font-bold hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
+            </div>
+          </div>
+        </form>
+      </Modal>
+
+      {/* 6. MODAL PERBAIKAN MENDADAK */}
+      <Modal isOpen={isEmergencyModalOpen} onClose={() => { setIsEmergencyModalOpen(false); resetEmergencyForm(); }} title="Catat Perbaikan Mendadak">
+        <form onSubmit={handleEmergencySubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
+          <div className="lg:col-span-2 flex flex-col gap-5">
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-xl text-xs text-red-700 dark:text-red-300 font-medium flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              Untuk kejadian mendadak yang butuh penanganan cepat (contoh: kebocoran pipa). Aset langsung berstatus "Perbaikan" saat ini juga, dan otomatis tercatat di Buku Sakit — tanpa perlu lapor kerusakan terpisah dulu.
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Kode Aset</label>
+              <select required value={emergencyForm.asset_id} onChange={e => setEmergencyForm({...emergencyForm, asset_id: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white">
+                <option value="">-- Pilih Kode --</option>
+                {assetsList.map(a => <option key={a.id} value={a.id}>{a.id} - {a.name}</option>)}
+              </select>
+              <span className="text-[11px] text-[#94A3B8] italic">Bisa dipilih dari status aset apa pun, tidak harus "Rusak" dulu.</span>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Kejadian / Masalah</label>
+              <input required type="text" value={emergencyForm.trouble} onChange={e => setEmergencyForm({...emergencyForm, trouble: e.target.value})} placeholder="Contoh: Pipa bocor di area produksi" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Penanganan Awal / Catatan</label>
+              <textarea rows={3} value={emergencyForm.description} onChange={e => setEmergencyForm({...emergencyForm, description: e.target.value})} placeholder="Jelaskan penanganan yang sudah/akan dilakukan..." className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none bg-white dark:bg-[#0F172A] dark:text-white font-medium"></textarea>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Yang Menemukan/Melapor</label>
+                <input type="text" value={emergencyForm.reporter_name} onChange={e => setEmergencyForm({...emergencyForm, reporter_name: e.target.value})} placeholder="Nama pelapor" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Pelaksana Perbaikan</label>
+                <input type="text" value={emergencyForm.oleh} onChange={e => setEmergencyForm({...emergencyForm, oleh: e.target.value})} placeholder="Nama teknisi/operator" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white" />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Foto Kejadian</label>
+              <input type="file" className="hidden" ref={emergencyFileInputRef} onChange={handleEmergencyImageChange} accept="image/*,.heic" />
+              <input type="file" className="hidden" ref={emergencyCameraInputRef} onChange={handleEmergencyImageChange} accept="image/*" capture="environment" />
+              <div className="flex items-center gap-3">
+                {emergencyImagePreview && (
+                  <img src={emergencyImagePreview} className="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-[#334155]" alt="Preview" />
+                )}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => emergencyFileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2.5 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all">
+                    <ImageIcon size={16} /> Pilih dari Galeri
+                  </button>
+                  <button type="button" onClick={() => emergencyCameraInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2.5 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all">
+                    <CameraIcon size={16} /> Kamera
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-1 flex flex-col gap-6 bg-[#F8FAFC] dark:bg-[#0F172A] p-6 rounded-2xl border border-gray-100 dark:border-[#334155]">
+            <h4 className="font-bold text-[#0F172A] dark:text-white text-sm border-b dark:border-[#334155] pb-2 uppercase tracking-widest text-center">Estimasi Biaya (Opsional)</h4>
+            <div className="flex flex-col gap-4">
+               <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-bold text-[#94A3B8] uppercase">Biaya Part (Rp)</label>
+                  <input type="number" value={emergencyForm.costPart === 0 ? "" : emergencyForm.costPart} onChange={e => setEmergencyForm({...emergencyForm, costPart: e.target.value === "" ? 0 : parseInt(e.target.value)})} placeholder="0" className="p-2.5 border dark:border-[#334155] rounded-lg text-sm dark:bg-[#1E293B] dark:text-white font-bold outline-none focus:border-primary" />
+               </div>
+               <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-bold text-[#94A3B8] uppercase">Biaya Jasa (Rp)</label>
+                  <input type="number" value={emergencyForm.costService === 0 ? "" : emergencyForm.costService} onChange={e => setEmergencyForm({...emergencyForm, costService: e.target.value === "" ? 0 : parseInt(e.target.value)})} placeholder="0" className="p-2.5 border dark:border-[#334155] rounded-lg text-sm dark:bg-[#1E293B] dark:text-white font-bold outline-none focus:border-primary" />
+               </div>
+               <div className="mt-2 p-4 bg-white dark:bg-[#1E293B] rounded-2xl border border-dashed border-red-400/40 flex justify-between items-center shadow-sm">
+                  <span className="text-[10px] font-black text-[#94A3B8] uppercase tracking-tighter">Total Estimasi</span>
+                  <span className="text-sm font-black text-[#EF4444]">
+                    Rp {(emergencyForm.costPart + emergencyForm.costService).toLocaleString('id-ID')}
+                  </span>
+               </div>
+               <p className="text-[10px] text-[#94A3B8] italic -mt-2">Biaya final bisa diperbarui lagi lewat riwayat update perbaikan, sama seperti Work Order biasa.</p>
+            </div>
+
+            <div className="flex flex-col gap-3 mt-auto pt-6">
+              <button type="submit" disabled={isSavingEmergency} className="w-full bg-[#EF4444] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50">
+                {isSavingEmergency ? "Menyimpan..." : "Catat & Mulai Perbaikan"}
+              </button>
+              <button type="button" onClick={() => { setIsEmergencyModalOpen(false); resetEmergencyForm(); }} className="w-full py-4 border border-gray-200 dark:border-[#334155] rounded-xl text-[#475569] dark:text-[#94A3B8] text-sm font-bold hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
             </div>
           </div>
         </form>
