@@ -17,6 +17,8 @@ interface ChecklistItem {
   status: "Belum" | "Selesai";
   image_url: string | null;
   sort_order: number;
+  harga: number | null;
+  payment_proof_url: string | null;
 }
 
 interface Schedule {
@@ -49,6 +51,9 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const [uploadingPaymentId, setUploadingPaymentId] = useState<string | null>(null);
+  const paymentProofInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState("");
@@ -169,6 +174,52 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
     setIsLightboxOpen(true);
   };
 
+  // --- UBAH HARGA PER ITEM CHECKLIST (LOKAL DULU, DISIMPAN SAAT BLUR) ---
+  const handleHargaChange = (item: ChecklistItem, value: string) => {
+    const harga = value === "" ? null : Number(value);
+    setChecklist(prev => prev.map(c => (c.id === item.id ? { ...c, harga } : c)));
+  };
+
+  const handleHargaBlur = async (item: ChecklistItem) => {
+    if (isLocked) return;
+    await supabase.from("maintenance_checklist_items").update({ harga: item.harga }).eq("id", item.id);
+  };
+
+  // --- UPLOAD BUKTI PEMBAYARAN PER ITEM CHECKLIST (WAJIB KALAU HARGA DIISI) ---
+  const handlePaymentProofChange = async (item: ChecklistItem, e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file || isLocked) return;
+
+    setUploadingPaymentId(item.id);
+    try {
+      if (file.name.toLowerCase().endsWith(".heic")) {
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      }
+      const compressedFile = await imageCompression(file, { maxSizeMB: 0.6, maxWidthOrHeight: 1200, useWebWorker: true });
+
+      const fileName = `${Date.now()}-checklist-bukti-${item.id}`;
+      const { error: uploadError } = await supabase.storage.from("payment-proofs").upload(fileName, compressedFile);
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from("payment-proofs").getPublicUrl(fileName);
+
+      const { error: updateError } = await supabase
+        .from("maintenance_checklist_items")
+        .update({ payment_proof_url: publicUrl })
+        .eq("id", item.id);
+      if (updateError) throw updateError;
+
+      setChecklist(prev => prev.map(c => (c.id === item.id ? { ...c, payment_proof_url: publicUrl } : c)));
+    } catch (err: any) {
+      alert("Gagal mengunggah bukti pembayaran: " + (err?.message || "Terjadi kesalahan"));
+    } finally {
+      setUploadingPaymentId(null);
+      if (paymentProofInputRefs.current[item.id]) paymentProofInputRefs.current[item.id]!.value = "";
+    }
+  };
+
   // --- SELESAIKAN PEMELIHARAAN (KUNCI FORM) ---
   const handleCompleteMaintenance = async () => {
     if (!schedule) return;
@@ -190,6 +241,13 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
     const missingPhoto = checklist.filter(c => !c.image_url);
     if (missingPhoto.length > 0) {
       alert(`Masih ada ${missingPhoto.length} item checklist yang belum diberi foto bukti. Unggah foto bukti untuk semua item terlebih dahulu.`);
+      return;
+    }
+
+    // --- VALIDASI WAJIB: KALAU HARGA DIISI, BUKTI PEMBAYARAN WAJIB ADA ---
+    const missingPaymentProof = checklist.filter(c => c.harga && c.harga > 0 && !c.payment_proof_url);
+    if (missingPaymentProof.length > 0) {
+      alert(`Masih ada ${missingPaymentProof.length} item checklist dengan harga terisi tapi belum ada bukti pembayaran.`);
       return;
     }
 
@@ -372,49 +430,97 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-[#334155]">
                   {checklist.map((item) => (
-                    <div key={item.id} className="p-5 flex flex-col md:flex-row md:items-center gap-4 bg-white dark:bg-[#1E293B]">
-                      {/* STATUS + TASK (KLIK UNTUK TOGGLE) */}
-                      <div
-                        onClick={() => toggleChecklistStatus(item)}
-                        className={`flex items-center gap-3 flex-1 ${isLocked ? "cursor-default" : "cursor-pointer group"}`}
-                      >
-                        {item.status === "Selesai" ? (
-                          <CheckCircle2 size={22} className="text-[#10B981] flex-shrink-0" />
-                        ) : (
-                          <Circle size={22} className={`text-[#94A3B8] flex-shrink-0 ${!isLocked && "group-hover:text-[#0D9488]"}`} />
-                        )}
-                        <span className={`text-sm font-medium ${item.status === "Selesai" ? "text-gray-400 line-through" : "text-[#0F172A] dark:text-[#F8FAFC]"}`}>
-                          {item.task}
-                        </span>
+                    <div key={item.id} className="p-5 flex flex-col gap-4 bg-white dark:bg-[#1E293B]">
+                      <div className="flex flex-col md:flex-row md:items-center gap-4">
+                        {/* STATUS + TASK (KLIK UNTUK TOGGLE) */}
+                        <div
+                          onClick={() => toggleChecklistStatus(item)}
+                          className={`flex items-center gap-3 flex-1 ${isLocked ? "cursor-default" : "cursor-pointer group"}`}
+                        >
+                          {item.status === "Selesai" ? (
+                            <CheckCircle2 size={22} className="text-[#10B981] flex-shrink-0" />
+                          ) : (
+                            <Circle size={22} className={`text-[#94A3B8] flex-shrink-0 ${!isLocked && "group-hover:text-[#0D9488]"}`} />
+                          )}
+                          <span className={`text-sm font-medium ${item.status === "Selesai" ? "text-gray-400 line-through" : "text-[#0F172A] dark:text-[#F8FAFC]"}`}>
+                            {item.task}
+                          </span>
+                        </div>
+
+                        {/* FOTO BUKTI */}
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          {item.image_url && (
+                            <img
+                              src={item.image_url}
+                              onClick={() => openLightbox(item.image_url)}
+                              className="w-12 h-12 rounded-lg object-cover border border-gray-200 dark:border-[#334155] cursor-zoom-in"
+                              alt="Bukti"
+                            />
+                          )}
+                          <input
+                            type="file"
+                            ref={(el) => { fileInputRefs.current[item.id] = el; }}
+                            onChange={(e) => handlePhotoChange(item, e)}
+                            className="hidden"
+                            accept="image/*,.heic"
+                            disabled={isLocked}
+                          />
+                          <button
+                            type="button"
+                            disabled={isLocked || uploadingId === item.id}
+                            onClick={() => fileInputRefs.current[item.id]?.click()}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Camera size={14} />
+                            {uploadingId === item.id ? "Mengunggah..." : item.image_url ? "Ganti Foto" : "Foto Bukti"}
+                          </button>
+                        </div>
                       </div>
 
-                      {/* FOTO BUKTI */}
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        {item.image_url && (
-                          <img
-                            src={item.image_url}
-                            onClick={() => openLightbox(item.image_url)}
-                            className="w-12 h-12 rounded-lg object-cover border border-gray-200 dark:border-[#334155] cursor-zoom-in"
-                            alt="Bukti"
+                      {/* HARGA (OPSIONAL) & BUKTI PEMBAYARAN (WAJIB KALAU HARGA DIISI) */}
+                      <div className="flex flex-col md:flex-row md:items-center gap-3 pl-9">
+                        <div className="flex items-center gap-2">
+                          <label className="text-[11px] font-bold text-[#94A3B8] uppercase whitespace-nowrap">Harga (Rp)</label>
+                          <input
+                            type="number"
+                            disabled={isLocked}
+                            placeholder="0"
+                            value={item.harga ?? ""}
+                            onChange={(e) => handleHargaChange(item, e.target.value)}
+                            onBlur={() => handleHargaBlur(item)}
+                            className="w-32 px-3 py-2 border border-gray-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#0F172A] text-xs font-bold outline-none focus:border-primary dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                           />
+                        </div>
+
+                        {item.harga !== null && item.harga !== undefined && Number(item.harga) > 0 && (
+                          <div className="flex items-center gap-3">
+                            {item.payment_proof_url && (
+                              <img
+                                src={item.payment_proof_url}
+                                onClick={() => openLightbox(item.payment_proof_url)}
+                                className="w-12 h-12 rounded-lg object-cover border border-gray-200 dark:border-[#334155] cursor-zoom-in"
+                                alt="Bukti Pembayaran"
+                              />
+                            )}
+                            <input
+                              type="file"
+                              ref={(el) => { paymentProofInputRefs.current[item.id] = el; }}
+                              onChange={(e) => handlePaymentProofChange(item, e)}
+                              className="hidden"
+                              accept="image/*,.heic"
+                              disabled={isLocked}
+                            />
+                            <button
+                              type="button"
+                              disabled={isLocked || uploadingPaymentId === item.id}
+                              onClick={() => paymentProofInputRefs.current[item.id]?.click()}
+                              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${item.payment_proof_url ? "bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155]" : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 hover:bg-red-100"}`}
+                            >
+                              <Camera size={14} />
+                              {uploadingPaymentId === item.id ? "Mengunggah..." : item.payment_proof_url ? "Ganti Bukti Pembayaran" : "Unggah Bukti Pembayaran"}
+                            </button>
+                          </div>
                         )}
-                        <input
-                          type="file"
-                          ref={(el) => { fileInputRefs.current[item.id] = el; }}
-                          onChange={(e) => handlePhotoChange(item, e)}
-                          className="hidden"
-                          accept="image/*,.heic"
-                          disabled={isLocked}
-                        />
-                        <button
-                          type="button"
-                          disabled={isLocked || uploadingId === item.id}
-                          onClick={() => fileInputRefs.current[item.id]?.click()}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Camera size={14} />
-                          {uploadingId === item.id ? "Mengunggah..." : item.image_url ? "Ganti Foto" : "Foto Bukti"}
-                        </button>
                       </div>
                     </div>
                   ))}
