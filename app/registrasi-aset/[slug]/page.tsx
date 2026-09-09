@@ -197,7 +197,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
         </select>
 
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
-          <option>Semua Status</option><option>Beroperasi</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
+          <option>Semua Status</option><option>Beroperasi</option><option>Idle</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
         </select>
       </div>
 

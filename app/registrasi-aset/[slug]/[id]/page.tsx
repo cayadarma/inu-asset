@@ -280,7 +280,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
              <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Status</label>
                 <select value={editData.status} onChange={(e) => setEditField({...editData, status: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white font-poppins">
-                   <option>Beroperasi</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
+                   <option>Beroperasi</option><option>Idle</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
                 </select>
              </div>
           </div>

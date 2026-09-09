@@ -12,6 +12,7 @@ interface StatusCount {
 export default function StatusChart() {
   const [statuses, setStatuses] = useState<StatusCount[]>([
     { label: "Beroperasi", count: 0, color: "bg-[#10B981]" },
+    { label: "Idle", count: 0, color: "bg-[#8B5CF6]" },
     { label: "Pemeliharaan", count: 0, color: "bg-[#F59E0B]" },
     { label: "Perbaikan", count: 0, color: "bg-[#F97316]" },
     { label: "Rusak", count: 0, color: "bg-[#EF4444]" },
@@ -26,12 +27,14 @@ export default function StatusChart() {
 
       if (data) {
         const beroperasi = data.filter((a) => a.status === "Beroperasi").length;
+        const idle = data.filter((a) => a.status === "Idle").length;
         const pemeliharaan = data.filter((a) => a.status === "Pemeliharaan").length;
         const perbaikan = data.filter((a) => a.status === "Perbaikan").length;
         const rusak = data.filter((a) => a.status === "Rusak").length;
 
         setStatuses([
           { label: "Beroperasi", count: beroperasi, color: "bg-[#10B981]" },
+          { label: "Idle", count: idle, color: "bg-[#8B5CF6]" },
           { label: "Pemeliharaan", count: pemeliharaan, color: "bg-[#F59E0B]" },
           { label: "Perbaikan", count: perbaikan, color: "bg-[#F97316]" },
           { label: "Rusak", count: rusak, color: "bg-[#EF4444]" },
@@ -45,7 +48,7 @@ export default function StatusChart() {
 
   // --- HITUNG SEGMEN CONIC-GRADIENT SECARA DINAMIS DARI PERSENTASE ASLI ---
   const gradientStops: string[] = [];
-  const gradientColors = ["#10B981", "#F59E0B", "#F97316", "#EF4444"];
+  const gradientColors = ["#10B981", "#8B5CF6", "#F59E0B", "#F97316", "#EF4444"];
   let cumulative = 0;
   statuses.forEach((s, i) => {
     const pct = total > 0 ? (s.count / total) * 100 : 0;

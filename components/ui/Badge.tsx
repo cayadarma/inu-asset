@@ -1,6 +1,6 @@
 import React from "react";
 
-type StatusType = "Beroperasi" | "Pemeliharaan" | "Rusak" | "Perbaikan" | "Aktif" | "Tidak Aktif" | "Tersedia" | "Menipis" | "Habis" | "Terjadwal" | "Berlangsung" | "Selesai" | "Terlambat";
+type StatusType = "Beroperasi" | "Idle" | "Pemeliharaan" | "Rusak" | "Perbaikan" | "Aktif" | "Tidak Aktif" | "Tersedia" | "Menipis" | "Habis" | "Terjadwal" | "Berlangsung" | "Selesai" | "Terlambat";
 
 export default function Badge({ status }: { status: StatusType | string }) {
   const getStyle = (status: string) => {
@@ -24,6 +24,9 @@ export default function Badge({ status }: { status: StatusType | string }) {
       case "Perbaikan":
         // Oranye
         return "bg-[#FEF3C7] dark:bg-[#EF4444]/20 text-[#EF4444]"; 
+      case "Idle":
+        // Ungu — aset kondisi baik tapi belum dipakai
+        return "bg-[#EDE9FE] dark:bg-[#5B21B6]/30 text-[#6D28D9] dark:text-[#C4B5FD]"; 
       case "Terjadwal":
         // Biru
         return "bg-[#DBEAFE] dark:bg-[#1E3A8A]/30 text-[#1D4ED8] dark:text-[#93C5FD]";

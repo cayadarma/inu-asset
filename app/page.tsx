@@ -17,6 +17,7 @@ export default function Home() {
   const [counts, setCounts] = useState({
     total: 0,
     active: 0,
+    idle: 0,
     maintenance: 0,
     broken: 0,
     cost: "Rp 0",
@@ -30,18 +31,20 @@ export default function Home() {
 
       const total = data.length;
       const active = data.filter((a) => a.status === "Beroperasi").length;
+      const idle = data.filter((a) => a.status === "Idle").length;
       const maintenance = data.filter((a) => a.status === "Pemeliharaan").length;
       const perbaikan = data.filter((a) => a.status === "Perbaikan").length;
       const rusak = data.filter((a) => a.status === "Rusak").length;
 
-      // --- ASSET AVAILABILITY: HANYA STATUS "BEROPERASI" & "PEMELIHARAAN" YANG DIHITUNG TERSEDIA ---
+      // --- ASSET AVAILABILITY: STATUS "BEROPERASI", "IDLE" & "PEMELIHARAAN" DIHITUNG TERSEDIA ---
       // Status "Rusak" dan "Perbaikan" TIDAK dihitung sebagai tersedia.
-      const availabilityPct = total > 0 ? ((active + maintenance) / total) * 100 : 0;
+      const availabilityPct = total > 0 ? ((active + idle + maintenance) / total) * 100 : 0;
 
       setCounts((prev) => ({
         ...prev,
         total,
         active,
+        idle,
         maintenance,
         broken: rusak + perbaikan,
         availability: `${availabilityPct.toFixed(1)}%`,
@@ -79,6 +82,7 @@ export default function Home() {
         [{
           snapshot_date: today,
           beroperasi: active,
+          idle: idle,
           pemeliharaan: maintenance,
           perbaikan: perbaikan,
           rusak: rusak,

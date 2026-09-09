@@ -7,20 +7,20 @@ import {
 } from "recharts";
 import { ChevronDown, MapPin, Calendar } from "lucide-react";
 
-// Dummy Data dengan 4 Variabel Status
+// Dummy Data dengan 5 Variabel Status
 const data = [
-  { name: "Jan", beroperasi: 1100, pemeliharaan: 120, perbaikan: 40, rusak: 15 },
-  { name: "Feb", beroperasi: 1050, pemeliharaan: 150, perbaikan: 60, rusak: 25 },
-  { name: "Mar", beroperasi: 1200, pemeliharaan: 100, perbaikan: 30, rusak: 10 },
-  { name: "Apr", beroperasi: 1150, pemeliharaan: 130, perbaikan: 50, rusak: 20 },
-  { name: "Mei", beroperasi: 1180, pemeliharaan: 110, perbaikan: 45, rusak: 12 },
-  { name: "Jun", beroperasi: 1247, pemeliharaan: 80, perbaikan: 20, rusak: 5 },
-  { name: "Jul", beroperasi: 1220, pemeliharaan: 140, perbaikan: 55, rusak: 18 },
-  { name: "Agu", beroperasi: 1190, pemeliharaan: 160, perbaikan: 70, rusak: 22 },
-  { name: "Sep", beroperasi: 1210, pemeliharaan: 120, perbaikan: 40, rusak: 14 },
-  { name: "Okt", beroperasi: 1230, pemeliharaan: 100, perbaikan: 35, rusak: 10 },
-  { name: "Nov", beroperasi: 1247, pemeliharaan: 90, perbaikan: 25, rusak: 8 },
-  { name: "Des", beroperasi: 1240, pemeliharaan: 110, perbaikan: 30, rusak: 12 },
+  { name: "Jan", beroperasi: 1100, idle: 60, pemeliharaan: 120, perbaikan: 40, rusak: 15 },
+  { name: "Feb", beroperasi: 1050, idle: 55, pemeliharaan: 150, perbaikan: 60, rusak: 25 },
+  { name: "Mar", beroperasi: 1200, idle: 70, pemeliharaan: 100, perbaikan: 30, rusak: 10 },
+  { name: "Apr", beroperasi: 1150, idle: 65, pemeliharaan: 130, perbaikan: 50, rusak: 20 },
+  { name: "Mei", beroperasi: 1180, idle: 50, pemeliharaan: 110, perbaikan: 45, rusak: 12 },
+  { name: "Jun", beroperasi: 1247, idle: 45, pemeliharaan: 80, perbaikan: 20, rusak: 5 },
+  { name: "Jul", beroperasi: 1220, idle: 58, pemeliharaan: 140, perbaikan: 55, rusak: 18 },
+  { name: "Agu", beroperasi: 1190, idle: 62, pemeliharaan: 160, perbaikan: 70, rusak: 22 },
+  { name: "Sep", beroperasi: 1210, idle: 52, pemeliharaan: 120, perbaikan: 40, rusak: 14 },
+  { name: "Okt", beroperasi: 1230, idle: 48, pemeliharaan: 100, perbaikan: 35, rusak: 10 },
+  { name: "Nov", beroperasi: 1247, idle: 40, pemeliharaan: 90, perbaikan: 25, rusak: 8 },
+  { name: "Des", beroperasi: 1240, idle: 44, pemeliharaan: 110, perbaikan: 30, rusak: 12 },
 ];
 
 // --- DAFTAR TAHUN & BULAN UNTUK FILTER (STATIS, MENGIKUTI DATA DUMMY) ---
@@ -235,7 +235,10 @@ export default function AvailabilityChart() {
               fill="url(#colorBeroperasi)" 
             />
 
-            {/* SEKTOR 2: PEMELIHARAAN (KUNING) */}
+            {/* SEKTOR 2: IDLE (UNGU) */}
+            <Area type="monotone" dataKey="idle" stroke="#8B5CF6" strokeWidth={3} fill="transparent" />
+
+            {/* SEKTOR 3: PEMELIHARAAN (KUNING) */}
             <Area type="monotone" dataKey="pemeliharaan" stroke="#F59E0B" strokeWidth={3} fill="transparent" />
 
             {/* SEKTOR 3: PERBAIKAN (ORANYE) */}
@@ -251,6 +254,7 @@ export default function AvailabilityChart() {
       {/* 3. LEGENDA KUSTOM DI BAWAH */}
       <div className="flex flex-wrap justify-center gap-x-8 gap-y-2 pt-4 border-t dark:border-[#334155]">
         <CustomLegend color="#10B981" label="Beroperasi" />
+        <CustomLegend color="#8B5CF6" label="Idle" />
         <CustomLegend color="#F59E0B" label="Pemeliharaan" />
         <CustomLegend color="#F97316" label="Perbaikan" />
         <CustomLegend color="#EF4444" label="Rusak" />
