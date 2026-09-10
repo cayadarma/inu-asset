@@ -8,7 +8,7 @@ import StatusChart from "../components/ui/StatusChart";
 import MaintenanceSummary from "../components/ui/MaintenanceSummary"; 
 import RecentActivity from "../components/ui/RecentActivity"; 
 // 1. Perbaikan Import Ikon
-import { Box, Banknote, ShieldCheck, PlayCircle, Wrench, AlertCircle } from "lucide-react";
+import { Box, Banknote, ShieldCheck, PlayCircle, Wrench, AlertCircle, ClipboardCheck } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 
 export default function Home() {
@@ -22,11 +22,18 @@ export default function Home() {
     broken: 0,
     cost: "Rp 0",
     availability: "0%",
+    addedThisYear: 0,
+    addedThisMonth: 0,
+    budgetAmount: 0,
+    budgetUsedPct: 0,
+    realisasiPct: 0,
+    realisasiSelesai: 0,
+    realisasiTotal: 0,
   });
 
   useEffect(() => {
     async function getStats() {
-      const { data } = await supabase.from("assets").select("status");
+      const { data } = await supabase.from("assets").select("status, purchase_date");
       if (!data) return;
 
       const total = data.length;
@@ -35,6 +42,17 @@ export default function Home() {
       const maintenance = data.filter((a) => a.status === "Pemeliharaan").length;
       const perbaikan = data.filter((a) => a.status === "Perbaikan").length;
       const rusak = data.filter((a) => a.status === "Rusak").length;
+
+      // --- AKUMULASI PENAMBAHAN ASET (BERDASARKAN TANGGAL PEMBELIAN, BUKAN TANGGAL INPUT) ---
+      const now = new Date();
+      const thisYear = now.getFullYear();
+      const thisMonth = now.getMonth();
+      const addedThisYear = data.filter((a) => a.purchase_date && new Date(a.purchase_date).getFullYear() === thisYear).length;
+      const addedThisMonth = data.filter((a) => {
+        if (!a.purchase_date) return false;
+        const d = new Date(a.purchase_date);
+        return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
+      }).length;
 
       // --- ASSET AVAILABILITY: STATUS "BEROPERASI", "IDLE" & "PEMELIHARAAN" DIHITUNG TERSEDIA ---
       // Status "Rusak" dan "Perbaikan" TIDAK dihitung sebagai tersedia.
@@ -48,23 +66,58 @@ export default function Home() {
         maintenance,
         broken: rusak + perbaikan,
         availability: `${availabilityPct.toFixed(1)}%`,
+        addedThisYear,
+        addedThisMonth,
       }));
 
-      // --- HITUNG BIAYA PEMELIHARAAN: BIAYA PERBAIKAN + BIAYA PEMBELIAN STOK ---
+      // --- SERAPAN BIAYA BULAN INI: GABUNGAN 4 KATEGORI (PEMELIHARAAN, PERBAIKAN, PEMBELIAN STOK, PEMBELIAN ASET) ---
+      const nowForCost = new Date();
+      const costYear = nowForCost.getFullYear();
+      const costMonth = nowForCost.getMonth(); // 0-11
+      const isThisMonth = (dateStr: string | null) => {
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        return d.getFullYear() === costYear && d.getMonth() === costMonth;
+      };
+
+      // 1. Biaya Perbaikan (Work Order, dated by completed_at/created_at)
       const { data: workOrders } = await supabase
         .from("work_orders")
-        .select("actual_cost")
+        .select("actual_cost, completed_at, created_at")
         .gt("actual_cost", 0);
-      const totalPerbaikan = (workOrders || []).reduce((sum, wo) => sum + (wo.actual_cost || 0), 0);
+      const totalPerbaikanBulanIni = (workOrders || [])
+        .filter((wo) => isThisMonth(wo.completed_at || wo.created_at))
+        .reduce((sum, wo) => sum + (wo.actual_cost || 0), 0);
 
+      // 2. Biaya Pembelian Stok (dated by reference/created_at)
       const { data: movements } = await supabase
         .from("stock_movements")
-        .select("qty, unit_price")
+        .select("qty, unit_price, reference, created_at")
         .eq("type", "Masuk")
         .not("unit_price", "is", null);
-      const totalStok = (movements || []).reduce((sum, m) => sum + (m.unit_price || 0) * (m.qty || 0), 0);
+      const totalStokBulanIni = (movements || [])
+        .filter((m) => isThisMonth(m.reference || m.created_at))
+        .reduce((sum, m) => sum + (m.unit_price || 0) * (m.qty || 0), 0);
 
-      const totalBiaya = totalPerbaikan + totalStok;
+      // 3. Biaya Pemeliharaan (item checklist yang ada harganya, dated dari jadwal pemeliharaannya)
+      const { data: checklistCosts } = await supabase
+        .from("maintenance_checklist_items")
+        .select("harga, maintenance_schedules(scheduled_date, completed_at)")
+        .gt("harga", 0);
+      const totalPemeliharaanBulanIni = (checklistCosts || [])
+        .filter((c: any) => isThisMonth(c.maintenance_schedules?.completed_at || c.maintenance_schedules?.scheduled_date))
+        .reduce((sum: number, c: any) => sum + (c.harga || 0), 0);
+
+      // 4. Biaya Pembelian Aset (dated by purchase_date)
+      const { data: assetsWithCost } = await supabase
+        .from("assets")
+        .select("purchase_cost, purchase_date")
+        .gt("purchase_cost", 0);
+      const totalAsetBulanIni = (assetsWithCost || [])
+        .filter((a) => isThisMonth(a.purchase_date))
+        .reduce((sum, a) => sum + (a.purchase_cost || 0), 0);
+
+      const totalBiaya = totalPerbaikanBulanIni + totalStokBulanIni + totalPemeliharaanBulanIni + totalAsetBulanIni;
       const formattedCost =
         totalBiaya >= 1_000_000_000
           ? `Rp ${(totalBiaya / 1_000_000_000).toFixed(1)} M`
@@ -72,7 +125,35 @@ export default function Home() {
           ? `Rp ${(totalBiaya / 1_000_000).toFixed(1)} Jt`
           : `Rp ${totalBiaya.toLocaleString("id-ID")}`;
 
-      setCounts((prev) => ({ ...prev, cost: formattedCost }));
+      // --- ANGGARAN PERUSAHAAN BULAN INI ---
+      const { data: budgetRow } = await supabase
+        .from("company_budgets")
+        .select("amount")
+        .eq("year", costYear)
+        .eq("month", costMonth + 1)
+        .maybeSingle();
+      const budgetAmount = budgetRow?.amount || 0;
+      const budgetUsedPct = budgetAmount > 0 ? Math.round((totalBiaya / budgetAmount) * 100) : 0;
+
+      setCounts((prev) => ({ ...prev, cost: formattedCost, budgetAmount, budgetUsedPct }));
+
+      // --- REALISASI PROGRAM KERJA (PREVENTIVE MAINTENANCE) BULAN INI ---
+      // Hanya dari agenda pemeliharaan pencegahan (BUKAN Work Order korektif/perbaikan).
+      const monthStart = `${costYear}-${String(costMonth + 1).padStart(2, "0")}-01`;
+      const monthEndDate = new Date(costYear, costMonth + 1, 0); // hari terakhir bulan ini
+      const monthEnd = monthEndDate.toISOString().slice(0, 10);
+
+      const { data: agendaBulanIni } = await supabase
+        .from("maintenance_schedules")
+        .select("status")
+        .gte("scheduled_date", monthStart)
+        .lte("scheduled_date", monthEnd);
+
+      const realisasiTotal = (agendaBulanIni || []).length;
+      const realisasiSelesai = (agendaBulanIni || []).filter((a) => a.status === "Selesai").length;
+      const realisasiPct = realisasiTotal > 0 ? Math.round((realisasiSelesai / realisasiTotal) * 100) : 0;
+
+      setCounts((prev) => ({ ...prev, realisasiPct, realisasiSelesai, realisasiTotal }));
 
       // --- CATAT "POTRET" STATUS ASET HARI INI UNTUK GRAFIK TREN ---
       // Di-upsert (insert atau update jika sudah ada) berdasarkan snapshot_date,
@@ -101,71 +182,107 @@ export default function Home() {
       {/* HEADER */}
       <div>
         <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("dashboard.overview")}</h1>
+        <p className="text-[#475569] dark:text-[#94A3B8] text-sm mt-1">{t("dashboard.overviewDesc")}</p>
       </div>
 
       {/* BARIS 1: KPI UTAMA */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard 
           title="Total Seluruh Aset" 
           value={counts.total.toLocaleString()} 
-          description="Unit terdaftar di database" 
+          description={`Unit aset yang terdaftar di sistem (per ${new Date().getFullYear()})`} 
           icon={<Box size={20} />} 
           href="/registrasi-aset/semua"
+          extra={
+            <div className="flex flex-col gap-0.5 text-[11px] font-bold">
+              <span className="text-[#0D9488]">+{counts.addedThisYear} aset baru tahun ini</span>
+              <span className="text-[#94A3B8]">+{counts.addedThisMonth} aset baru bulan ini</span>
+            </div>
+          }
         />
         <StatCard 
-          title="Biaya Pemeliharaan" 
+          title="Serapan Biaya Bulan Ini" 
           value={counts.cost} 
-          description="Biaya perbaikan + pembelian stok" 
+          description="Total pengeluaran bulan ini (semua kategori biaya)" 
           icon={<Banknote size={20} />} 
           href="/analisis-biaya"
+          extra={
+            <div className="flex flex-col gap-1 text-[11px] font-bold">
+              {counts.budgetAmount > 0 ? (
+                <>
+                  <span className="text-[#94A3B8]">Anggaran: Rp {counts.budgetAmount.toLocaleString("id-ID")}</span>
+                  <span className={counts.budgetUsedPct >= 100 ? "text-[#EF4444]" : counts.budgetUsedPct >= 80 ? "text-[#F59E0B]" : "text-[#0D9488]"}>
+                    {counts.budgetUsedPct}% anggaran terpakai
+                  </span>
+                </>
+              ) : (
+                <span className="text-[#94A3B8] italic">Anggaran bulan ini belum diatur</span>
+              )}
+            </div>
+          }
         />
         <StatCard 
           title="Asset Availability" 
           value={counts.availability} 
-          description="Rata-rata kesiapan alat" 
+          description="Persentase aset yang siap dipakai saat ini" 
           icon={<ShieldCheck size={20} />} 
+        />
+        <StatCard 
+          title="Realisasi Program Kerja" 
+          value={`${counts.realisasiPct}%`} 
+          description="Agenda pemeliharaan pencegahan bulan ini"
+          icon={<ClipboardCheck size={20} />} 
+          href="/pemeliharaan"
+          extra={
+            <span className="text-[11px] font-bold text-[#94A3B8]">
+              {counts.realisasiSelesai} dari {counts.realisasiTotal} agenda selesai
+            </span>
+          }
         />
       </div>
 
       {/* BARIS 2: STATUS OPERASIONAL */}
       <div className="flex flex-col gap-4">
-        <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">Ringkasan Pemeliharaan</h3>
+        <div>
+          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">Ringkasan Status Aset</h3>
+          <p className="text-[#94A3B8] text-xs mt-1">Jumlah aset berdasarkan kondisi terkininya saat ini</p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatCard 
             title="Unit Beroperasi" 
             value={counts.active} 
-            description="Alat sedang bekerja normal" 
+            description="Sedang dipakai & bekerja normal" 
             icon={<PlayCircle size={20} className="text-emerald-500" />} 
           />
           <StatCard 
             title="Unit Pemeliharaan" 
             value={counts.maintenance} 
-            description="Sedang servis rutin berkala" 
+            description="Sedang dicek/dirawat rutin terjadwal" 
             icon={<Wrench size={20} className="text-amber-500" />} 
           />
           <StatCard 
             title="Unit Rusak / Perbaikan" 
             value={counts.broken} 
-            description="Membutuhkan tindakan segera" 
+            description="Rusak menunggu diperbaiki atau sedang ditangani" 
             icon={<AlertCircle size={20} className="text-red-500" />} 
           />
         </div>
       </div>
       
-      {/* BARIS 3: TREN STATUS ASET */}
+      {/* BARIS 3: DAFTAR WORK ORDER */}
+      <div className="w-full">
+        <MaintenanceSummary />
+      </div>
+
+      {/* BARIS 4: TREN STATUS ASET / MONITORING STATUS BULANAN */}
       <div className="w-full">
         <AvailabilityChart />
       </div>
 
-      {/* BARIS 4: STATUS OPERASIONAL & AKTIVITAS TERBARU */}
+      {/* BARIS 5: STATUS OPERASIONAL & AKTIVITAS TERBARU */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <StatusChart />
         <RecentActivity />
-      </div>
-
-      {/* BARIS 5: DAFTAR WORK ORDER */}
-      <div className="w-full">
-        <MaintenanceSummary />
       </div>
 
     </div>

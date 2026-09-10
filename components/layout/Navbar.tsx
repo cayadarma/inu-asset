@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Sun, Moon, Bell, Menu } from "lucide-react";
+import { Sun, Moon, Bell, Menu, Globe, Check, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "../../context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -18,6 +18,12 @@ const MODULE_LABEL_KEYS: Record<string, string> = {
   laporan: "menu.laporan",
   pengaturan: "menu.pengaturan",
 };
+
+// --- DAFTAR BAHASA YANG TERSEDIA (TINGGAL TAMBAH BARIS DI SINI KALAU ADA BAHASA BARU) ---
+const LANGUAGES: { code: "id" | "en"; label: string;}[] = [
+  { code: "id", label: "Bahasa Indonesia"},
+  { code: "en", label: "English"},
+];
 
 function Breadcrumbs() {
   const pathname = usePathname();
@@ -119,8 +125,12 @@ function Breadcrumbs() {
 
 export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { isDarkMode, toggleTheme } = useTheme();
+  const { lang, setLang } = useLanguage();
   const { user } = useAuth();
   const [notifCount, setNotifCount] = useState(0);
+  const [isLangOpen, setIsLangOpen] = useState(false);
+
+  const currentLang = LANGUAGES.find((l) => l.code === lang) || LANGUAGES[0];
 
   useEffect(() => {
     // Notifikasi kerusakan aset (Buku Sakit) dianggap kategori "Pemeliharaan"
@@ -166,6 +176,44 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       <div className="flex items-center gap-3 md:gap-6">
+        {/* DROPDOWN GANTI BAHASA — daftar bahasa cukup ditambah di konstanta LANGUAGES, dropdown ini otomatis menyesuaikan */}
+        <div className="relative">
+          <button
+            onClick={() => setIsLangOpen((v) => !v)}
+            title="Ganti bahasa / Change language"
+            className="flex items-center gap-1.5 md:gap-2 bg-[#F1F5F9] dark:bg-[#334155] border border-gray-100 dark:border-[#475569] rounded-full px-2.5 md:px-3 h-9 cursor-pointer hover:bg-gray-200 dark:hover:bg-[#475569] transition-all"
+          >
+            <Globe size={16} className="text-[#475569] dark:text-[#94A3B8]" />
+            <span className="hidden md:inline text-[12px] font-bold text-[#475569] dark:text-[#94A3B8]">{currentLang.label}</span>
+            <ChevronDown size={12} className={`text-[#94A3B8] transition-transform ${isLangOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {isLangOpen && (
+            <>
+              {/* Backdrop transparan untuk menutup dropdown saat klik di luar */}
+              <div className="fixed inset-0 z-40" onClick={() => setIsLangOpen(false)} />
+              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#1E293B] border border-gray-100 dark:border-[#334155] rounded-xl shadow-lg z-50 overflow-hidden py-1.5">
+                {LANGUAGES.map((l) => (
+                  <button
+                    key={l.code}
+                    onClick={() => { setLang(l.code); setIsLangOpen(false); }}
+                    className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium transition-all ${
+                      l.code === lang
+                        ? "bg-[#CCFBF1] dark:bg-[#115E59]/30 text-[#0D9488] dark:text-[#37BAAE] font-bold"
+                        : "text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {l.label}
+                    </span>
+                    {l.code === lang && <Check size={16} />}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
         <div
           onClick={toggleTheme}
           className="hidden lg:flex items-center gap-2 md:gap-3 bg-[#F1F5F9] dark:bg-[#334155] p-1 rounded-full border border-gray-100 dark:border-[#475569] cursor-pointer"

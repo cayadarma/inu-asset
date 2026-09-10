@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 import Link from "next/link";
 
-export default function StatCard({ title, value, description, icon, href }: any) {
+export default function StatCard({ title, value, description, icon, href, extra }: any) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x: 50, y: 50 });
   const [isHovering, setIsHovering] = useState(false);
@@ -38,6 +38,7 @@ export default function StatCard({ title, value, description, icon, href }: any)
       </div>
       <div className="text-2xl font-black text-[#0F172A] dark:text-[#F8FAFC] mt-1">{value}</div>
       <div className="text-[12px] text-[#64748B] dark:text-[#94A3B8] font-medium">{description}</div>
+      {extra && <div className="mt-1 pt-2 border-t border-gray-50 dark:border-[#334155]">{extra}</div>}
     </div>
   );
 

@@ -62,7 +62,10 @@ export default function MaintenanceSummary() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-white dark:bg-[#1E293B] rounded-[32px] border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-3 md:gap-4 lg:gap-6">
-      <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base md:text-lg lg:text-lg">Daftar Work Order</h3>
+      <div>
+        <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base md:text-lg lg:text-lg">Daftar Work Order</h3>
+        <p className="text-[#94A3B8] text-xs mt-1">Pekerjaan perbaikan aset yang sedang berjalan & sudah selesai</p>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 lg:gap-4">
         {data.map((item) => (
           <div key={item.label} className={`p-3 md:p-4 lg:p-6 ${item.bg} rounded-2xl border border-gray-100 dark:border-[#334155] flex flex-col gap-1 transition-all hover:scale-[1.02]`}>

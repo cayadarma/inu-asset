@@ -68,6 +68,7 @@ export default function AvailabilityChart() {
         <div className="flex flex-col gap-1">
           <h3 className="text-[11px] font-black text-[#94A3B8] uppercase tracking-[0.2em]">Tren Ketersediaan Aset</h3>
           <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Monitoring Status {period}</p>
+          <p className="text-[#94A3B8] text-xs">Jumlah aset per kondisi dari waktu ke waktu</p>
         </div>
 
         <div className="flex flex-wrap gap-3 w-full md:w-auto items-center">

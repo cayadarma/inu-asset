@@ -70,9 +70,12 @@ export default function RecentActivity() {
 
   return (
     <div className="flex-1 p-6 bg-white dark:bg-[#1E293B] rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-6 transition-all duration-300">
-      <div className="flex justify-between items-center">
-        <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base">Aktivitas Terbaru</h3>
-        <Link href="/pemeliharaan" className="text-[13px] font-bold text-[#0D9488] dark:text-[#37BAAE] hover:underline">
+      <div className="flex justify-between items-start">
+        <div>
+          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base">Aktivitas Terbaru</h3>
+          <p className="text-[#94A3B8] text-xs mt-1">Kejadian terbaru dari kerusakan & jadwal pemeliharaan aset</p>
+        </div>
+        <Link href="/pemeliharaan" className="text-[13px] font-bold text-[#0D9488] dark:text-[#37BAAE] hover:underline whitespace-nowrap">
           Lihat Semua
         </Link>
       </div>

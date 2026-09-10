@@ -9,6 +9,7 @@ export const dictionary = {
     "menu.pemeliharaan": "Pemeliharaan",
     "menu.stok": "Stok",
     "menu.analisisBiaya": "Analisis Biaya",
+    "menu.anggaran": "Anggaran",
     "menu.laporan": "Laporan",
     "menu.pengaturan": "Pengaturan",
     "menu.modeGelap": "Mode Gelap",
@@ -27,8 +28,8 @@ export const dictionary = {
     // Dashboard
     "dashboard.title": "Dashboard",
     "dashboard.subtitle": "Ringkasan kondisi aset dan aktivitas sistem",
-    "dashboard.overview": "Dashboard Overview",
-    "dashboard.overviewDesc": "Pemantauan kesehatan aset dan progres perbaikan teknis",
+    "dashboard.overview": "Ringkasan Dashboard",
+    "dashboard.overviewDesc": "Pantau kondisi aset, pekerjaan pemeliharaan, dan biaya perusahaan dalam satu tampilan",
 
     // Pengaturan
     "settings.title": "Pengaturan Sistem",
@@ -81,6 +82,7 @@ export const dictionary = {
     "menu.pemeliharaan": "Maintenance",
     "menu.stok": "Stock",
     "menu.analisisBiaya": "Cost Analysis",
+    "menu.anggaran": "Budget",
     "menu.laporan": "Reports",
     "menu.pengaturan": "Settings",
     "menu.modeGelap": "Dark Mode",
@@ -97,8 +99,7 @@ export const dictionary = {
 
     "dashboard.title": "Dashboard",
     "dashboard.subtitle": "Overview of asset condition and system activity",
-    "dashboard.overview": "Dashboard Overview",
-    "dashboard.overviewDesc": "Monitoring asset health and technical repair progress",
+    "dashboard.overview": "Dashboard Summary",
 
     "settings.title": "System Settings",
     "settings.subtitle": "Manage system preferences and security",

@@ -62,7 +62,8 @@ export default function StatusChart() {
 
   return (
     <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col min-h-[350px] transition-all duration-300">
-      <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-8 text-base">Status Operasional Aset</h3>
+      <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-1 text-base">Status Operasional Aset</h3>
+      <p className="text-[#94A3B8] text-xs mb-7">Proporsi kondisi seluruh aset saat ini</p>
       <div className="flex flex-1 flex-col sm:flex-row items-center justify-center gap-8">
         <div
           className="relative w-32 h-32 flex-shrink-0 rounded-full flex items-center justify-center shadow-inner"
