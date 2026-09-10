@@ -3,19 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Banknote, Wrench, Package, ChevronDown, ClipboardCheck, Boxes, TrendingUp, TrendingDown } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
-
-type CostCategory = "Perbaikan" | "Pembelian Stok" | "Pemeliharaan" | "Pembelian Aset";
-
-interface CostTransaction {
-  id: string;
-  date: string; // ISO date dipakai untuk sorting & grouping bulan
-  category: CostCategory;
-  description: string;
-  location: string | null;
-  amount: number;
-  href: string;
-}
+import { fetchAllCostTransactions, CostCategory, CostTransaction } from "@/lib/costQueries";
 
 // --- KONFIGURASI 4 KATEGORI BIAYA (DIPAKAI BERSAMA UNTUK CARD, FILTER, & CHART) ---
 const CATEGORIES: { key: CostCategory; label: string; color: string; icon: any; bg: string; text: string }[] = [
@@ -41,113 +29,11 @@ export default function CostAnalysisPage() {
   // --- FILTER TAHUN UNTUK CHART TREN BULANAN ---
   const [chartYear, setChartYear] = useState(currentYear);
 
+  // Fetch data biaya (4 kategori) via lib/costQueries.ts — reusable, dipakai juga oleh
+  // Laporan Keuangan/Manajemen di app/laporan/page.tsx. Jangan duplikasi query di sini.
   const fetchData = async () => {
     setIsLoading(true);
-
-    // 1. BIAYA PERBAIKAN (dari Work Order Korektif yang sudah ada biaya aktual)
-    const { data: workOrders } = await supabase
-      .from("work_orders")
-      .select("id, asset_id, actual_cost, completed_at, created_at, assets(name, locations(name))")
-      .gt("actual_cost", 0);
-
-    const perbaikanTx: CostTransaction[] = (workOrders || []).map((wo: any) => ({
-      id: `wo-${wo.id}`,
-      date: wo.completed_at || wo.created_at,
-      category: "Perbaikan",
-      description: `${wo.asset_id}${wo.assets?.name ? ` — ${wo.assets.name}` : ""}`,
-      location: wo.assets?.locations?.name || null,
-      amount: wo.actual_cost || 0,
-      href: `/pemeliharaan/korektif/${wo.id}`,
-    }));
-
-    // 2. BIAYA PEMBELIAN STOK
-    // 2a. Ambil semua item stok (untuk hitung nilai pembelian awal, sama seperti di halaman detail stok)
-    const { data: stockItems } = await supabase
-      .from("stock_items")
-      .select("id, name, qty, purchase_price, created_at");
-
-    // 2b. Ambil semua pergerakan stok tipe "Masuk" yang punya harga per unit
-    const { data: movements } = await supabase
-      .from("stock_movements")
-      .select("id, stock_item_id, type, qty, unit_price, created_at, reference, stock_items(name)")
-      .eq("type", "Masuk")
-      .not("unit_price", "is", null);
-
-    // Perlu SEMUA pergerakan (masuk & keluar) per item untuk menghitung qty awal, bukan hanya yang masuk & berharga
-    const { data: allMovementsForQty } = await supabase
-      .from("stock_movements")
-      .select("stock_item_id, type, qty");
-
-    const netQtyByItem = new Map<string, number>();
-    (allMovementsForQty || []).forEach((m: any) => {
-      const delta = m.type === "Masuk" ? m.qty : -m.qty;
-      netQtyByItem.set(m.stock_item_id, (netQtyByItem.get(m.stock_item_id) || 0) + delta);
-    });
-
-    // 2c. Nilai pembelian awal per item (qty awal x harga per unit di data item)
-    const initialStokTx: CostTransaction[] = (stockItems || [])
-      .map((item: any): CostTransaction | null => {
-        const initialQty = item.qty - (netQtyByItem.get(item.id) || 0);
-        const initialValue = (item.purchase_price || 0) * initialQty;
-        if (initialValue <= 0) return null;
-        return {
-          id: `stok-awal-${item.id}`,
-          date: item.created_at,
-          category: "Pembelian Stok" as const,
-          description: `${item.name} (Stok Awal — ${initialQty} unit)`,
-          location: null,
-          amount: initialValue,
-          href: `/stok/${item.id}`,
-        };
-      })
-      .filter((tx): tx is CostTransaction => tx !== null);
-
-    // 2d. Nilai pembelian dari seluruh riwayat pergerakan "Masuk"
-    const stokTx: CostTransaction[] = (movements || []).map((m: any) => ({
-      id: `mv-${m.id}`,
-      date: m.reference || m.created_at,
-      category: "Pembelian Stok",
-      description: `${m.stock_items?.name || m.stock_item_id} (${m.qty} unit)`,
-      location: null,
-      amount: (m.unit_price || 0) * (m.qty || 0),
-      href: `/stok/${m.stock_item_id}`,
-    }));
-
-    // 3. BIAYA PEMELIHARAAN (dari item checklist pemeliharaan pencegahan yang ada harganya)
-    const { data: checklistCosts } = await supabase
-      .from("maintenance_checklist_items")
-      .select("id, task, harga, schedule_id, maintenance_schedules(scheduled_date, completed_at, asset_id, assets(name, locations(name)))")
-      .gt("harga", 0);
-
-    const pemeliharaanTx: CostTransaction[] = (checklistCosts || []).map((c: any) => ({
-      id: `chk-${c.id}`,
-      date: c.maintenance_schedules?.completed_at || c.maintenance_schedules?.scheduled_date,
-      category: "Pemeliharaan",
-      description: `${c.maintenance_schedules?.assets?.name || "-"} — ${c.task}`,
-      location: c.maintenance_schedules?.assets?.locations?.name || null,
-      amount: c.harga || 0,
-      href: `/pemeliharaan/checklist/${c.schedule_id}`,
-    }));
-
-    // 4. BIAYA PEMBELIAN ASET (dari aset yang ada biaya pembeliannya)
-    const { data: assetsWithCost } = await supabase
-      .from("assets")
-      .select("id, name, purchase_cost, purchase_date, location_id, locations(name)")
-      .gt("purchase_cost", 0);
-
-    const asetTx: CostTransaction[] = (assetsWithCost || []).map((a: any) => ({
-      id: `aset-${a.id}`,
-      date: a.purchase_date,
-      category: "Pembelian Aset",
-      description: `${a.id}${a.name ? ` — ${a.name}` : ""}`,
-      location: a.locations?.name || null,
-      amount: a.purchase_cost || 0,
-      href: `/registrasi-aset/${a.location_id}/${a.id}`,
-    }));
-
-    const all = [...perbaikanTx, ...initialStokTx, ...stokTx, ...pemeliharaanTx, ...asetTx].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+    const all = await fetchAllCostTransactions();
     setTransactions(all);
     setIsLoading(false);
   };

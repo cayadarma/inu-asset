@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Eye } from "lucide-react";
+import Link from "next/link";
 
 import PeriodFilter from "@/components/laporan/PeriodFilter";
 import SummaryCards from "@/components/laporan/SummaryCards";
@@ -9,8 +10,12 @@ import AvailabilityTrend from "@/components/laporan/AvailabilityTrend";
 import CorrectiveSection from "@/components/laporan/CorrectiveSection";
 import PreventiveSection from "@/components/laporan/PreventiveSection";
 import BukuSakitSection from "@/components/laporan/BukuSakitSection";
+import FinancialSummaryCards from "@/components/laporan/FinancialSummaryCards";
+import FinancialTrend from "@/components/laporan/FinancialTrend";
+import BudgetRealization from "@/components/laporan/BudgetRealization";
+import FinancialTransactionTable from "@/components/laporan/FinancialTransactionTable";
 
-import { getDefaultPeriodParams, resolvePeriod, PeriodParams } from "@/lib/reportPeriod";
+import { getDefaultPeriodParams, resolvePeriod, serializePeriodParams, PeriodParams } from "@/lib/reportPeriod";
 import {
   fetchOperationalSummary,
   fetchAvailabilityTrend,
@@ -23,6 +28,7 @@ import {
   PreventiveMaintenanceReport,
   BukuSakitReport,
 } from "@/lib/reportQueries";
+import { fetchFinancialReport, FinancialReport } from "@/lib/reportFinance";
 
 type ReportType = "Operasional" | "Keuangan";
 
@@ -31,12 +37,18 @@ export default function ReportPage() {
   const [periodParams, setPeriodParams] = useState<PeriodParams>(getDefaultPeriodParams());
   const period = useMemo(() => resolvePeriod(periodParams), [periodParams]);
 
+  const previewHref = useMemo(() => {
+    const qs = new URLSearchParams({ type: reportType, ...serializePeriodParams(periodParams) });
+    return `/laporan/preview?${qs.toString()}`;
+  }, [reportType, periodParams]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [summary, setSummary] = useState<OperationalSummary | null>(null);
   const [trend, setTrend] = useState<AvailabilityTrendPoint[]>([]);
   const [corrective, setCorrective] = useState<CorrectiveMaintenanceReport | null>(null);
   const [preventive, setPreventive] = useState<PreventiveMaintenanceReport | null>(null);
   const [bukuSakit, setBukuSakit] = useState<BukuSakitReport | null>(null);
+  const [financial, setFinancial] = useState<FinancialReport | null>(null);
 
   useEffect(() => {
     if (reportType !== "Operasional") return;
@@ -57,6 +69,24 @@ export default function ReportPage() {
       setCorrective(correctiveData);
       setPreventive(preventiveData);
       setBukuSakit(bukuSakitData);
+      setIsLoading(false);
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportType, period.startDate, period.endDate]);
+
+  useEffect(() => {
+    if (reportType !== "Keuangan") return;
+
+    let isCancelled = false;
+    setIsLoading(true);
+
+    fetchFinancialReport(period).then((financialData) => {
+      if (isCancelled) return;
+      setFinancial(financialData);
       setIsLoading(false);
     });
 
@@ -96,7 +126,15 @@ export default function ReportPage() {
           <PeriodFilter value={periodParams} onChange={setPeriodParams} />
         </div>
 
-        <p className="text-xs font-bold text-[#0D9488]">{period.label}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-xs font-bold text-[#0D9488]">{period.label}</p>
+          <Link
+            href={previewHref}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#0D9488] text-white rounded-lg text-sm font-bold hover:bg-teal-700 transition-colors w-fit"
+          >
+            <Eye size={16} /> Preview & Cetak Laporan
+          </Link>
+        </div>
       </div>
 
       {/* KONTEN LAPORAN */}
@@ -109,8 +147,11 @@ export default function ReportPage() {
           <BukuSakitSection data={bukuSakit} isLoading={isLoading} />
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#1E293B] p-10 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm text-center text-[#94A3B8] italic">
-          Laporan Keuangan / Manajemen menyusul di tahap berikutnya (reuse logic dari halaman Analisis Biaya).
+        <div className="flex flex-col gap-10">
+          <FinancialSummaryCards data={financial} isLoading={isLoading} />
+          <FinancialTrend data={financial} isLoading={isLoading} />
+          <BudgetRealization data={financial} isLoading={isLoading} />
+          <FinancialTransactionTable data={financial} isLoading={isLoading} />
         </div>
       )}
     </div>

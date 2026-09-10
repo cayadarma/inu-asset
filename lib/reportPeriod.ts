@@ -136,3 +136,34 @@ export function isWithinPeriod(dateInput: string | Date | null | undefined, peri
   const dateStr = typeof dateInput === "string" ? dateInput.slice(0, 10) : toDateStr(dateInput);
   return dateStr >= period.startDate && dateStr <= period.endDate;
 }
+
+// --- Serialize/parse PeriodParams ke/dari URLSearchParams, dipakai untuk mengoper filter
+// dari app/laporan/page.tsx ke app/laporan/preview/page.tsx lewat query string ---
+export function serializePeriodParams(params: PeriodParams): Record<string, string> {
+  return {
+    mode: params.mode,
+    selectedYear: String(params.selectedYear),
+    selectedMonth: params.selectedMonth,
+    selectedMonthYear: String(params.selectedMonthYear),
+    selectedWeekDate: params.selectedWeekDate,
+    selectedDay: params.selectedDay,
+    customStart: params.customStart,
+    customEnd: params.customEnd,
+  };
+}
+
+export function parsePeriodParams(searchParams: URLSearchParams): PeriodParams {
+  const fallback = getDefaultPeriodParams();
+  const mode = searchParams.get("mode");
+
+  return {
+    mode: (PERIOD_MODES as string[]).includes(mode || "") ? (mode as PeriodMode) : fallback.mode,
+    selectedYear: Number(searchParams.get("selectedYear")) || fallback.selectedYear,
+    selectedMonth: searchParams.get("selectedMonth") || fallback.selectedMonth,
+    selectedMonthYear: Number(searchParams.get("selectedMonthYear")) || fallback.selectedMonthYear,
+    selectedWeekDate: searchParams.get("selectedWeekDate") || fallback.selectedWeekDate,
+    selectedDay: searchParams.get("selectedDay") || fallback.selectedDay,
+    customStart: searchParams.get("customStart") || fallback.customStart,
+    customEnd: searchParams.get("customEnd") || fallback.customEnd,
+  };
+}
