@@ -29,7 +29,6 @@ export const dictionary = {
     "dashboard.title": "Dashboard",
     "dashboard.subtitle": "Ringkasan kondisi aset dan aktivitas sistem",
     "dashboard.overview": "Ringkasan Dashboard",
-    "dashboard.overviewDesc": "Pantau kondisi aset, pekerjaan pemeliharaan, dan biaya perusahaan dalam satu tampilan",
 
     // Pengaturan
     "settings.title": "Pengaturan Sistem",

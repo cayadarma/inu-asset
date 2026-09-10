@@ -182,7 +182,6 @@ export default function Home() {
       {/* HEADER */}
       <div>
         <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("dashboard.overview")}</h1>
-        <p className="text-[#475569] dark:text-[#94A3B8] text-sm mt-1">{t("dashboard.overviewDesc")}</p>
       </div>
 
       {/* BARIS 1: KPI UTAMA */}
