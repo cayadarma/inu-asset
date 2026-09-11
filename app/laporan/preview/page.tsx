@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronLeft, Download, Printer } from "lucide-react";
+import { ChevronLeft, Download, FileSpreadsheet, Printer } from "lucide-react";
 import Link from "next/link";
 
 import { parsePeriodParams, resolvePeriod } from "@/lib/reportPeriod";
@@ -18,6 +18,12 @@ import {
   BukuSakitReport,
 } from "@/lib/reportQueries";
 import { fetchFinancialReport, FinancialReport } from "@/lib/reportFinance";
+import {
+  exportOperationalPDF,
+  exportFinancialPDF,
+  exportOperationalExcel,
+  exportFinancialExcel,
+} from "@/lib/reportExport";
 
 const formatRupiah = (n: number | null | undefined) => `Rp ${(n || 0).toLocaleString("id-ID")}`;
 const formatTanggalSingkat = (d: string | null | undefined) =>
@@ -30,6 +36,7 @@ function ReportPreviewContent() {
   const period = useMemo(() => resolvePeriod(periodParams), [periodParams]);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState<"pdf" | "excel" | null>(null);
 
   // --- Data Operasional ---
   const [summary, setSummary] = useState<OperationalSummary | null>(null);
@@ -72,6 +79,34 @@ function ReportPreviewContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportType, period.startDate, period.endDate]);
 
+  const handleExportPDF = async () => {
+    if (isLoading || isExporting) return;
+    setIsExporting("pdf");
+    try {
+      if (reportType === "Operasional") {
+        await exportOperationalPDF(period, { summary, corrective, preventive, bukuSakit });
+      } else if (financial) {
+        await exportFinancialPDF(period, financial);
+      }
+    } finally {
+      setIsExporting(null);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (isLoading || isExporting) return;
+    setIsExporting("excel");
+    try {
+      if (reportType === "Operasional") {
+        await exportOperationalExcel(period, { summary, corrective, preventive, bukuSakit });
+      } else if (financial) {
+        await exportFinancialExcel(period, financial);
+      }
+    } finally {
+      setIsExporting(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 max-w-[1000px] mx-auto">
       {/* Action Bar (tidak ikut tercetak) */}
@@ -87,11 +122,18 @@ function ReportPreviewContent() {
             <Printer size={18} /> Cetak
           </button>
           <button
-            disabled
-            title="Export PDF akan tersedia pada tahap berikutnya"
-            className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-[#334155] text-gray-400 dark:text-[#64748B] rounded-lg text-sm font-bold cursor-not-allowed"
+            onClick={handleExportExcel}
+            disabled={isLoading || isExporting !== null}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-[#334155] rounded-lg text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Download size={18} /> Download PDF
+            <FileSpreadsheet size={18} /> {isExporting === "excel" ? "Menyiapkan..." : "Download Excel"}
+          </button>
+          <button
+            onClick={handleExportPDF}
+            disabled={isLoading || isExporting !== null}
+            className="flex items-center gap-2 px-4 py-2 bg-[#0D9488] text-white rounded-lg text-sm font-bold hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={18} /> {isExporting === "pdf" ? "Menyiapkan..." : "Download PDF"}
           </button>
         </div>
       </div>

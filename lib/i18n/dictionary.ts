@@ -28,7 +28,7 @@ export const dictionary = {
     // Dashboard
     "dashboard.title": "Dashboard",
     "dashboard.subtitle": "Ringkasan kondisi aset dan aktivitas sistem",
-    "dashboard.overview": "Ringkasan Dashboard",
+    "dashboard.overview": "Dashboard Overview",
 
     // Pengaturan
     "settings.title": "Pengaturan Sistem",
