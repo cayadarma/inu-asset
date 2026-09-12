@@ -8,8 +8,15 @@ import StatusChart from "../components/ui/StatusChart";
 import MaintenanceSummary from "../components/ui/MaintenanceSummary"; 
 import RecentActivity from "../components/ui/RecentActivity"; 
 // 1. Perbaikan Import Ikon
-import { Box, Banknote, ShieldCheck, PlayCircle, Wrench, AlertCircle, ClipboardCheck } from "lucide-react";
+import { Box, Banknote, ShieldCheck, PlayCircle, Wrench, AlertCircle, ClipboardCheck, Package, Boxes, Wallet } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+
+const formatRupiahShort = (n: number) =>
+  n >= 1_000_000_000
+    ? `Rp ${(n / 1_000_000_000).toFixed(1)} M`
+    : n >= 1_000_000
+    ? `Rp ${(n / 1_000_000).toFixed(1)} Jt`
+    : `Rp ${n.toLocaleString("id-ID")}`;
 
 export default function Home() {
   const { t } = useLanguage();
@@ -29,6 +36,10 @@ export default function Home() {
     realisasiPct: 0,
     realisasiSelesai: 0,
     realisasiTotal: 0,
+    biayaPemeliharaan: 0,
+    biayaPerbaikan: 0,
+    biayaStok: 0,
+    biayaAset: 0,
   });
 
   useEffect(() => {
@@ -135,7 +146,16 @@ export default function Home() {
       const budgetAmount = budgetRow?.amount || 0;
       const budgetUsedPct = budgetAmount > 0 ? Math.round((totalBiaya / budgetAmount) * 100) : 0;
 
-      setCounts((prev) => ({ ...prev, cost: formattedCost, budgetAmount, budgetUsedPct }));
+      setCounts((prev) => ({
+        ...prev,
+        cost: formattedCost,
+        budgetAmount,
+        budgetUsedPct,
+        biayaPemeliharaan: totalPemeliharaanBulanIni,
+        biayaPerbaikan: totalPerbaikanBulanIni,
+        biayaStok: totalStokBulanIni,
+        biayaAset: totalAsetBulanIni,
+      }));
 
       // --- REALISASI PROGRAM KERJA (PREVENTIVE MAINTENANCE) BULAN INI ---
       // Hanya dari agenda pemeliharaan pencegahan (BUKAN Work Order korektif/perbaikan).
@@ -184,101 +204,137 @@ export default function Home() {
         <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("dashboard.overview")}</h1>
       </div>
 
-      {/* BARIS 1: KPI UTAMA */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard 
-          title="Total Seluruh Aset" 
-          value={counts.total.toLocaleString()} 
-          description={`Unit aset yang terdaftar di sistem (per ${new Date().getFullYear()})`} 
-          icon={<Box size={20} />} 
-          href="/registrasi-aset/semua"
-          extra={
-            <div className="flex flex-col gap-0.5 text-[11px] font-bold">
-              <span className="text-[#0D9488]">+{counts.addedThisYear} aset baru tahun ini</span>
-              <span className="text-[#94A3B8]">+{counts.addedThisMonth} aset baru bulan ini</span>
-            </div>
-          }
-        />
-        <StatCard 
-          title="Serapan Biaya Bulan Ini" 
-          value={counts.cost} 
-          description="Total pengeluaran bulan ini (semua kategori biaya)" 
-          icon={<Banknote size={20} />} 
-          href="/analisis-biaya"
-          extra={
-            <div className="flex flex-col gap-1 text-[11px] font-bold">
-              {counts.budgetAmount > 0 ? (
-                <>
-                  <span className="text-[#94A3B8]">Anggaran: Rp {counts.budgetAmount.toLocaleString("id-ID")}</span>
-                  <span className={counts.budgetUsedPct >= 100 ? "text-[#EF4444]" : counts.budgetUsedPct >= 80 ? "text-[#F59E0B]" : "text-[#0D9488]"}>
-                    {counts.budgetUsedPct}% anggaran terpakai
-                  </span>
-                </>
-              ) : (
-                <span className="text-[#94A3B8] italic">Anggaran bulan ini belum diatur</span>
-              )}
-            </div>
-          }
-        />
-        <StatCard 
-          title="Asset Availability" 
-          value={counts.availability} 
-          description="Persentase aset yang siap dipakai saat ini" 
-          icon={<ShieldCheck size={20} />} 
-        />
-        <StatCard 
-          title="Realisasi Program Kerja" 
-          value={`${counts.realisasiPct}%`} 
-          description="Agenda pemeliharaan pencegahan bulan ini"
-          icon={<ClipboardCheck size={20} />} 
-          href="/pemeliharaan"
-          extra={
-            <span className="text-[11px] font-bold text-[#94A3B8]">
-              {counts.realisasiSelesai} dari {counts.realisasiTotal} agenda selesai
-            </span>
-          }
-        />
-      </div>
-
-      {/* BARIS 2: STATUS OPERASIONAL */}
+      {/* RINGKASAN ASET */}
       <div className="flex flex-col gap-4">
         <div>
-          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">Ringkasan Status Aset</h3>
-          <p className="text-[#94A3B8] text-xs mt-1">Jumlah aset berdasarkan kondisi terkininya saat ini</p>
+          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">Ringkasan Aset</h3>
+          <p className="text-[#94A3B8] text-xs mt-1">Kondisi & ketersediaan aset saat ini</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <StatCard 
-            title="Unit Beroperasi" 
-            value={counts.active} 
-            description="Sedang dipakai & bekerja normal" 
-            icon={<PlayCircle size={20} className="text-emerald-500" />} 
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <StatCard
+            title="Total Seluruh Aset"
+            value={counts.total.toLocaleString()}
+            description={`Unit aset yang terdaftar di sistem (per ${new Date().getFullYear()})`}
+            icon={<Box size={20} />}
+            href="/registrasi-aset/semua"
+            extra={
+              <div className="flex flex-col gap-0.5 text-[11px] font-bold">
+                <span className="text-[#0D9488]">+{counts.addedThisYear} aset baru tahun ini</span>
+                <span className="text-[#94A3B8]">+{counts.addedThisMonth} aset baru bulan ini</span>
+              </div>
+            }
           />
-          <StatCard 
-            title="Unit Pemeliharaan" 
-            value={counts.maintenance} 
-            description="Sedang dicek/dirawat rutin terjadwal" 
-            icon={<Wrench size={20} className="text-amber-500" />} 
+          <StatCard
+            title="Asset Availability"
+            value={counts.availability}
+            description="Persentase aset yang siap dipakai saat ini"
+            icon={<ShieldCheck size={20} />}
           />
-          <StatCard 
-            title="Unit Rusak / Perbaikan" 
-            value={counts.broken} 
-            description="Rusak menunggu diperbaiki atau sedang ditangani" 
-            icon={<AlertCircle size={20} className="text-red-500" />} 
+          <StatCard
+            title="Realisasi Program Kerja"
+            value={`${counts.realisasiPct}%`}
+            description="Agenda pemeliharaan pencegahan bulan ini"
+            icon={<ClipboardCheck size={20} />}
+            href="/pemeliharaan"
+            extra={
+              <span className="text-[11px] font-bold text-[#94A3B8]">
+                {counts.realisasiSelesai} dari {counts.realisasiTotal} agenda selesai
+              </span>
+            }
+          />
+          <StatCard
+            title="Unit Beroperasi"
+            value={counts.active}
+            description="Sedang dipakai & bekerja normal"
+            icon={<PlayCircle size={20} className="text-emerald-500" />}
+          />
+          <StatCard
+            title="Unit Pemeliharaan"
+            value={counts.maintenance}
+            description="Sedang dicek/dirawat rutin terjadwal"
+            icon={<Wrench size={20} className="text-amber-500" />}
+          />
+          <StatCard
+            title="Unit Rusak / Perbaikan"
+            value={counts.broken}
+            description="Rusak menunggu diperbaiki atau sedang ditangani"
+            icon={<AlertCircle size={20} className="text-red-500" />}
           />
         </div>
       </div>
-      
-      {/* BARIS 3: DAFTAR WORK ORDER */}
+
+      {/* DAFTAR WORK ORDER */}
       <div className="w-full">
         <MaintenanceSummary />
       </div>
 
-      {/* BARIS 4: TREN STATUS ASET / MONITORING STATUS BULANAN */}
+      {/* RINGKASAN KEUANGAN/MANAJEMEN */}
+      <div className="flex flex-col gap-4">
+        <div>
+          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">Ringkasan Keuangan/Manajemen</h3>
+          <p className="text-[#94A3B8] text-xs mt-1">Anggaran & realisasi biaya bulan berjalan</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <StatCard
+            title="Anggaran Bulan Ini"
+            value={counts.budgetAmount > 0 ? formatRupiahShort(counts.budgetAmount) : "Belum diatur"}
+            description="Anggaran biaya yang ditetapkan untuk bulan ini"
+            icon={<Wallet size={20} />}
+            href="/anggaran"
+          />
+          <StatCard
+            title="Serapan Biaya Bulan Ini"
+            value={counts.cost}
+            description="Total pengeluaran bulan ini (semua kategori biaya)"
+            icon={<Banknote size={20} />}
+            href="/analisis-biaya"
+            extra={
+              counts.budgetAmount > 0 ? (
+                <span className={`text-[11px] font-bold ${counts.budgetUsedPct >= 100 ? "text-[#EF4444]" : counts.budgetUsedPct >= 80 ? "text-[#F59E0B]" : "text-[#0D9488]"}`}>
+                  {counts.budgetUsedPct}% anggaran terpakai
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-[#94A3B8] italic">Anggaran bulan ini belum diatur</span>
+              )
+            }
+          />
+          <StatCard
+            title="Biaya Pemeliharaan"
+            value={formatRupiahShort(counts.biayaPemeliharaan)}
+            description="Biaya pemeliharaan checklist bulan ini"
+            icon={<ClipboardCheck size={20} />}
+            href="/analisis-biaya"
+          />
+          <StatCard
+            title="Biaya Perbaikan"
+            value={formatRupiahShort(counts.biayaPerbaikan)}
+            description="Biaya Work Order korektif bulan ini"
+            icon={<Wrench size={20} />}
+            href="/analisis-biaya"
+          />
+          <StatCard
+            title="Biaya Pembelian Stok"
+            value={formatRupiahShort(counts.biayaStok)}
+            description="Biaya pembelian stok/sparepart bulan ini"
+            icon={<Package size={20} />}
+            href="/analisis-biaya"
+          />
+          <StatCard
+            title="Biaya Pembelian Aset"
+            value={formatRupiahShort(counts.biayaAset)}
+            description="Biaya pembelian aset baru bulan ini"
+            icon={<Boxes size={20} />}
+            href="/analisis-biaya"
+          />
+        </div>
+      </div>
+
+      {/* TREN STATUS ASET / MONITORING STATUS BULANAN */}
       <div className="w-full">
         <AvailabilityChart />
       </div>
 
-      {/* BARIS 5: STATUS OPERASIONAL & AKTIVITAS TERBARU */}
+      {/* STATUS OPERASIONAL & AKTIVITAS TERBARU */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <StatusChart />
         <RecentActivity />

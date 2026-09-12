@@ -7,9 +7,10 @@ interface PaginationProps {
   totalCount: number;
   itemsPerPage: number;
   onPageChange: (page: number) => void;
+  itemLabel?: string;
 }
 
-export default function Pagination({ currentPage, totalCount, itemsPerPage, onPageChange }: PaginationProps) {
+export default function Pagination({ currentPage, totalCount, itemsPerPage, onPageChange, itemLabel = "aset" }: PaginationProps) {
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   // Jika halaman cuma 1, tidak perlu tampilkan pagination
@@ -36,7 +37,7 @@ export default function Pagination({ currentPage, totalCount, itemsPerPage, onPa
     <div className="px-6 py-4 bg-white dark:bg-[#1E293B] border-t border-gray-100 dark:border-[#334155] flex flex-col md:flex-row items-center justify-between gap-4">
       {/* Info Teks */}
       <span className="text-sm text-[#94A3B8] font-medium font-poppins">
-        Menampilkan {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, totalCount)} dari {totalCount} aset
+        Menampilkan {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, totalCount)} dari {totalCount} {itemLabel}
       </span>
       
       {/* Tombol-tombol (Gaya Sesuai Gambar) */}

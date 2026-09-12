@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { ClipboardCheck, MapPin } from "lucide-react";
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
+import Pagination from "@/components/ui/Pagination";
 import { PreventiveMaintenanceReport } from "@/lib/reportQueries";
 
 interface PreventiveSectionProps {
@@ -11,7 +12,23 @@ interface PreventiveSectionProps {
   isLoading: boolean;
 }
 
+const PAGE_SIZE = 10;
+
 export default function PreventiveSection({ data, isLoading }: PreventiveSectionProps) {
+  const [pageLokasi, setPageLokasi] = useState(1);
+  const [pageDetail, setPageDetail] = useState(1);
+
+  useEffect(() => {
+    setPageLokasi(1);
+    setPageDetail(1);
+  }, [data]);
+
+  const byLocation = data?.byLocation ?? [];
+  const detailRows = data?.detailRows ?? [];
+
+  const pagedLokasi = byLocation.slice((pageLokasi - 1) * PAGE_SIZE, pageLokasi * PAGE_SIZE);
+  const pagedDetail = detailRows.slice((pageDetail - 1) * PAGE_SIZE, pageDetail * PAGE_SIZE);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-2">
@@ -51,10 +68,10 @@ export default function PreventiveSection({ data, isLoading }: PreventiveSection
             <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
               {isLoading ? (
                 <tr><td colSpan={4} className="px-6 py-8 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
-              ) : !data || data.byLocation.length === 0 ? (
+              ) : byLocation.length === 0 ? (
                 <tr><td colSpan={4} className="px-6 py-8 text-center text-[#94A3B8] italic">Belum ada jadwal pemeliharaan pada periode ini.</td></tr>
               ) : (
-                data.byLocation.map((loc) => (
+                pagedLokasi.map((loc) => (
                   <tr key={loc.locationName} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
                     <td className="px-6 py-3 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{loc.locationName}</td>
                     <td className="px-6 py-3 text-center">{loc.total}</td>
@@ -66,6 +83,9 @@ export default function PreventiveSection({ data, isLoading }: PreventiveSection
             </tbody>
           </table>
         </div>
+        {!isLoading && byLocation.length > 0 && (
+          <Pagination currentPage={pageLokasi} totalCount={byLocation.length} itemsPerPage={PAGE_SIZE} onPageChange={setPageLokasi} itemLabel="lokasi" />
+        )}
       </div>
 
       {/* TABEL DETAIL JADWAL */}
@@ -86,10 +106,10 @@ export default function PreventiveSection({ data, isLoading }: PreventiveSection
             <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
               {isLoading ? (
                 <tr><td colSpan={4} className="px-6 py-8 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
-              ) : !data || data.detailRows.length === 0 ? (
+              ) : detailRows.length === 0 ? (
                 <tr><td colSpan={4} className="px-6 py-8 text-center text-[#94A3B8] italic">Belum ada jadwal pemeliharaan pada periode ini.</td></tr>
               ) : (
-                data.detailRows.map((s) => (
+                pagedDetail.map((s) => (
                   <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
                     <td className="px-6 py-3 text-[#475569] dark:text-[#94A3B8] font-medium">
                       {new Date(s.scheduledDate + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
@@ -108,6 +128,9 @@ export default function PreventiveSection({ data, isLoading }: PreventiveSection
             </tbody>
           </table>
         </div>
+        {!isLoading && detailRows.length > 0 && (
+          <Pagination currentPage={pageDetail} totalCount={detailRows.length} itemsPerPage={PAGE_SIZE} onPageChange={setPageDetail} itemLabel="jadwal" />
+        )}
       </div>
     </div>
   );

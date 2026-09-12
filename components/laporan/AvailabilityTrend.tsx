@@ -31,16 +31,16 @@ export default function AvailabilityTrend({ data, isLoading }: AvailabilityTrend
   const chartData = data.map((row) => ({ ...row, label: formatShortDate(row.date) }));
 
   return (
-    <div className="bg-white dark:bg-[#1E293B] p-8 rounded-[32px] border border-gray-100 dark:border-[#334155] shadow-sm min-h-[420px] flex flex-col gap-6">
+    <div className="bg-white dark:bg-[#1E293B] p-8 rounded-[32px] border border-gray-100 dark:border-[#334155] shadow-sm min-h-[500px] flex flex-col gap-8">
       <div className="flex flex-col gap-1">
-        <h3 className="text-[11px] font-black text-[#94A3B8] uppercase tracking-[0.2em]">Ketersediaan Aset</h3>
-        <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Tren Kondisi Aset per Hari</p>
+        <h3 className="text-[11px] font-black text-[#94A3B8] uppercase tracking-[0.2em]">Tren Ketersediaan Aset</h3>
+        <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Monitoring Status Harian pada Periode Laporan</p>
         <p className="text-[#94A3B8] text-xs">
-          Jumlah aset per kondisi berdasarkan snapshot harian (data hari yang tidak sempat tercatat tidak akan muncul di grafik ini)
+          Jumlah aset per kondisi berdasarkan snapshot harian pada periode yang sedang ditampilkan (data hari yang tidak sempat tercatat tidak akan muncul di grafik ini)
         </p>
       </div>
 
-      <div className="h-[300px] w-full -ml-4">
+      <div className="h-[320px] w-full -ml-4">
         {isLoading ? (
           <div className="h-full flex items-center justify-center text-[#94A3B8] text-sm">Memuat data...</div>
         ) : chartData.length === 0 ? (

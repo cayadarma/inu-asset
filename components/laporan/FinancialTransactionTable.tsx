@@ -1,14 +1,17 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { FinancialReport } from "@/lib/reportFinance";
 import { CostCategory } from "@/lib/costQueries";
+import Pagination from "@/components/ui/Pagination";
 
 interface FinancialTransactionTableProps {
   data: FinancialReport | null;
   isLoading: boolean;
 }
+
+const PAGE_SIZE = 10;
 
 const formatRupiah = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
 
@@ -20,6 +23,16 @@ const CATEGORY_BADGE: Record<CostCategory, string> = {
 };
 
 export default function FinancialTransactionTable({ data, isLoading }: FinancialTransactionTableProps) {
+  const [page, setPage] = useState(1);
+  const rows = data?.detailRows ?? [];
+
+  // --- RESET KE HALAMAN 1 SETIAP KALI DATA/PERIODE BERUBAH ---
+  useEffect(() => {
+    setPage(1);
+  }, [data]);
+
+  const pagedRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-gray-200 dark:border-[#334155] shadow-sm overflow-hidden">
       <div className="p-5 border-b border-gray-100 dark:border-[#334155]">
@@ -39,10 +52,10 @@ export default function FinancialTransactionTable({ data, isLoading }: Financial
           <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
             {isLoading ? (
               <tr><td colSpan={5} className="px-6 py-8 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
-            ) : !data || data.detailRows.length === 0 ? (
+            ) : rows.length === 0 ? (
               <tr><td colSpan={5} className="px-6 py-8 text-center text-[#94A3B8] italic">Belum ada transaksi biaya pada periode ini.</td></tr>
             ) : (
-              data.detailRows.map((tx) => (
+              pagedRows.map((tx) => (
                 <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
                   <td className="px-6 py-3 text-[#475569] dark:text-[#94A3B8] font-medium whitespace-nowrap">
                     {tx.date ? new Date(tx.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-"}
@@ -65,6 +78,9 @@ export default function FinancialTransactionTable({ data, isLoading }: Financial
           </tbody>
         </table>
       </div>
+      {!isLoading && rows.length > 0 && (
+        <Pagination currentPage={page} totalCount={rows.length} itemsPerPage={PAGE_SIZE} onPageChange={setPage} itemLabel="transaksi" />
+      )}
     </div>
   );
 }

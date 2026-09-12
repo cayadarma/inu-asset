@@ -1,14 +1,17 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { HeartPulse, AlertTriangle, Info } from "lucide-react";
 import Link from "next/link";
+import Pagination from "@/components/ui/Pagination";
 import { BukuSakitReport, formatDurationHours } from "@/lib/reportQueries";
 
 interface BukuSakitSectionProps {
   data: BukuSakitReport | null;
   isLoading: boolean;
 }
+
+const PAGE_SIZE = 10;
 
 const urgencyStyle: Record<string, string> = {
   Tinggi: "bg-[#FEE2E2] text-[#991B1B]",
@@ -17,6 +20,20 @@ const urgencyStyle: Record<string, string> = {
 };
 
 export default function BukuSakitSection({ data, isLoading }: BukuSakitSectionProps) {
+  const [pageProblematic, setPageProblematic] = useState(1);
+  const [pageDetail, setPageDetail] = useState(1);
+
+  useEffect(() => {
+    setPageProblematic(1);
+    setPageDetail(1);
+  }, [data]);
+
+  const topProblematicAssets = data?.topProblematicAssets ?? [];
+  const detailRows = data?.detailRows ?? [];
+
+  const pagedProblematic = topProblematicAssets.slice((pageProblematic - 1) * PAGE_SIZE, pageProblematic * PAGE_SIZE);
+  const pagedDetail = detailRows.slice((pageDetail - 1) * PAGE_SIZE, pageDetail * PAGE_SIZE);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-2">
@@ -49,10 +66,10 @@ export default function BukuSakitSection({ data, isLoading }: BukuSakitSectionPr
             <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
               {isLoading ? (
                 <tr><td colSpan={3} className="px-6 py-8 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
-              ) : !data || data.topProblematicAssets.length === 0 ? (
+              ) : topProblematicAssets.length === 0 ? (
                 <tr><td colSpan={3} className="px-6 py-8 text-center text-[#94A3B8] italic">Belum ada laporan kerusakan pada periode ini.</td></tr>
               ) : (
-                data.topProblematicAssets.map((a) => (
+                pagedProblematic.map((a) => (
                   <tr key={a.assetId} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
                     <td className="px-6 py-3 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{a.assetId} — {a.assetName}</td>
                     <td className="px-6 py-3 text-[#475569] dark:text-[#94A3B8]">{a.locationName}</td>
@@ -63,6 +80,9 @@ export default function BukuSakitSection({ data, isLoading }: BukuSakitSectionPr
             </tbody>
           </table>
         </div>
+        {!isLoading && topProblematicAssets.length > 0 && (
+          <Pagination currentPage={pageProblematic} totalCount={topProblematicAssets.length} itemsPerPage={PAGE_SIZE} onPageChange={setPageProblematic} itemLabel="aset" />
+        )}
       </div>
 
       {/* HISTORI + ESTIMASI DURASI */}
@@ -91,10 +111,10 @@ export default function BukuSakitSection({ data, isLoading }: BukuSakitSectionPr
             <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
               {isLoading ? (
                 <tr><td colSpan={5} className="px-6 py-8 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
-              ) : !data || data.detailRows.length === 0 ? (
+              ) : detailRows.length === 0 ? (
                 <tr><td colSpan={5} className="px-6 py-8 text-center text-[#94A3B8] italic">Belum ada laporan kerusakan pada periode ini.</td></tr>
               ) : (
-                data.detailRows.map((r) => (
+                pagedDetail.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
                     <td className="px-6 py-3 text-[#475569] dark:text-[#94A3B8] font-medium">
                       {new Date(r.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
@@ -118,6 +138,9 @@ export default function BukuSakitSection({ data, isLoading }: BukuSakitSectionPr
             </tbody>
           </table>
         </div>
+        {!isLoading && detailRows.length > 0 && (
+          <Pagination currentPage={pageDetail} totalCount={detailRows.length} itemsPerPage={PAGE_SIZE} onPageChange={setPageDetail} itemLabel="laporan" />
+        )}
       </div>
     </div>
   );

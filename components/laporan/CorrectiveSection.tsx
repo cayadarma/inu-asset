@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Wrench, MapPin, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
+import Pagination from "@/components/ui/Pagination";
 import { CorrectiveMaintenanceReport, formatDurationHours } from "@/lib/reportQueries";
 
 interface CorrectiveSectionProps {
@@ -11,9 +12,30 @@ interface CorrectiveSectionProps {
   isLoading: boolean;
 }
 
+const PAGE_SIZE = 10;
+
 const formatRupiah = (n: number | null) => (n ? `Rp ${n.toLocaleString("id-ID")}` : "-");
 
 export default function CorrectiveSection({ data, isLoading }: CorrectiveSectionProps) {
+  const [pageLokasi, setPageLokasi] = useState(1);
+  const [pageDamaged, setPageDamaged] = useState(1);
+  const [pageDetail, setPageDetail] = useState(1);
+
+  // --- RESET SEMUA HALAMAN KE 1 SETIAP KALI PERIODE/DATA BERUBAH ---
+  useEffect(() => {
+    setPageLokasi(1);
+    setPageDamaged(1);
+    setPageDetail(1);
+  }, [data]);
+
+  const byLocation = data?.byLocation ?? [];
+  const topDamagedAssets = data?.topDamagedAssets ?? [];
+  const detailRows = data?.detailRows ?? [];
+
+  const pagedLokasi = byLocation.slice((pageLokasi - 1) * PAGE_SIZE, pageLokasi * PAGE_SIZE);
+  const pagedDamaged = topDamagedAssets.slice((pageDamaged - 1) * PAGE_SIZE, pageDamaged * PAGE_SIZE);
+  const pagedDetail = detailRows.slice((pageDetail - 1) * PAGE_SIZE, pageDetail * PAGE_SIZE);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-2">
@@ -49,10 +71,10 @@ export default function CorrectiveSection({ data, isLoading }: CorrectiveSection
             <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
               {isLoading ? (
                 <tr><td colSpan={4} className="px-6 py-8 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
-              ) : !data || data.byLocation.length === 0 ? (
+              ) : byLocation.length === 0 ? (
                 <tr><td colSpan={4} className="px-6 py-8 text-center text-[#94A3B8] italic">Belum ada Work Order pada periode ini.</td></tr>
               ) : (
-                data.byLocation.map((loc) => (
+                pagedLokasi.map((loc) => (
                   <tr key={loc.locationName} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
                     <td className="px-6 py-3 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{loc.locationName}</td>
                     <td className="px-6 py-3 text-center">{loc.total}</td>
@@ -64,6 +86,9 @@ export default function CorrectiveSection({ data, isLoading }: CorrectiveSection
             </tbody>
           </table>
         </div>
+        {!isLoading && byLocation.length > 0 && (
+          <Pagination currentPage={pageLokasi} totalCount={byLocation.length} itemsPerPage={PAGE_SIZE} onPageChange={setPageLokasi} itemLabel="lokasi" />
+        )}
       </div>
 
       {/* ASET DENGAN LAPORAN KERUSAKAN TERBANYAK */}
@@ -84,10 +109,10 @@ export default function CorrectiveSection({ data, isLoading }: CorrectiveSection
             <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
               {isLoading ? (
                 <tr><td colSpan={3} className="px-6 py-8 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
-              ) : !data || data.topDamagedAssets.length === 0 ? (
+              ) : topDamagedAssets.length === 0 ? (
                 <tr><td colSpan={3} className="px-6 py-8 text-center text-[#94A3B8] italic">Belum ada laporan kerusakan pada periode ini.</td></tr>
               ) : (
-                data.topDamagedAssets.map((a) => (
+                pagedDamaged.map((a) => (
                   <tr key={a.assetId} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
                     <td className="px-6 py-3 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{a.assetId} — {a.assetName}</td>
                     <td className="px-6 py-3 text-[#475569] dark:text-[#94A3B8]">{a.locationName}</td>
@@ -98,6 +123,9 @@ export default function CorrectiveSection({ data, isLoading }: CorrectiveSection
             </tbody>
           </table>
         </div>
+        {!isLoading && topDamagedAssets.length > 0 && (
+          <Pagination currentPage={pageDamaged} totalCount={topDamagedAssets.length} itemsPerPage={PAGE_SIZE} onPageChange={setPageDamaged} itemLabel="aset" />
+        )}
       </div>
 
       {/* TABEL DETAIL WO */}
@@ -119,10 +147,10 @@ export default function CorrectiveSection({ data, isLoading }: CorrectiveSection
             <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
               {isLoading ? (
                 <tr><td colSpan={5} className="px-6 py-8 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
-              ) : !data || data.detailRows.length === 0 ? (
+              ) : detailRows.length === 0 ? (
                 <tr><td colSpan={5} className="px-6 py-8 text-center text-[#94A3B8] italic">Belum ada Work Order pada periode ini.</td></tr>
               ) : (
-                data.detailRows.map((wo) => (
+                pagedDetail.map((wo) => (
                   <tr key={wo.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/50">
                     <td className="px-6 py-3 font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                       <Link href={`/pemeliharaan/korektif/${wo.id}`} className="hover:text-[#0D9488]">{wo.id}</Link>
@@ -140,6 +168,9 @@ export default function CorrectiveSection({ data, isLoading }: CorrectiveSection
             </tbody>
           </table>
         </div>
+        {!isLoading && detailRows.length > 0 && (
+          <Pagination currentPage={pageDetail} totalCount={detailRows.length} itemsPerPage={PAGE_SIZE} onPageChange={setPageDetail} itemLabel="work order" />
+        )}
       </div>
     </div>
   );

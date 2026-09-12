@@ -4,7 +4,7 @@ import React, { useState, use, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ChevronLeft, Printer, Wrench, Image as ImageIcon,
+  ChevronLeft, Wrench, Image as ImageIcon,
   Camera, X, CheckCircle2, ZoomIn, Trash2
 } from "lucide-react";
 import imageCompression from "browser-image-compression";
@@ -294,9 +294,6 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
           )}
         </div>
         <div className="flex gap-3">
-          <button className="px-5 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 flex items-center gap-2">
-            <Printer size={18} /> Cetak WO
-          </button>
           {!isLocked && (
             <button
               onClick={openUpdateModal}
@@ -316,7 +313,21 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
             label="Tanggal Terbit"
             value={workOrder.tgl ? new Date(workOrder.tgl + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-"}
           />
-          <RowItem label="Kode Aset" value={`${workOrder.asset_id}${workOrder.assets?.name ? ` — ${workOrder.assets.name}` : ""}`} />
+          <div className="flex items-center">
+            <span className="w-40 text-xs font-bold text-[#94A3B8] uppercase">Kode Aset</span>
+            {workOrder.assets?.location_id ? (
+              <Link
+                href={`/registrasi-aset/${workOrder.assets.location_id}/${workOrder.asset_id}?name=${encodeURIComponent(workOrder.assets?.locations?.name || "")}&assetName=${encodeURIComponent(workOrder.assets?.name || "")}`}
+                className="text-sm font-bold text-[#0D9488] hover:underline"
+              >
+                {workOrder.asset_id}{workOrder.assets?.name ? ` — ${workOrder.assets.name}` : ""}
+              </Link>
+            ) : (
+              <span className="text-sm text-[#0F172A] dark:text-[#F8FAFC] font-bold">
+                {workOrder.asset_id}{workOrder.assets?.name ? ` — ${workOrder.assets.name}` : ""}
+              </span>
+            )}
+          </div>
           <RowItem label="Jenis Barang" value={workOrder.assets?.type || "-"} />
           <RowItem label="Kategori" value={workOrder.kategori || "-"} />
           <RowItem label="Pengawas" value={workOrder.supervisor || "-"} />
