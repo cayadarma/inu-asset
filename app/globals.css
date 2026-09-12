@@ -46,3 +46,21 @@ input[type="password"]::-ms-reveal,
 input[type="password"]::-ms-clear {
     display: none;
 }
+
+/* Kertas Laporan (Langkah 6): pastikan ukuran A4 konsisten saat window.print() */
+@media print {
+    @page {
+        size: A4;
+        margin: 0;
+    }
+    body {
+        background: #ffffff !important;
+    }
+    .print\:hidden {
+        display: none !important;
+    }
+    #report-template-a4 {
+        box-shadow: none !important;
+        margin: 0 auto !important;
+    }
+}

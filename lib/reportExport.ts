@@ -17,6 +17,47 @@ import type {
 } from "@/lib/reportQueries";
 import type { FinancialReport } from "@/lib/reportFinance";
 import { COST_CATEGORIES } from "@/lib/costQueries";
+import type { ReportTemplateData } from "@/components/laporan/ReportTemplate";
+
+// ============================================================
+// WRAPPER GABUNGAN (Langkah 6 — Step 6.1)
+//
+// SEMENTARA: masih memakai mesin jsPDF/xlsx lama di bawah, hanya menghormati
+// checklist section dari halaman preview. Ini akan digantikan di:
+// - Step 6.2: render components/laporan/ReportTemplate.tsx yang SAMA lewat
+//   html2canvas -> potong per halaman A4 -> jsPDF, supaya preview & PDF 100%
+//   identik pixel-nya (bukan lagi 2 layout terpisah seperti sekarang).
+// - Step 6.3: ganti ke exceljs supaya bisa embed foto bukti WO per baris.
+// ============================================================
+export async function exportReportPDF(data: ReportTemplateData) {
+  const { sections, period } = data;
+  if (sections.corrective || sections.preventive || sections.bukusakit || sections.ringkasan) {
+    await exportOperationalPDF(period, {
+      summary: sections.ringkasan ? data.summary : null,
+      corrective: sections.corrective ? data.corrective : null,
+      preventive: sections.preventive ? data.preventive : null,
+      bukuSakit: sections.bukusakit ? data.bukuSakit : null,
+    });
+  }
+  if (sections.keuangan && data.financial) {
+    await exportFinancialPDF(period, data.financial);
+  }
+}
+
+export async function exportReportExcel(data: ReportTemplateData) {
+  const { sections, period } = data;
+  if (sections.corrective || sections.preventive || sections.bukusakit || sections.ringkasan) {
+    await exportOperationalExcel(period, {
+      summary: sections.ringkasan ? data.summary : null,
+      corrective: sections.corrective ? data.corrective : null,
+      preventive: sections.preventive ? data.preventive : null,
+      bukuSakit: sections.bukusakit ? data.bukuSakit : null,
+    });
+  }
+  if (sections.keuangan && data.financial) {
+    await exportFinancialExcel(period, data.financial);
+  }
+}
 
 export interface OperationalExportData {
   summary: OperationalSummary | null;
