@@ -30,12 +30,16 @@ function ReportPreviewContent() {
   const period = useMemo(() => resolvePeriod(periodParams), [periodParams]);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState<"pdf" | "excel" | null>(null);
+  const [isExporting, setIsExporting] = useState<"pdf" | "excel" | "print" | null>(null);
 
   // Panel checklist section — DEFAULT SEMUA TERCENTANG saat pertama dibuka (poin 3, Langkah 6).
   const [sections, setSections] = useState<ReportSectionSelection>(defaultReportSectionSelection());
   const toggleSection = (key: keyof ReportSectionSelection) =>
     setSections((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  // Opsional & default OFF: embed foto bukti WO ke Excel menambah ukuran file
+  // & waktu generate cukup signifikan (tiap foto di-fetch dari Supabase Storage).
+  const [includePhotosInExcel, setIncludePhotosInExcel] = useState(false);
 
   // --- Data gabungan: Operasional + Keuangan sekaligus (preview sekarang 1 halaman, bukan per-tipe) ---
   const [summary, setSummary] = useState<OperationalSummary | null>(null);
@@ -75,7 +79,22 @@ function ReportPreviewContent() {
     if (isLoading || isExporting) return;
     setIsExporting("pdf");
     try {
-      await exportReportPDF(templateData);
+      await exportReportPDF(templateData, "download");
+    } finally {
+      setIsExporting(null);
+    }
+  };
+
+  // "Cetak" TIDAK pakai window.print() lagi (itu yg cetak navbar & pecah halaman
+  // beda dg PDF). Sekarang tetap lewat pipeline yg sama dg Download PDF
+  // (reportPaginator.tsx + html2canvas), hasilnya dimuat ke iframe tersembunyi
+  // lalu di-print dari situ — TANPA pindah tab/halaman, dialog print langsung
+  // muncul di atas halaman preview seperti perilaku window.print() sebelumnya.
+  const handlePrint = async () => {
+    if (isLoading || isExporting) return;
+    setIsExporting("print");
+    try {
+      await exportReportPDF(templateData, "print");
     } finally {
       setIsExporting(null);
     }
@@ -85,7 +104,7 @@ function ReportPreviewContent() {
     if (isLoading || isExporting) return;
     setIsExporting("excel");
     try {
-      await exportReportExcel(templateData);
+      await exportReportExcel(templateData, includePhotosInExcel);
     } finally {
       setIsExporting(null);
     }
@@ -115,11 +134,27 @@ function ReportPreviewContent() {
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] p-4 rounded-xl shadow-sm border border-gray-100 dark:border-[#334155] flex flex-col gap-2">
+          <label className="flex items-start gap-2 text-sm text-dark dark:text-white cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includePhotosInExcel}
+              onChange={() => setIncludePhotosInExcel((v) => !v)}
+              className="w-4 h-4 mt-0.5 accent-[#0D9488] rounded flex-shrink-0"
+            />
+            <span>
+              Sertakan foto bukti WO di Excel
+              <span className="block text-[11px] font-normal text-[#94A3B8]">Menambah ukuran file & waktu generate</span>
+            </span>
+          </label>
+        </div>
+
+        <div className="bg-white dark:bg-[#1E293B] p-4 rounded-xl shadow-sm border border-gray-100 dark:border-[#334155] flex flex-col gap-2">
           <button
-            onClick={() => window.print()}
-            className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 dark:border-[#334155] rounded-lg text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50"
+            onClick={handlePrint}
+            disabled={isLoading || isExporting !== null}
+            className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 dark:border-[#334155] rounded-lg text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Printer size={18} /> Cetak
+            <Printer size={18} /> {isExporting === "print" ? "Menyiapkan..." : "Cetak"}
           </button>
           <button
             onClick={handleExportExcel}

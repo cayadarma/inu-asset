@@ -180,6 +180,16 @@ export interface CorrectiveWorkOrderRow {
   createdAt: string;
   completedAt: string | null;
   actualCost: number | null;
+  // --- Ditambahkan utk kebutuhan export Excel WO (format perusahaan) ---
+  // Diambil dari damage_reports (form "Laporkan Kerusakan Aset"), BUKAN dari
+  // work_orders.trouble/tindak_lanjut — sesuai keputusan: form WO saat ini
+  // masih akan direvisi, jadi sumber utama tetap Buku Sakit.
+  masalah: string | null; // damage_reports.issue_title ("Judul Masalah")
+  indikasiPenyebab: string | null; // damage_reports.description ("Kronologi")
+  pelaksana: string | null; // work_orders.tech_name
+  pengawas: string | null; // work_orders.supervisor
+  ket: string | null; // work_orders.tindak_lanjut
+  fotoUrl: string | null; // foto TERBARU dari work_order_updates.proof_photo_url
 }
 
 export interface LocationBreakdownRow {
@@ -228,7 +238,7 @@ export async function fetchCorrectiveMaintenanceReport(period: ResolvedPeriod): 
   // WO yang DIBUAT pada rentang periode ini (cakupan section = aktivitas korektif periode berjalan)
   const { data: woData } = await supabase
     .from("work_orders")
-    .select("id, tgl, asset_id, trouble, status, actual_cost, created_at, completed_at, assets(name, locations(name))")
+    .select("id, tgl, asset_id, trouble, tech_name, supervisor, tindak_lanjut, status, actual_cost, created_at, completed_at, assets(name, locations(name))")
     .gte("created_at", fromTs)
     .lte("created_at", toTs)
     .order("created_at", { ascending: false });
@@ -290,18 +300,67 @@ export async function fetchCorrectiveMaintenanceReport(period: ResolvedPeriod): 
     .slice(0, 10);
 
   // --- Tabel detail WO ---
-  const detailRows: CorrectiveWorkOrderRow[] = rows.map((wo: any) => ({
-    id: wo.id,
-    tgl: wo.tgl,
-    assetId: wo.asset_id,
-    assetName: wo.assets?.name || wo.asset_id,
-    locationName: wo.assets?.locations?.name || "-",
-    trouble: wo.trouble,
-    status: wo.status,
-    createdAt: wo.created_at,
-    completedAt: wo.completed_at,
-    actualCost: wo.actual_cost,
-  }));
+  // Sumber "Masalah" & "Indikasi Penyebab" = Buku Sakit (damage_reports), bukan
+  // field work_orders — per keputusan ayaa (form WO masih akan direvisi).
+  // Karena work_orders belum punya FK ke damage_reports, dicocokkan manual:
+  // untuk tiap WO, ambil damage_reports milik aset yang sama dengan created_at
+  // TERDEKAT (dan tidak lebih baru dari WO-nya sendiri, toleransi beberapa menit
+  // ke depan utk jaga2 selisih waktu insert emergency flow).
+  const assetIds = Array.from(new Set(rows.map((wo: any) => wo.asset_id)));
+  const woIds = rows.map((wo: any) => wo.id);
+
+  const { data: relatedDamageReports } = assetIds.length
+    ? await supabase
+        .from("damage_reports")
+        .select("asset_id, issue_title, description, created_at")
+        .in("asset_id", assetIds)
+        .order("created_at", { ascending: false })
+    : { data: [] as any[] };
+
+  const { data: relatedUpdates } = woIds.length
+    ? await supabase
+        .from("work_order_updates")
+        .select("work_order_id, proof_photo_url, created_at")
+        .in("work_order_id", woIds)
+        .not("proof_photo_url", "is", null)
+        .order("created_at", { ascending: false })
+    : { data: [] as any[] };
+
+  // Ambil foto TERBARU per WO (data sudah diurutkan desc, jadi first-match menang)
+  const latestPhotoByWoId = new Map<string, string>();
+  (relatedUpdates || []).forEach((u: any) => {
+    if (!latestPhotoByWoId.has(u.work_order_id)) {
+      latestPhotoByWoId.set(u.work_order_id, u.proof_photo_url);
+    }
+  });
+
+  const TOLERANSI_MS = 30 * 60 * 1000; // 30 menit toleransi laporan dibuat sedikit setelah WO (alur emergency)
+
+  const detailRows: CorrectiveWorkOrderRow[] = rows.map((wo: any) => {
+    const woCreatedMs = new Date(wo.created_at).getTime();
+    const candidate = (relatedDamageReports || [])
+      .filter((d: any) => d.asset_id === wo.asset_id)
+      .find((d: any) => new Date(d.created_at).getTime() <= woCreatedMs + TOLERANSI_MS);
+
+    return {
+      id: wo.id,
+      tgl: wo.tgl,
+      assetId: wo.asset_id,
+      assetName: wo.assets?.name || wo.asset_id,
+      locationName: wo.assets?.locations?.name || "-",
+      trouble: wo.trouble,
+      status: wo.status,
+      createdAt: wo.created_at,
+      completedAt: wo.completed_at,
+      actualCost: wo.actual_cost,
+      masalah: candidate?.issue_title ?? wo.trouble ?? null,
+      indikasiPenyebab: candidate?.description ?? null,
+      pelaksana: wo.tech_name ?? null,
+      pengawas: wo.supervisor ?? null,
+      ket: wo.tindak_lanjut ?? null,
+      fotoUrl: latestPhotoByWoId.get(wo.id) ?? null,
+    };
+  });
 
   return { totalWO, byStatus, mttrHours, byLocation, topDamagedAssets, detailRows };
 }

@@ -12,6 +12,7 @@ import type { ResolvedPeriod } from "@/lib/reportPeriod";
 import type {
   OperationalSummary,
   CorrectiveMaintenanceReport,
+  CorrectiveWorkOrderRow,
   PreventiveMaintenanceReport,
   BukuSakitReport,
 } from "@/lib/reportQueries";
@@ -59,7 +60,12 @@ async function waitForImagesLoaded(container: HTMLElement) {
 // - Laporan panjang: otomatis jadi N halaman A4.
 // - Header tiap halaman: SAMA, karena tiap halaman punya <ReportHeader/> sendiri.
 // ============================================================
-export async function exportReportPDF(data: ReportTemplateData) {
+// mode "download" -> langsung men-save file .pdf (tombol "Download PDF")
+// mode "print"    -> buka PDF yg sama di tab baru & langsung munculkan dialog print
+//                    browser (tombol "Cetak"), supaya hasil CETAK 100% identik
+//                    dengan hasil DOWNLOAD — sama-sama render dari pageIds yg
+//                    sama, cuma beda aksi akhirnya (save vs print).
+export async function exportReportPDF(data: ReportTemplateData, mode: "download" | "print" = "download") {
   const { buildPaginatedReportDOM } = await import("@/lib/reportPaginator");
   const { pageIds, cleanup } = await buildPaginatedReportDOM(data);
 
@@ -83,22 +89,84 @@ export async function exportReportPDF(data: ReportTemplateData) {
       pdf.addImage(imgData, "PNG", 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
     }
 
-    const safeLabel = data.period.label.replace(/[^a-zA-Z0-9]+/g, "_");
-    pdf.save(`Laporan_INU_Asset_${safeLabel}.pdf`);
+    if (mode === "print") {
+      // Cetak TANPA pindah halaman/tab baru: PDF yg sudah jadi (dari pipeline
+      // reportPaginator.tsx + html2canvas yg sama persis dg tombol Download)
+      // dimuat ke iframe tersembunyi, lalu print() dipanggil dari dalam iframe
+      // itu begitu selesai load. User tetap di halaman preview seperti biasa.
+      const blobUrl = pdf.output("bloburl") as unknown as string;
+      await printPdfViaHiddenIframe(blobUrl);
+    } else {
+      const safeLabel = data.period.label.replace(/[^a-zA-Z0-9]+/g, "_");
+      pdf.save(`Laporan_INU_Asset_${safeLabel}.pdf`);
+    }
   } finally {
     cleanup();
   }
 }
 
-export async function exportReportExcel(data: ReportTemplateData) {
+// Buat <iframe> tak terlihat, muat PDF blob di dalamnya, tunggu sampai
+// benar-benar termuat, lalu panggil window.print() dari CONTEXT iframe
+// tsb (bukan window utama) supaya yg ke-print cuma isi PDF-nya.
+// PENTING: promise di-resolve SEGERA setelah print() dipanggil (bukan
+// menunggu iframe dibuang) — supaya tombol "Cetak" di UI tidak stuck
+// nunggu. Pembersihan iframe & blob URL tetap jalan di belakang layar.
+function printPdfViaHiddenIframe(blobUrl: string): Promise<void> {
+  return new Promise((resolve) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.src = blobUrl;
+
+    const scheduleCleanup = () => {
+      setTimeout(() => {
+        URL.revokeObjectURL(blobUrl);
+        iframe.remove();
+      }, 60000);
+    };
+
+    // Jaga-jaga kalau onload tidak pernah terpanggil (mis. PDF viewer
+    // internal browser "menelan" event load) — jangan sampai tombol
+    // stuck selamanya menunggu.
+    const failSafeTimer = setTimeout(() => {
+      resolve();
+      scheduleCleanup();
+    }, 4000);
+
+    iframe.onload = () => {
+      clearTimeout(failSafeTimer);
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch {
+        // Kalau browser block print dari iframe (jarang), fallback: buka tab baru.
+        window.open(blobUrl, "_blank");
+      }
+      resolve();
+      scheduleCleanup();
+    };
+
+    document.body.appendChild(iframe);
+  });
+}
+
+export async function exportReportExcel(data: ReportTemplateData, includePhotos: boolean = false) {
   const { sections, period } = data;
   if (sections.corrective || sections.preventive || sections.bukusakit || sections.ringkasan) {
-    await exportOperationalExcel(period, {
-      summary: sections.ringkasan ? data.summary : null,
-      corrective: sections.corrective ? data.corrective : null,
-      preventive: sections.preventive ? data.preventive : null,
-      bukuSakit: sections.bukusakit ? data.bukuSakit : null,
-    });
+    await exportOperationalExcel(
+      period,
+      {
+        summary: sections.ringkasan ? data.summary : null,
+        corrective: sections.corrective ? data.corrective : null,
+        preventive: sections.preventive ? data.preventive : null,
+        bukuSakit: sections.bukusakit ? data.bukuSakit : null,
+      },
+      includePhotos
+    );
   }
   if (sections.keuangan && data.financial) {
     await exportFinancialExcel(period, data.financial);
@@ -339,60 +407,231 @@ function drawSignature(doc: any) {
 }
 
 // ============================================================
-// EXCEL EXPORT
+// EXCEL EXPORT — Step 6.3
+//
+// Diganti dari "xlsx" ke "exceljs" karena sheet Work Order (Corrective
+// Maintenance) sekarang butuh EMBED FOTO per baris, meniru format Excel WO
+// yang sudah dipakai perusahaan (1 sheet per aset, judul = nama aset,
+// kolom: NO | TGL | FOTO | LOKASI | MASALAH (TROUBLE) | INDIKASI PENYEBAB |
+// TINDAKAN | PELAKSANA | PENGAWAS | KET).
 // ============================================================
-export async function exportOperationalExcel(period: ResolvedPeriod, data: OperationalExportData) {
-  const XLSX = await import("xlsx");
-  const wb = XLSX.utils.book_new();
 
+const WO_SHEET_HEADERS = [
+  "NO",
+  "TGL",
+  "FOTO",
+  "LOKASI",
+  "MASALAH (TROUBLE)",
+  "INDIKASI PENYEBAB",
+  "TINDAKAN",
+  "PELAKSANA",
+  "PENGAWAS",
+  "KET",
+];
+const WO_SHEET_COL_WIDTHS = [6, 13, 20, 16, 22, 26, 30, 18, 16, 24];
+
+// Ambil bytes gambar dari URL (Supabase Storage) supaya bisa di-embed exceljs.
+// Kalau gagal (network/format tak dikenal), balikin null — baris tetap
+// ditulis, cuma kolom FOTO kosong, tidak menggagalkan export secara keseluruhan.
+async function fetchImageForEmbed(url: string): Promise<{ buffer: ArrayBuffer; extension: "png" | "jpeg" } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    const contentType = res.headers.get("content-type") || "";
+    const extension: "png" | "jpeg" = contentType.includes("png") ? "png" : "jpeg";
+    return { buffer, extension };
+  } catch {
+    return null;
+  }
+}
+
+// Bangun 1 worksheet ber-format WO utk 1 aset (persis contoh_work_order.xlsx).
+async function buildWorkOrderSheetForAsset(
+  workbook: import("exceljs").Workbook,
+  assetName: string,
+  woRows: CorrectiveWorkOrderRow[],
+  includePhotos: boolean
+) {
+  // Nama sheet Excel maks 31 char & tidak boleh mengandung: \ / ? * [ ]
+  const safeSheetName = assetName.replace(/[\\/?*\[\]]/g, "").slice(0, 31) || "Aset";
+  const sheet = workbook.addWorksheet(safeSheetName);
+
+  sheet.columns = WO_SHEET_COL_WIDTHS.map((width) => ({ width }));
+
+  // --- Judul (baris 1-2, merge, bold, center — sesuai template) ---
+  sheet.mergeCells(1, 1, 2, WO_SHEET_HEADERS.length);
+  const titleCell = sheet.getCell(1, 1);
+  titleCell.value = assetName.toUpperCase();
+  titleCell.font = { name: "Arial", size: 10, bold: true };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  sheet.getRow(1).height = 21.6;
+  sheet.getRow(2).height = 21.6;
+
+  // --- Header kolom (baris 3) ---
+  const headerRow = sheet.getRow(3);
+  WO_SHEET_HEADERS.forEach((label, idx) => {
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = label;
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = {
+      top: { style: "thin" }, bottom: { style: "thin" },
+      left: { style: "thin" }, right: { style: "thin" },
+    };
+  });
+
+  const FOTO_COL = 3; // C
+  const PHOTO_HEIGHT_PT = 90; // ~ setara contoh template (row height 72-130pt)
+
+  for (let i = 0; i < woRows.length; i++) {
+    const wo = woRows[i];
+    const rowIndex = 4 + i;
+    const row = sheet.getRow(rowIndex);
+
+    const values = [
+      i + 1,
+      formatTanggalSingkat(wo.tgl || wo.createdAt),
+      "", // FOTO diisi via addImage, bukan value teks
+      wo.locationName,
+      wo.masalah || "-",
+      wo.indikasiPenyebab || "-",
+      wo.ket || "-",
+      wo.pelaksana || "-",
+      wo.pengawas || "-",
+      wo.status,
+    ];
+    values.forEach((v, idx) => {
+      const cell = row.getCell(idx + 1);
+      cell.value = v;
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: idx === 0 || idx === 1 || idx === 7 || idx === 8 ? "center" : "left",
+        wrapText: idx !== 0 && idx !== 1,
+      };
+      cell.border = {
+        top: { style: "thin" }, bottom: { style: "thin" },
+        left: { style: "thin" }, right: { style: "thin" },
+      };
+    });
+
+    row.height = includePhotos && wo.fotoUrl ? PHOTO_HEIGHT_PT : 30;
+
+    if (includePhotos && wo.fotoUrl) {
+      const img = await fetchImageForEmbed(wo.fotoUrl);
+      if (img) {
+        const imageId = workbook.addImage({ buffer: img.buffer as any, extension: img.extension });
+        // Ditempel MENGISI cell kolom FOTO (row & col 0-indexed utk exceljs)
+        sheet.addImage(imageId, {
+          tl: { col: FOTO_COL - 1 + 0.05, row: rowIndex - 1 + 0.05 },
+          ext: { width: 110, height: PHOTO_HEIGHT_PT * 1.33 }, // px, ~sesuai row height pt
+          editAs: "oneCell",
+        });
+      }
+    }
+  }
+}
+
+export async function exportOperationalExcel(
+  period: ResolvedPeriod,
+  data: OperationalExportData,
+  includePhotos: boolean = false
+) {
+  const ExcelJS = await import("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "INU Asset — Caya Darma";
+  workbook.created = new Date();
+
+  // --- Sheet Ringkasan ---
   const { summary } = data;
-  const ringkasanSheet = XLSX.utils.aoa_to_sheet([
-    ["Laporan Operasional"],
+  const ringkasanSheet = workbook.addWorksheet("Ringkasan");
+  ringkasanSheet.columns = [{ width: 28 }, { width: 20 }];
+  const ringkasanRows: [string, string | number][] = [
+    ["Laporan Operasional", ""],
     ["Periode", period.label],
-    [],
+    ["", ""],
     ["Availability (%)", summary?.availabilityAvgPct ?? 0],
     ["Total Work Order", summary?.totalWorkOrder ?? 0],
     ["Work Order Selesai", summary?.totalWorkOrderSelesai ?? 0],
     ["MTTR (jam)", summary?.mttrHours ?? 0],
     ["PM Completion Rate (%)", summary?.pmCompletionRatePct ?? 0],
-  ]);
-  XLSX.utils.book_append_sheet(wb, ringkasanSheet, "Ringkasan");
+  ];
+  ringkasanRows.forEach((r, idx) => {
+    const row = ringkasanSheet.addRow(r);
+    if (idx === 0) row.getCell(1).font = { bold: true, size: 13 };
+  });
 
-  const correctiveSheet = XLSX.utils.json_to_sheet(
-    (data.corrective?.detailRows || []).map((wo) => ({
-      "ID WO": wo.id,
-      Aset: wo.assetName,
-      Lokasi: wo.locationName,
-      Kejadian: wo.trouble || "-",
-      Status: wo.status,
-      "Biaya (Rp)": wo.actualCost || 0,
-    }))
-  );
-  XLSX.utils.book_append_sheet(wb, correctiveSheet, "Corrective Maintenance");
+  // --- Sheet(s) Work Order: 1 sheet per aset, format persis Excel WO perusahaan ---
+  const woRows = data.corrective?.detailRows || [];
+  const rowsByAsset = new Map<string, CorrectiveWorkOrderRow[]>();
+  woRows.forEach((wo) => {
+    const key = wo.assetName || wo.assetId;
+    if (!rowsByAsset.has(key)) rowsByAsset.set(key, []);
+    rowsByAsset.get(key)!.push(wo);
+  });
+  for (const [assetName, rowsForAsset] of rowsByAsset.entries()) {
+    // Urutkan lama -> baru dalam 1 aset, seperti histori berjalan di contoh template
+    const sorted = [...rowsForAsset].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+    await buildWorkOrderSheetForAsset(workbook, assetName, sorted, includePhotos);
+  }
+  if (rowsByAsset.size === 0) {
+    // Tidak ada WO pada periode ini — tetap sediakan 1 sheet kosong biar tidak membingungkan
+    const emptySheet = workbook.addWorksheet("Corrective Maintenance");
+    emptySheet.addRow(["Tidak ada Work Order pada periode ini."]);
+  }
 
-  const preventiveSheet = XLSX.utils.json_to_sheet(
-    (data.preventive?.detailRows || []).map((s) => ({
-      Tanggal: formatTanggalSingkat(s.scheduledDate),
-      Aset: s.assetName,
-      Lokasi: s.locationName,
-      Operator: s.operatorName || "-",
-      Status: s.displayStatus,
-    }))
-  );
-  XLSX.utils.book_append_sheet(wb, preventiveSheet, "Preventive Maintenance");
+  // --- Sheet Preventive Maintenance ---
+  const preventiveSheet = workbook.addWorksheet("Preventive Maintenance");
+  preventiveSheet.columns = [
+    { header: "Tanggal", key: "tanggal", width: 18 },
+    { header: "Aset", key: "aset", width: 24 },
+    { header: "Lokasi", key: "lokasi", width: 18 },
+    { header: "Operator", key: "operator", width: 18 },
+    { header: "Status", key: "status", width: 16 },
+  ];
+  preventiveSheet.getRow(1).font = { bold: true };
+  (data.preventive?.detailRows || []).forEach((s) => {
+    preventiveSheet.addRow({
+      tanggal: formatTanggalSingkat(s.scheduledDate),
+      aset: s.assetName,
+      lokasi: s.locationName,
+      operator: s.operatorName || "-",
+      status: s.displayStatus,
+    });
+  });
 
-  const bukuSakitSheet = XLSX.utils.json_to_sheet(
-    (data.bukuSakit?.detailRows || []).map((r) => ({
-      Tanggal: formatTanggalSingkat(r.createdAt),
-      Aset: r.assetName,
-      Lokasi: r.locationName,
-      Kejadian: r.issueTitle || "-",
-      Urgency: r.urgency || "-",
-    }))
-  );
-  XLSX.utils.book_append_sheet(wb, bukuSakitSheet, "Buku Sakit");
+  // --- Sheet Buku Sakit ---
+  const bukuSakitSheet = workbook.addWorksheet("Buku Sakit");
+  bukuSakitSheet.columns = [
+    { header: "Tanggal", key: "tanggal", width: 18 },
+    { header: "Aset", key: "aset", width: 24 },
+    { header: "Lokasi", key: "lokasi", width: 18 },
+    { header: "Kejadian", key: "kejadian", width: 30 },
+    { header: "Urgency", key: "urgency", width: 14 },
+  ];
+  bukuSakitSheet.getRow(1).font = { bold: true };
+  (data.bukuSakit?.detailRows || []).forEach((r) => {
+    bukuSakitSheet.addRow({
+      tanggal: formatTanggalSingkat(r.createdAt),
+      aset: r.assetName,
+      lokasi: r.locationName,
+      kejadian: r.issueTitle || "-",
+      urgency: r.urgency || "-",
+    });
+  });
 
-  XLSX.writeFile(wb, buildFileName("Operasional", period, "xlsx"));
+  const buf = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = buildFileName("Operasional", period, "xlsx");
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function exportFinancialExcel(period: ResolvedPeriod, data: FinancialReport) {

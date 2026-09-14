@@ -139,7 +139,7 @@ export function ReportTitle({ period }: { period: ResolvedPeriod }) {
 
 export function ReportSignature() {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", paddingTop: 24, marginTop: "auto" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", paddingTop: 12 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 60 }}>
         <p style={{ fontSize: 10, fontWeight: 700, margin: 0 }}>Disiapkan Oleh:</p>
         <div style={{ borderTop: "1px solid #0F172A", paddingTop: 4, width: 160 }}>
