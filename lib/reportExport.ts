@@ -18,6 +18,25 @@ import type {
 import type { FinancialReport } from "@/lib/reportFinance";
 import { COST_CATEGORIES } from "@/lib/costQueries";
 import type { ReportTemplateData } from "@/components/laporan/ReportTemplate";
+import { A4_WIDTH_MM, A4_HEIGHT_MM } from "@/components/laporan/ReportTemplate";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+
+// Menunggu semua <img> di dalam kertas laporan (mis. logo) selesai loading,
+// supaya tidak ke-capture blank saat html2canvas jalan lebih cepat dari loading gambar.
+async function waitForImagesLoaded(container: HTMLElement) {
+  const imgs = Array.from(container.querySelectorAll("img"));
+  await Promise.all(
+    imgs.map((img) =>
+      img.complete
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            img.addEventListener("load", () => resolve(), { once: true });
+            img.addEventListener("error", () => resolve(), { once: true });
+          })
+    )
+  );
+}
 
 // ============================================================
 // WRAPPER GABUNGAN (Langkah 6 — Step 6.1)
@@ -29,18 +48,45 @@ import type { ReportTemplateData } from "@/components/laporan/ReportTemplate";
 //   identik pixel-nya (bukan lagi 2 layout terpisah seperti sekarang).
 // - Step 6.3: ganti ke exceljs supaya bisa embed foto bukti WO per baris.
 // ============================================================
+// ============================================================
+// EXPORT PDF — Step 6.2 (REVISI: paginasi nyata per-halaman)
+//
+// Alur baru: bangun N kertas A4 terpisah (masing2 dg <ReportHeader/> sendiri,
+// tanpa baris tabel yg kepotong) lewat lib/reportPaginator.tsx, lalu
+// html2canvas SATU-SATU per halaman (bukan 1 screenshot raksasa yg dipotong
+// buta seperti sebelumnya). Ini menjawab 3 hal:
+// - Tabel >10 baris: tetap ditulis semua, tidak ada pagination browsing spt di /laporan.
+// - Laporan panjang: otomatis jadi N halaman A4.
+// - Header tiap halaman: SAMA, karena tiap halaman punya <ReportHeader/> sendiri.
+// ============================================================
 export async function exportReportPDF(data: ReportTemplateData) {
-  const { sections, period } = data;
-  if (sections.corrective || sections.preventive || sections.bukusakit || sections.ringkasan) {
-    await exportOperationalPDF(period, {
-      summary: sections.ringkasan ? data.summary : null,
-      corrective: sections.corrective ? data.corrective : null,
-      preventive: sections.preventive ? data.preventive : null,
-      bukuSakit: sections.bukusakit ? data.bukuSakit : null,
-    });
-  }
-  if (sections.keuangan && data.financial) {
-    await exportFinancialPDF(period, data.financial);
+  const { buildPaginatedReportDOM } = await import("@/lib/reportPaginator");
+  const { pageIds, cleanup } = await buildPaginatedReportDOM(data);
+
+  try {
+    const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+
+    for (let i = 0; i < pageIds.length; i++) {
+      const pageEl = document.getElementById(pageIds[i]);
+      if (!pageEl) continue;
+
+      await waitForImagesLoaded(pageEl);
+
+      const canvas = await html2canvas(pageEl, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+
+      const imgData = canvas.toDataURL("image/png", 1.0);
+      if (i > 0) pdf.addPage("a4", "portrait");
+      pdf.addImage(imgData, "PNG", 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+    }
+
+    const safeLabel = data.period.label.replace(/[^a-zA-Z0-9]+/g, "_");
+    pdf.save(`Laporan_INU_Asset_${safeLabel}.pdf`);
+  } finally {
+    cleanup();
   }
 }
 
