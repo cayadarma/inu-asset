@@ -93,6 +93,7 @@ function MaintenanceContent() {
         .from("assets")
         .select("id, name, type")
         .eq("location_id", formLocationId)
+        .eq("is_active", true)
         .order("name", { ascending: true });
       if (data) setAssetsByLocation(data);
     }

@@ -26,6 +26,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("Semua Tipe");
   const [filterStatus, setFilterStatus] = useState("Semua Status");
+  const [showInactive, setShowInactive] = useState(false);
   
   // --- STATE FORM ---
   const [newAsset, setNewAsset] = useState({
@@ -109,8 +110,9 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
     
     const matchesType = filterType === "Semua Tipe" || asset.type === filterType;
     const matchesStatus = filterStatus === "Semua Status" || asset.status === filterStatus;
+    const matchesActive = showInactive || asset.is_active !== false;
     
-    return matchesSearch && matchesType && matchesStatus;
+    return matchesSearch && matchesType && matchesStatus && matchesActive;
   });
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -221,6 +223,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       image_url: uploadedImageUrls[0] || "",
       image_urls: uploadedImageUrls,
       payment_proof_url: paymentProofUrl || null,
+      is_active: true,
     }]);
     
     if (error) alert("Gagal: " + error.message);
@@ -277,6 +280,11 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
           <option>Semua Status</option><option>Beroperasi</option><option>Idle</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
         </select>
+
+        <label className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] cursor-pointer select-none">
+          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="accent-[#0D9488] w-4 h-4" />
+          Tampilkan aset nonaktif
+        </label>
       </div>
 
       {/* Tabel Section */}
@@ -300,11 +308,11 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
               <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
                 {/* PERBAIKAN: Menggunakan filteredAssets, bukan assets */}
                 {filteredAssets.map((asset) => (
-                  <tr key={asset.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/30 transition-colors">
+                  <tr key={asset.id} className={`hover:bg-gray-50 dark:hover:bg-[#334155]/30 transition-colors ${asset.is_active === false ? "opacity-60" : ""}`}>
                     <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.id}</td>
                     <td className="px-6 py-5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{asset.name}</td>
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.type}</td>
-                    <td className="px-6 py-5 text-center"><Badge status={asset.status} /></td>
+                    <td className="px-6 py-5 text-center"><Badge status={asset.is_active === false ? "Nonaktif" : asset.status} /></td>
                     <td className="px-6 py-5 text-center">
                       <Link href={`/registrasi-aset/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] hover:text-primary transition-all">
                         <Eye size={18} />
@@ -347,7 +355,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                 )}
              </div>
 
-             <FormInput label="Spesifikasi" placeholder="Detail spek" value={newAsset.specification} onChange={(e: any) => setNewAsset({...newAsset, specification: e.target.value})} />
+             <FormInput label="Spesifikasi" placeholder="Detail spek" value={newAsset.specification} onChange={(e: any) => setNewAsset({...newAsset, specification: e.target.value})} multiline />
              <FormInput label="Tanggal Pembelian" type="date" value={newAsset.purchase_date} onChange={(e: any) => { setNewAsset({...newAsset, purchase_date: e.target.value}); setTempAge(calculateAge(e.target.value)); }} />
              <FormInput label="Umur Aset" value={tempAge} disabled />
              <FormInput label="Biaya Pembelian" type="number" placeholder="Contoh: 5000000" value={newAsset.purchase_cost} onChange={(e: any) => setNewAsset({...newAsset, purchase_cost: e.target.value})} />
@@ -408,18 +416,29 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   );
 }
 
-function FormInput({ label, placeholder, value, type = "text", disabled = false, onChange }: any) {
+function FormInput({ label, placeholder, value, type = "text", disabled = false, onChange, multiline = false }: any) {
   return (
     <div className="flex flex-col gap-2 text-left">
       <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{label}</label>
-      <input 
-        type={type} 
-        disabled={disabled} 
-        placeholder={placeholder} 
-        value={value}
-        onChange={onChange}
-        className={`w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary ${disabled ? 'bg-[#F8FAFC] dark:bg-[#0F172A] cursor-not-allowed' : 'bg-white dark:bg-[#1E293B] dark:text-white'}`} 
-      />
+      {multiline ? (
+        <textarea
+          disabled={disabled}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          rows={4}
+          className={`w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary resize-y ${disabled ? 'bg-[#F8FAFC] dark:bg-[#0F172A] cursor-not-allowed' : 'bg-white dark:bg-[#1E293B] dark:text-white'}`}
+        />
+      ) : (
+        <input 
+          type={type} 
+          disabled={disabled} 
+          placeholder={placeholder} 
+          value={value}
+          onChange={onChange}
+          className={`w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary ${disabled ? 'bg-[#F8FAFC] dark:bg-[#0F172A] cursor-not-allowed' : 'bg-white dark:bg-[#1E293B] dark:text-white'}`} 
+        />
+      )}
     </div>
   );
 }

@@ -12,16 +12,24 @@ export default function BukuSakitPage() {
     async function fetchLocations() {
       setIsLoading(true);
       const { data: locData } = await supabase.from("locations").select("*").order("name", { ascending: true });
-      const { data: assetData } = await supabase.from("assets").select("location_id, status");
+      const { data: assetData } = await supabase.from("assets").select("location_id, status, is_active");
       if (locData) {
         const enriched = locData.map((loc) => {
           const assetsInLoc = assetData?.filter((a) => a.location_id === loc.id) || [];
+          // PENTING: aset yang sudah dinonaktifkan (is_active === false) TIDAK dianggap
+          // beroperasi/idle/pemeliharaan/perbaikan/rusak lagi, berapa pun nilai `status`
+          // terakhirnya sebelum dinonaktifkan. Kategori operasional di bawah ini karena itu
+          // selalu mengecualikan aset nonaktif, supaya tidak salah hitung (mis. aset yang
+          // dinonaktifkan saat statusnya masih "Beroperasi" tidak ikut menaikkan angka aktif).
+          const activeAssets = assetsInLoc.filter((a) => a.is_active !== false);
           return {
             ...loc,
-            active: assetsInLoc.filter((a) => a.status === "Beroperasi").length,
-            maintenance: assetsInLoc.filter((a) => a.status === "Pemeliharaan").length,
-            repair: assetsInLoc.filter((a) => a.status === "Perbaikan").length,
-            broken: assetsInLoc.filter((a) => a.status === "Rusak").length,
+            active: activeAssets.filter((a) => a.status === "Beroperasi").length,
+            idle: activeAssets.filter((a) => a.status === "Idle").length,
+            maintenance: activeAssets.filter((a) => a.status === "Pemeliharaan").length,
+            repair: activeAssets.filter((a) => a.status === "Perbaikan").length,
+            broken: activeAssets.filter((a) => a.status === "Rusak").length,
+            nonaktif: assetsInLoc.filter((a) => a.is_active === false).length,
           };
         });
         setLocations(enriched);
@@ -46,8 +54,16 @@ export default function BukuSakitPage() {
               <div className="flex flex-col gap-3">
                 <h3 className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC] uppercase">{loc.name}</h3>
                 <div className="flex flex-wrap gap-x-8 gap-y-2">
-                   <div className="flex flex-col gap-1"><span className="px-3 py-0.5 bg-[#D1FAE5] text-[#065F46] text-[10px] font-bold rounded-full">{loc.active} aset beroperasi</span><span className="px-3 py-0.5 bg-[#FEF3C7] text-[#EF4444] text-[10px] font-bold rounded-full">{loc.repair} aset perbaikan</span></div>
-                   <div className="flex flex-col gap-1"><span className="px-3 py-0.5 bg-[#FFF7D6] text-[#E28E00] text-[10px] font-bold rounded-full">{loc.maintenance} aset pemeliharaan</span><span className="px-3 py-0.5 bg-[#FEE2E2] text-[#991B1B] text-[10px] font-bold rounded-full">{loc.broken} aset rusak</span></div>
+                   <div className="flex flex-col gap-1">
+                     <span className="px-3 py-0.5 bg-[#D1FAE5] text-[#065F46] text-[10px] font-bold rounded-full">{loc.active} aset beroperasi</span>
+                     <span className="px-3 py-0.5 bg-[#FEF3C7] text-[#EF4444] text-[10px] font-bold rounded-full">{loc.repair} aset perbaikan</span>
+                     <span className="px-3 py-0.5 bg-[#EDE9FE] text-[#6D28D9] text-[10px] font-bold rounded-full">{loc.idle} aset idle</span>
+                   </div>
+                   <div className="flex flex-col gap-1">
+                     <span className="px-3 py-0.5 bg-[#FFF7D6] text-[#E28E00] text-[10px] font-bold rounded-full">{loc.maintenance} aset pemeliharaan</span>
+                     <span className="px-3 py-0.5 bg-[#FEE2E2] text-[#991B1B] text-[10px] font-bold rounded-full">{loc.broken} aset rusak</span>
+                     <span className="px-3 py-0.5 bg-[#E2E8F0] text-[#475569] text-[10px] font-bold rounded-full">{loc.nonaktif} aset non-aktif</span>
+                   </div>
                 </div>
               </div>
             </div>

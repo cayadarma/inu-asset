@@ -17,6 +17,7 @@ export default function SemuaAsetPage() {
   const [filterType, setFilterType] = useState("Semua Tipe");
   const [filterStatus, setFilterStatus] = useState("Semua Status");
   const [filterLocation, setFilterLocation] = useState("Semua Lokasi");
+  const [showInactive, setShowInactive] = useState(false);
 
   const fetchAssets = async () => {
     setIsLoading(true);
@@ -51,8 +52,9 @@ export default function SemuaAsetPage() {
     const matchesType = filterType === "Semua Tipe" || asset.type === filterType;
     const matchesStatus = filterStatus === "Semua Status" || asset.status === filterStatus;
     const matchesLocation = filterLocation === "Semua Lokasi" || asset.locations?.id === filterLocation;
+    const matchesActive = showInactive || asset.is_active !== false;
 
-    return matchesSearch && matchesType && matchesStatus && matchesLocation;
+    return matchesSearch && matchesType && matchesStatus && matchesLocation && matchesActive;
   });
 
   return (
@@ -103,6 +105,11 @@ export default function SemuaAsetPage() {
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
           <option>Semua Status</option><option>Beroperasi</option><option>Idle</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
         </select>
+
+        <label className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] cursor-pointer select-none">
+          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="accent-[#0D9488] w-4 h-4" />
+          Tampilkan aset nonaktif
+        </label>
       </div>
 
       {/* Tabel Section */}
@@ -126,12 +133,12 @@ export default function SemuaAsetPage() {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
                 {filteredAssets.map((asset) => (
-                  <tr key={asset.id} className="hover:bg-gray-50 dark:hover:bg-[#334155]/30 transition-colors">
+                  <tr key={asset.id} className={`hover:bg-gray-50 dark:hover:bg-[#334155]/30 transition-colors ${asset.is_active === false ? "opacity-60" : ""}`}>
                     <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.id}</td>
                     <td className="px-6 py-5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{asset.name}</td>
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.type}</td>
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8] uppercase">{asset.locations?.name || "-"}</td>
-                    <td className="px-6 py-5 text-center"><Badge status={asset.status} /></td>
+                    <td className="px-6 py-5 text-center"><Badge status={asset.is_active === false ? "Nonaktif" : asset.status} /></td>
                     <td className="px-6 py-5 text-center">
                       <Link
                         href={`/registrasi-aset/${asset.location_id}/${asset.id}?name=${encodeURIComponent(asset.locations?.name || "")}&assetName=${encodeURIComponent(asset.name)}`}

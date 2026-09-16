@@ -2,7 +2,7 @@
 
 import React, { useState, use, useEffect, useRef } from "react";
 import { 
-  ChevronLeft, ChevronRight, Edit3, Trash2, Calendar, MapPin, Tag, 
+  ChevronLeft, ChevronRight, Edit3, PowerOff, Power, Trash2, Calendar, MapPin, Tag, 
   Image as LucideImage, ChevronDown, Wrench, AlertTriangle, X, Camera as CameraIcon 
 } from "lucide-react";
 import Link from "next/link";
@@ -11,11 +11,13 @@ import imageCompression from 'browser-image-compression';
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 
 export default function AssetDetailPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   
   const locationNameFromUrl = searchParams.get("name") || "";
   const locationName = locationNameFromUrl.toUpperCase() || slug.toUpperCase();
@@ -29,9 +31,16 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   
   // --- STATE MODAL & LIGHTBOX ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeactivateModalOpen, setIsDeactivateModalOpen] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState("");
+
+  // --- STATE HAPUS PERMANEN (khusus administrator, hanya untuk aset tanpa riwayat) ---
+  const [isPermaDeleteModalOpen, setIsPermaDeleteModalOpen] = useState(false);
+  const [isCheckingDeletable, setIsCheckingDeletable] = useState(false);
+  const [isDeletingPermanently, setIsDeletingPermanently] = useState(false);
+  const [permaDeleteConfirmInput, setPermaDeleteConfirmInput] = useState("");
 
   // --- STATE FORM EDIT & TIPE (SAMA SEPERTI TAMBAH ASET) ---
   const [editData, setEditField] = useState<any>({});
@@ -196,11 +205,94 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     setIsLoading(false);
   };
 
-  const handleDelete = async () => {
+  // --- NONAKTIFKAN ASET (soft-delete) ---
+  // Sengaja TIDAK menyentuh kolom `status` (Beroperasi/Rusak/Pemeliharaan/dst) sama sekali.
+  // `is_active` murni menandai apakah aset masih terdaftar/dipakai atau tidak, terpisah dari
+  // kondisi operasionalnya, supaya tidak bentrok dengan alur-alur lain yang otomatis mengubah
+  // `status` (mis. selesai Work Order -> "Beroperasi", lapor kerusakan -> "Rusak", dst).
+  const handleDeactivate = async () => {
     setIsLoading(true);
+    const { error } = await supabase.from("assets").update({ is_active: false }).eq("id", id);
+    if (error) {
+      alert("Gagal menonaktifkan aset: " + error.message);
+      setIsLoading(false);
+    } else {
+      setIsDeactivateModalOpen(false);
+      await fetchDetail();
+      setIsLoading(false);
+    }
+  };
+
+  // --- AKTIFKAN KEMBALI ASET ---
+  const handleReactivate = async () => {
+    setIsReactivating(true);
+    const { error } = await supabase.from("assets").update({ is_active: true }).eq("id", id);
+    if (error) alert("Gagal mengaktifkan kembali aset: " + error.message);
+    else await fetchDetail();
+    setIsReactivating(false);
+  };
+
+  // --- CEK RIWAYAT ASET ---
+  // Hapus permanen hanya boleh untuk aset yang BELUM PERNAH punya riwayat sama sekali
+  // (kandidat kuat: salah input / data dummy / percobaan). Kalau sudah ada satu saja
+  // riwayat WO, laporan kerusakan, atau jadwal pemeliharaan, aset dianggap "sudah pernah
+  // hidup" di sistem dan wajib pakai jalur Nonaktifkan supaya riwayatnya tidak hilang.
+  const checkAssetHistoryCounts = async () => {
+    const [woRes, drRes, msRes] = await Promise.all([
+      supabase.from("work_orders").select("id", { count: "exact", head: true }).eq("asset_id", id),
+      supabase.from("damage_reports").select("id", { count: "exact", head: true }).eq("asset_id", id),
+      supabase.from("maintenance_schedules").select("id", { count: "exact", head: true }).eq("asset_id", id),
+    ]);
+    return {
+      workOrders: woRes.count || 0,
+      damageReports: drRes.count || 0,
+      maintenanceSchedules: msRes.count || 0,
+    };
+  };
+
+  // --- BUKA MODAL HAPUS PERMANEN (setelah lolos cek riwayat) ---
+  const handleOpenPermaDelete = async () => {
+    setIsCheckingDeletable(true);
+    const counts = await checkAssetHistoryCounts();
+    setIsCheckingDeletable(false);
+
+    const totalHistory = counts.workOrders + counts.damageReports + counts.maintenanceSchedules;
+    if (totalHistory > 0) {
+      alert(
+        `Aset ini tidak bisa dihapus permanen karena sudah punya riwayat: ` +
+        `${counts.workOrders} Work Order, ${counts.damageReports} laporan kerusakan, ` +
+        `${counts.maintenanceSchedules} jadwal pemeliharaan.\n\n` +
+        `Untuk aset yang sudah pernah dipakai, gunakan "Nonaktifkan" saja supaya riwayatnya tetap tersimpan.`
+      );
+      return;
+    }
+    setPermaDeleteConfirmInput("");
+    setIsPermaDeleteModalOpen(true);
+  };
+
+  // --- EKSEKUSI HAPUS PERMANEN ---
+  const handlePermanentDelete = async () => {
+    if (permaDeleteConfirmInput.trim() !== asset.id) return;
+    setIsDeletingPermanently(true);
+
+    // Cek ulang riwayat (jaga-jaga ada race condition: mis. laporan kerusakan baru masuk
+    // tepat di antara buka modal ini dan klik hapus).
+    const counts = await checkAssetHistoryCounts();
+    const totalHistory = counts.workOrders + counts.damageReports + counts.maintenanceSchedules;
+    if (totalHistory > 0) {
+      alert("Aset ini ternyata sudah punya riwayat baru sejak modal ini dibuka, jadi tidak jadi dihapus. Silakan refresh halaman.");
+      setIsDeletingPermanently(false);
+      setIsPermaDeleteModalOpen(false);
+      return;
+    }
+
     const { error } = await supabase.from("assets").delete().eq("id", id);
-    if (error) alert("Gagal hapus: " + error.message);
-    else router.push(`/registrasi-aset/${slug}?name=${locationNameFromUrl}`);
+    if (error) {
+      alert("Gagal menghapus aset: " + error.message);
+      setIsDeletingPermanently(false);
+    } else {
+      router.push(`/registrasi-aset/${slug}?name=${locationNameFromUrl}`);
+    }
   };
 
   const calculateAge = (dateString: string) => {
@@ -284,16 +376,32 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
             })()}
             <div className="mt-4 flex justify-between items-center px-2">
               <span className="text-sm font-bold text-[#475569] dark:text-[#94A3B8]">Status Sekarang:</span>
-              <Badge status={asset.status} />
+              <Badge status={asset.is_active === false ? "Nonaktif" : asset.status} />
             </div>
           </div>
+
+          {asset.is_active === false && (
+            <div className="flex items-start gap-3 p-4 bg-[#F1F5F9] dark:bg-[#0F172A] rounded-2xl border border-gray-200 dark:border-[#334155]">
+              <AlertTriangle size={16} className="text-[#94A3B8] mt-0.5 flex-shrink-0" />
+              <p className="text-[12px] text-[#475569] dark:text-[#94A3B8] font-medium leading-relaxed">
+                Aset ini sudah dinonaktifkan. Aset tidak akan muncul di daftar/dropdown pemilihan aset untuk Work Order, jadwal pemeliharaan, atau lapor kerusakan baru, tapi seluruh riwayatnya tetap tersimpan.
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button onClick={() => setIsEditModalOpen(true)} className="flex-1 flex items-center justify-center gap-2 bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">
                <Edit3 size={18} /> Edit
             </button>
-            <button onClick={() => setIsDeleteModalOpen(true)} className="flex-1 flex items-center justify-center gap-2 bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md">
-               <Trash2 size={18} /> Hapus
-            </button>
+            {asset.is_active === false ? (
+              <button onClick={handleReactivate} disabled={isReactivating} className="flex-1 flex items-center justify-center gap-2 bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all disabled:opacity-50">
+                 <Power size={18} /> {isReactivating ? "Memproses..." : "Aktifkan Kembali"}
+              </button>
+            ) : (
+              <button onClick={() => setIsDeactivateModalOpen(true)} className="flex-1 flex items-center justify-center gap-2 bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md">
+                 <PowerOff size={18} /> Nonaktifkan
+              </button>
+            )}
           </div>
         </div>
 
@@ -379,7 +487,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                 )}
              </div>
 
-             <EditField label="Spesifikasi" val={editData.specification} onChange={(e:any) => setEditField({...editData, specification: e.target.value})} />
+             <EditField label="Spesifikasi" val={editData.specification} onChange={(e:any) => setEditField({...editData, specification: e.target.value})} multiline />
              <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Status</label>
                 <select value={editData.status} onChange={(e) => setEditField({...editData, status: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white font-poppins">
@@ -426,17 +534,74 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                 <button type="button" onClick={() => { setIsEditModalOpen(false); resetEditPhotoState(); setIsNewTypeEdit(false); }} className="w-full py-3.5 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
              </div>
           </div>
+
+          {/* ZONA BERBAHAYA — khusus administrator. Sengaja dipisah jauh dari tombol
+              Simpan/Batal (di kolom lain, di baris paling bawah) supaya tidak ada risiko
+              salah klik untuk aksi yang sifatnya permanen/tidak bisa dibatalkan. */}
+          {user?.role === "administrator" && (
+            <div className="lg:col-span-3 mt-2 p-5 rounded-2xl border-2 border-dashed border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-black uppercase tracking-wider text-red-600">Zona Berbahaya</span>
+                <p className="text-xs text-[#94A3B8] max-w-md">
+                  Khusus untuk data yang salah input atau data percobaan (dummy) yang belum pernah dipakai sama sekali.
+                  Kalau aset ini sudah pernah punya Work Order, laporan kerusakan, atau jadwal pemeliharaan, gunakan tombol
+                  "Nonaktifkan" saja — aksi ini tidak akan berhasil kalau riwayatnya sudah ada.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenPermaDelete}
+                disabled={isCheckingDeletable}
+                className="flex-shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 border-2 border-red-500 text-red-600 dark:text-red-400 rounded-xl font-bold text-sm hover:bg-red-500 hover:text-white transition-all disabled:opacity-50"
+              >
+                <Trash2 size={16} /> {isCheckingDeletable ? "Memeriksa riwayat..." : "Hapus Permanen"}
+              </button>
+            </div>
+          )}
         </form>
       </Modal>
 
-      {/* MODAL KONFIRMASI HAPUS */}
-      <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Konfirmasi Hapus">
+      {/* MODAL KONFIRMASI HAPUS PERMANEN — hanya bisa dilanjutkan kalau kode aset diketik ulang persis */}
+      <Modal isOpen={isPermaDeleteModalOpen} onClose={() => setIsPermaDeleteModalOpen(false)} title="Konfirmasi Hapus Permanen">
         <div className="flex flex-col items-center text-center gap-6 py-4">
-           <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center"><AlertTriangle size={32} /></div>
-           <p className="dark:text-white font-poppins text-lg">Yakin hapus permanen <span className="font-bold text-red-600">{asset.name}</span>?</p>
+           <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center"><Trash2 size={32} /></div>
+           <p className="dark:text-white font-poppins text-lg">
+             Aset <span className="font-bold text-red-600">{asset.name}</span> ({asset.id}) akan dihapus permanen.
+           </p>
+           <p className="text-sm text-[#94A3B8] -mt-4">
+             Aksi ini <span className="font-bold text-red-500">tidak bisa dibatalkan</span> dan tidak menyisakan jejak apa pun. Aset ini sudah dipastikan belum punya riwayat WO/kerusakan/pemeliharaan. Ketik ulang kode aset <span className="font-mono font-bold">{asset.id}</span> di bawah untuk melanjutkan.
+           </p>
+           <input
+             type="text"
+             value={permaDeleteConfirmInput}
+             onChange={(e) => setPermaDeleteConfirmInput(e.target.value)}
+             placeholder={`Ketik "${asset.id}" untuk konfirmasi`}
+             className="w-full px-4 py-3 border-2 border-gray-200 dark:border-[#334155] rounded-xl text-sm text-center font-mono font-bold outline-none focus:border-red-500 bg-white dark:bg-[#1E293B] dark:text-white"
+           />
            <div className="flex gap-4 w-full">
-              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
-              <button onClick={handleDelete} className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold shadow-md">Ya, Hapus</button>
+              <button onClick={() => setIsPermaDeleteModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
+              <button
+                onClick={handlePermanentDelete}
+                disabled={isDeletingPermanently || permaDeleteConfirmInput.trim() !== asset.id}
+                className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isDeletingPermanently ? "Menghapus..." : "Ya, Hapus Permanen"}
+              </button>
+           </div>
+        </div>
+      </Modal>
+
+      {/* MODAL KONFIRMASI NONAKTIFKAN */}
+      <Modal isOpen={isDeactivateModalOpen} onClose={() => setIsDeactivateModalOpen(false)} title="Konfirmasi Nonaktifkan Aset">
+        <div className="flex flex-col items-center text-center gap-6 py-4">
+           <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center"><PowerOff size={32} /></div>
+           <p className="dark:text-white font-poppins text-lg">Yakin nonaktifkan <span className="font-bold text-red-600">{asset.name}</span>?</p>
+           <p className="text-sm text-[#94A3B8] -mt-4">
+             Aset tidak akan dihapus. Seluruh riwayat pemeliharaan, kerusakan, dan biaya tetap tersimpan. Aset hanya akan disembunyikan dari daftar aktif dan dropdown pemilihan aset baru. Kamu bisa mengaktifkannya kembali kapan saja.
+           </p>
+           <div className="flex gap-4 w-full">
+              <button onClick={() => setIsDeactivateModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
+              <button onClick={handleDeactivate} disabled={isLoading} className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold shadow-md disabled:opacity-50">{isLoading ? "Memproses..." : "Ya, Nonaktifkan"}</button>
            </div>
         </div>
       </Modal>
@@ -456,16 +621,26 @@ function DetailItem({ label, val }: any) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-[11px] font-bold text-[#94A3B8] uppercase tracking-wider">{label}</span>
-      <span className="text-[15px] font-bold text-[#0F172A] dark:text-[#F8FAFC]">{val || "-"}</span>
+      <span className="text-[15px] font-bold text-[#0F172A] dark:text-[#F8FAFC] whitespace-pre-line">{val || "-"}</span>
     </div>
   );
 }
 
-function EditField({ label, val, onChange, type = "text", disabled = false }: any) {
+function EditField({ label, val, onChange, type = "text", disabled = false, multiline = false }: any) {
   return (
     <div className="flex flex-col gap-2 text-left">
       <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{label}</label>
-      <input type={type} defaultValue={val} onChange={onChange} disabled={disabled} className={`w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary transition-all ${disabled ? 'bg-[#F8FAFC] dark:bg-[#0F172A] text-[#94A3B8]' : 'bg-white dark:bg-[#1E293B] font-bold text-[#0F172A] dark:text-[#F8FAFC]'}`} />
+      {multiline ? (
+        <textarea
+          defaultValue={val}
+          onChange={onChange}
+          disabled={disabled}
+          rows={4}
+          className={`w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary transition-all resize-y ${disabled ? 'bg-[#F8FAFC] dark:bg-[#0F172A] text-[#94A3B8]' : 'bg-white dark:bg-[#1E293B] font-bold text-[#0F172A] dark:text-[#F8FAFC]'}`}
+        />
+      ) : (
+        <input type={type} defaultValue={val} onChange={onChange} disabled={disabled} className={`w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary transition-all ${disabled ? 'bg-[#F8FAFC] dark:bg-[#0F172A] text-[#94A3B8]' : 'bg-white dark:bg-[#1E293B] font-bold text-[#0F172A] dark:text-[#F8FAFC]'}`} />
+      )}
     </div>
   );
 }

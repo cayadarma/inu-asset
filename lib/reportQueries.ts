@@ -238,7 +238,7 @@ export async function fetchCorrectiveMaintenanceReport(period: ResolvedPeriod): 
   // WO yang DIBUAT pada rentang periode ini (cakupan section = aktivitas korektif periode berjalan)
   const { data: woData } = await supabase
     .from("work_orders")
-    .select("id, tgl, asset_id, trouble, tech_name, supervisor, tindak_lanjut, status, actual_cost, created_at, completed_at, assets(name, locations(name))")
+    .select("id, tgl, asset_id, damage_report_id, trouble, tech_name, supervisor, tindak_lanjut, status, actual_cost, created_at, completed_at, assets(name, locations(name))")
     .gte("created_at", fromTs)
     .lte("created_at", toTs)
     .order("created_at", { ascending: false });
@@ -302,18 +302,33 @@ export async function fetchCorrectiveMaintenanceReport(period: ResolvedPeriod): 
   // --- Tabel detail WO ---
   // Sumber "Masalah" & "Indikasi Penyebab" = Buku Sakit (damage_reports), bukan
   // field work_orders — per keputusan ayaa (form WO masih akan direvisi).
-  // Karena work_orders belum punya FK ke damage_reports, dicocokkan manual:
-  // untuk tiap WO, ambil damage_reports milik aset yang sama dengan created_at
-  // TERDEKAT (dan tidak lebih baru dari WO-nya sendiri, toleransi beberapa menit
-  // ke depan utk jaga2 selisih waktu insert emergency flow).
-  const assetIds = Array.from(new Set(rows.map((wo: any) => wo.asset_id)));
+  //
+  // Sejak work_orders punya kolom damage_report_id (FK langsung ke damage_reports),
+  // pencocokan WO <-> laporan kerusakan dilakukan lewat FK ini — akurat 100%, tidak lagi
+  // menebak berdasarkan kedekatan waktu. Heuristik waktu di bawah HANYA dipakai sebagai
+  // fallback untuk WO lama yang dibuat sebelum kolom damage_report_id ada (nilainya null).
   const woIds = rows.map((wo: any) => wo.id);
+  const directReportIds = Array.from(
+    new Set(rows.map((wo: any) => wo.damage_report_id).filter((v: any): v is string => !!v))
+  );
+  const assetIdsForFallback = Array.from(
+    new Set(rows.filter((wo: any) => !wo.damage_report_id).map((wo: any) => wo.asset_id))
+  );
 
-  const { data: relatedDamageReports } = assetIds.length
+  const { data: directDamageReports } = directReportIds.length
+    ? await supabase
+        .from("damage_reports")
+        .select("id, issue_title, description")
+        .in("id", directReportIds)
+    : { data: [] as any[] };
+  const damageReportById = new Map<string, { issue_title: string | null; description: string | null }>();
+  (directDamageReports || []).forEach((d: any) => damageReportById.set(d.id, d));
+
+  const { data: fallbackDamageReports } = assetIdsForFallback.length
     ? await supabase
         .from("damage_reports")
         .select("asset_id, issue_title, description, created_at")
-        .in("asset_id", assetIds)
+        .in("asset_id", assetIdsForFallback)
         .order("created_at", { ascending: false })
     : { data: [] as any[] };
 
@@ -334,13 +349,19 @@ export async function fetchCorrectiveMaintenanceReport(period: ResolvedPeriod): 
     }
   });
 
-  const TOLERANSI_MS = 30 * 60 * 1000; // 30 menit toleransi laporan dibuat sedikit setelah WO (alur emergency)
+  const TOLERANSI_MS = 30 * 60 * 1000; // 30 menit toleransi laporan dibuat sedikit setelah WO (alur emergency, khusus fallback)
 
   const detailRows: CorrectiveWorkOrderRow[] = rows.map((wo: any) => {
-    const woCreatedMs = new Date(wo.created_at).getTime();
-    const candidate = (relatedDamageReports || [])
-      .filter((d: any) => d.asset_id === wo.asset_id)
-      .find((d: any) => new Date(d.created_at).getTime() <= woCreatedMs + TOLERANSI_MS);
+    let matched: { issue_title: string | null; description: string | null } | null | undefined =
+      wo.damage_report_id ? damageReportById.get(wo.damage_report_id) : null;
+
+    // Fallback heuristik waktu — hanya jalan untuk WO lama tanpa damage_report_id
+    if (!matched && !wo.damage_report_id) {
+      const woCreatedMs = new Date(wo.created_at).getTime();
+      matched = (fallbackDamageReports || [])
+        .filter((d: any) => d.asset_id === wo.asset_id)
+        .find((d: any) => new Date(d.created_at).getTime() <= woCreatedMs + TOLERANSI_MS);
+    }
 
     return {
       id: wo.id,
@@ -353,8 +374,8 @@ export async function fetchCorrectiveMaintenanceReport(period: ResolvedPeriod): 
       createdAt: wo.created_at,
       completedAt: wo.completed_at,
       actualCost: wo.actual_cost,
-      masalah: candidate?.issue_title ?? wo.trouble ?? null,
-      indikasiPenyebab: candidate?.description ?? null,
+      masalah: matched?.issue_title ?? wo.trouble ?? null,
+      indikasiPenyebab: matched?.description ?? null,
       pelaksana: wo.tech_name ?? null,
       pengawas: wo.supervisor ?? null,
       ket: wo.tindak_lanjut ?? null,
@@ -499,15 +520,21 @@ export async function fetchBukuSakitReport(period: ResolvedPeriod): Promise<Buku
   // --- Ambil semua WO untuk aset-aset yang muncul di rows, buat pencarian pasangan WO nya ---
   const assetIds = Array.from(new Set(rows.map((r: any) => r.asset_id)));
   let workOrdersByAsset = new Map<string, { created_at: string; completed_at: string | null }[]>();
+  let workOrderByReportId = new Map<string, { completed_at: string | null }>();
 
   if (assetIds.length > 0) {
     const { data: woData } = await supabase
       .from("work_orders")
-      .select("asset_id, created_at, completed_at")
+      .select("asset_id, damage_report_id, created_at, completed_at")
       .in("asset_id", assetIds)
       .order("created_at", { ascending: true });
 
     (woData || []).forEach((wo: any) => {
+      // Pencocokan utama: lewat FK damage_report_id (akurat, tidak menebak)
+      if (wo.damage_report_id) {
+        workOrderByReportId.set(wo.damage_report_id, { completed_at: wo.completed_at });
+      }
+      // Tetap kumpulkan per aset untuk fallback heuristik waktu (WO lama tanpa FK ini)
       const list = workOrdersByAsset.get(wo.asset_id) || [];
       list.push({ created_at: wo.created_at, completed_at: wo.completed_at });
       workOrdersByAsset.set(wo.asset_id, list);
@@ -515,25 +542,39 @@ export async function fetchBukuSakitReport(period: ResolvedPeriod): Promise<Buku
   }
 
   const detailRows: BukuSakitRow[] = rows.map((r: any) => {
-    const reportTime = new Date(r.created_at).getTime();
-    const candidates = workOrdersByAsset.get(r.asset_id) || [];
-
-    // Cari WO yang dibuat pada/setelah laporan, paling dekat waktunya, dalam batas toleransi
-    let bestMatch: { created_at: string; completed_at: string | null } | null = null;
-    let bestDiff = Infinity;
-    candidates.forEach((wo) => {
-      const woTime = new Date(wo.created_at).getTime();
-      const diff = woTime - reportTime;
-      if (diff >= 0 && diff <= WO_MATCH_TOLERANCE_MS && diff < bestDiff) {
-        bestDiff = diff;
-        bestMatch = wo;
-      }
-    });
+    // Pencocokan utama: WO yang benar-benar diterbitkan dari laporan ini (via FK)
+    const directMatch = workOrderByReportId.get(r.id);
 
     let estimatedDurationHours: number | null = null;
-    if (bestMatch && (bestMatch as any).completed_at) {
-      const completedTime = new Date((bestMatch as any).completed_at as string).getTime();
-      estimatedDurationHours = (completedTime - reportTime) / (1000 * 60 * 60);
+
+    if (directMatch) {
+      if (directMatch.completed_at) {
+        const reportTime = new Date(r.created_at).getTime();
+        const completedTime = new Date(directMatch.completed_at).getTime();
+        estimatedDurationHours = (completedTime - reportTime) / (1000 * 60 * 60);
+      }
+      // Kalau directMatch ada tapi belum completed_at, berarti WO-nya masih berjalan -> tetap null (belum selesai)
+    } else {
+      // Fallback heuristik waktu — hanya relevan untuk laporan lama yang WO-nya
+      // dibuat sebelum kolom damage_report_id ada, sehingga tidak punya pasangan FK.
+      const reportTime = new Date(r.created_at).getTime();
+      const candidates = workOrdersByAsset.get(r.asset_id) || [];
+
+      let bestMatch: { created_at: string; completed_at: string | null } | null = null;
+      let bestDiff = Infinity;
+      candidates.forEach((wo) => {
+        const woTime = new Date(wo.created_at).getTime();
+        const diff = woTime - reportTime;
+        if (diff >= 0 && diff <= WO_MATCH_TOLERANCE_MS && diff < bestDiff) {
+          bestDiff = diff;
+          bestMatch = wo;
+        }
+      });
+
+      if (bestMatch && (bestMatch as any).completed_at) {
+        const completedTime = new Date((bestMatch as any).completed_at as string).getTime();
+        estimatedDurationHours = (completedTime - reportTime) / (1000 * 60 * 60);
+      }
     }
 
     return {

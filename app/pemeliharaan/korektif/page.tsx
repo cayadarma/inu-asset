@@ -42,7 +42,8 @@ function CorrectiveContent() {
     priority: "TINGGI",
     costPart: 0,
     costService: 0,
-    tindak_lanjut: ""
+    tindak_lanjut: "",
+    damage_report_id: "" as string | null, // diisi otomatis kalau WO ini diterbitkan dari sebuah laporan kerusakan
   });
 
   // --- STATE FORM PERBAIKAN MENDADAK (TANPA WORK ORDER FORMAL DI AWAL) ---
@@ -151,7 +152,7 @@ function CorrectiveContent() {
   const fetchData = async () => {
     setIsLoading(true);
     const { data: woData } = await supabase.from("work_orders").select(`*, assets(name, type, location_id, locations(name))`).order("created_at", { ascending: false });
-    const { data: assetData } = await supabase.from("assets").select("id, name, type");
+    const { data: assetData } = await supabase.from("assets").select("id, name, type").eq("is_active", true);
     const { data: locationData } = await supabase.from("locations").select("id, name").order("name", { ascending: true });
 
     if (woData) setWorkOrders(woData);
@@ -169,6 +170,7 @@ function CorrectiveContent() {
         ...prev, 
         asset_id: searchParams.get("assetId") || "", 
         trouble: searchParams.get("problem") || "",
+        damage_report_id: searchParams.get("reportId") || null,
         id: `WO-${Date.now().toString().slice(-4)}`
       }));
     }
@@ -198,6 +200,7 @@ function CorrectiveContent() {
       cost_part: formData.costPart,
       cost_service: formData.costService,
       tindak_lanjut: formData.tindak_lanjut,
+      damage_report_id: formData.damage_report_id || null,
       status: "Dalam Proses"
     }]);
 
@@ -289,7 +292,7 @@ function CorrectiveContent() {
           <button onClick={() => setIsEmergencyModalOpen(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#EF4444] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
             <Zap size={18} /> Perbaikan Mendadak
           </button>
-          <button onClick={() => setIsAddModalOpen(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
+          <button onClick={() => { setFormData(prev => ({ ...prev, id: `WO-${Date.now().toString().slice(-4)}`, asset_id: "", trouble: "", damage_report_id: null })); setIsAddModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
             <Plus size={18} /> Buat Work Order
           </button>
         </div>

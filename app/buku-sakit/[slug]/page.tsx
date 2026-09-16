@@ -187,12 +187,12 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
                 {filteredAssets.map((asset) => (
-                  <tr key={asset.id} className="hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-colors">
+                  <tr key={asset.id} className={`hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-colors ${asset.is_active === false ? "opacity-60" : ""}`}>
                     <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.id}</td>
                     <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.name}</td>
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.type}</td>
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.specification}</td>
-                    <td className="px-6 py-5 text-center"><Badge status={asset.status} /></td>
+                    <td className="px-6 py-5 text-center"><Badge status={asset.is_active === false ? "Nonaktif" : asset.status} /></td>
                     <td className="px-6 py-5 text-center">
                       <Link href={`/buku-sakit/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all"><Eye size={20} /></Link>
                     </td>
@@ -214,7 +214,7 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
                 <label className="text-sm font-bold text-[#0F172A] dark:text-white">Pilih Aset</label>
                 <select required value={reportData.asset_id} onChange={(e) => setReportData({...reportData, asset_id: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white">
                   <option value="">-- Pilih Aset --</option>
-                  {assets.map(a => <option key={a.id} value={a.id}>{a.id} - {a.name}</option>)}
+                  {assets.filter(a => a.is_active !== false).map(a => <option key={a.id} value={a.id}>{a.id} - {a.name}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-2">

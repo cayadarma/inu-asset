@@ -23,6 +23,8 @@ export default function Home() {
   // 2. Perbaikan State (Menambahkan active, maintenance, dan broken)
   const [counts, setCounts] = useState({
     total: 0,
+    totalAset: 0,
+    nonaktif: 0,
     active: 0,
     idle: 0,
     maintenance: 0,
@@ -44,17 +46,34 @@ export default function Home() {
 
   useEffect(() => {
     async function getStats() {
-      const { data } = await supabase.from("assets").select("status, purchase_date");
+      const { data } = await supabase.from("assets").select("status, purchase_date, is_active");
       if (!data) return;
 
-      const total = data.length;
-      const active = data.filter((a) => a.status === "Beroperasi").length;
-      const idle = data.filter((a) => a.status === "Idle").length;
-      const maintenance = data.filter((a) => a.status === "Pemeliharaan").length;
-      const perbaikan = data.filter((a) => a.status === "Perbaikan").length;
-      const rusak = data.filter((a) => a.status === "Rusak").length;
+      // PENTING: aset yang sudah dinonaktifkan (is_active === false) dikeluarkan dari
+      // perhitungan status & availability. Aset nonaktif dianggap tidak beroperasi dan tidak
+      // termasuk kategori apa pun (Beroperasi/Idle/Pemeliharaan/Perbaikan/Rusak), berapa pun
+      // nilai `status` terakhirnya sebelum dinonaktifkan.
+      //
+      // TAPI aset nonaktif tetap milik perusahaan — jadi "Total Seluruh Aset" (totalAset)
+      // sengaja TIDAK mengecualikan aset nonaktif, berbeda dengan `total` di bawah yang
+      // khusus jadi denominator availability (sengaja eksklusif, karena availability menjawab
+      // "dari aset yang seharusnya beroperasi, berapa persen yang tersedia").
+      const totalAset = data.length;
+      const nonaktifCount = data.filter((a) => a.is_active === false).length;
+
+      const operationalAssets = data.filter((a) => a.is_active !== false);
+
+      const total = operationalAssets.length;
+      const active = operationalAssets.filter((a) => a.status === "Beroperasi").length;
+      const idle = operationalAssets.filter((a) => a.status === "Idle").length;
+      const maintenance = operationalAssets.filter((a) => a.status === "Pemeliharaan").length;
+      const perbaikan = operationalAssets.filter((a) => a.status === "Perbaikan").length;
+      const rusak = operationalAssets.filter((a) => a.status === "Rusak").length;
 
       // --- AKUMULASI PENAMBAHAN ASET (BERDASARKAN TANGGAL PEMBELIAN, BUKAN TANGGAL INPUT) ---
+      // Catatan: akumulasi ini SENGAJA tetap memakai seluruh data (termasuk aset nonaktif),
+      // karena ini menghitung riwayat penambahan aset dari waktu ke waktu, bukan status
+      // operasional saat ini — aset yang dinonaktifkan tetap pernah dibeli pada tanggal itu.
       const now = new Date();
       const thisYear = now.getFullYear();
       const thisMonth = now.getMonth();
@@ -72,6 +91,8 @@ export default function Home() {
       setCounts((prev) => ({
         ...prev,
         total,
+        totalAset,
+        nonaktif: nonaktifCount,
         active,
         idle,
         maintenance,
@@ -213,7 +234,7 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <StatCard
             title="Total Seluruh Aset"
-            value={counts.total.toLocaleString()}
+            value={counts.totalAset.toLocaleString()}
             description={`Unit aset yang terdaftar di sistem (per ${new Date().getFullYear()})`}
             icon={<Box size={20} />}
             href="/registrasi-aset/semua"
@@ -221,6 +242,9 @@ export default function Home() {
               <div className="flex flex-col gap-0.5 text-[11px] font-bold">
                 <span className="text-[#0D9488]">+{counts.addedThisYear} aset baru tahun ini</span>
                 <span className="text-[#94A3B8]">+{counts.addedThisMonth} aset baru bulan ini</span>
+                {counts.nonaktif > 0 && (
+                  <span className="text-[#94A3B8]">(termasuk {counts.nonaktif} nonaktif)</span>
+                )}
               </div>
             }
           />

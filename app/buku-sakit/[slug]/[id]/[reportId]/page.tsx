@@ -10,6 +10,7 @@ import {
   Box, 
   X, 
   ArrowRight, 
+  Eye,
   Info 
 } from "lucide-react";
 import Link from "next/link";
@@ -23,6 +24,7 @@ export default function FinalReportDetailPage({ params }: { params: Promise<{ sl
   
   // State Data
   const [report, setReport] = useState<any>(null);
+  const [existingWorkOrder, setExistingWorkOrder] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
@@ -40,6 +42,16 @@ export default function FinalReportDetailPage({ params }: { params: Promise<{ sl
         .maybeSingle();
 
       if (data) setReport(data);
+
+      // Cek langsung via FK damage_report_id — pasti akurat, tidak lagi menebak
+      // berdasarkan kedekatan waktu seperti pencocokan manual di reportQueries.ts
+      const { data: woData } = await supabase
+        .from("work_orders")
+        .select("id, status")
+        .eq("damage_report_id", reportId)
+        .maybeSingle();
+
+      setExistingWorkOrder(woData || null);
       setIsLoading(false);
     }
     fetchSingleReport();
@@ -163,10 +175,17 @@ export default function FinalReportDetailPage({ params }: { params: Promise<{ sl
 
         {/* 4. FOOTER ACTION */}
         <div className="p-8 md:p-10 border-t border-gray-100 dark:border-[#334155] bg-white dark:bg-[#1E293B] flex justify-end">
-            <Link href={`/pemeliharaan/korektif?openModal=true&assetId=${report.asset_id}&assetName=${encodeURIComponent(report.assets?.name)}&problem=${encodeURIComponent(report.issue_title)}`}
-            className="group flex items-center gap-4 px-10 py-4 bg-[#0D9488] text-white rounded-2xl font-bold text-sm shadow-xl hover:bg-teal-700 active:scale-95 transition-all">
-            Terbitkan Work Order <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
-            </Link>
+            {existingWorkOrder ? (
+              <Link href={`/pemeliharaan/korektif/${existingWorkOrder.id}`}
+              className="group flex items-center gap-4 px-10 py-4 bg-[#0F172A] dark:bg-[#334155] text-white rounded-2xl font-bold text-sm shadow-xl hover:bg-[#1E293B] active:scale-95 transition-all">
+              <Eye size={20} /> Lihat Work Order
+              </Link>
+            ) : (
+              <Link href={`/pemeliharaan/korektif?openModal=true&assetId=${report.asset_id}&assetName=${encodeURIComponent(report.assets?.name)}&problem=${encodeURIComponent(report.issue_title)}&reportId=${reportId}`}
+              className="group flex items-center gap-4 px-10 py-4 bg-[#0D9488] text-white rounded-2xl font-bold text-sm shadow-xl hover:bg-teal-700 active:scale-95 transition-all">
+              Terbitkan Work Order <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+              </Link>
+            )}
         </div>
       </div>
 
