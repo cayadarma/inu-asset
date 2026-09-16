@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
+import { CHECKLIST_CATEGORY_OPTIONS, ChecklistCategoryOption } from "@/constants/checklistTemplates";
 
 export default function AssetListPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
@@ -30,7 +31,8 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   
   // --- STATE FORM ---
   const [newAsset, setNewAsset] = useState({
-    id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: ""
+    id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "",
+    checklist_category: "", checklist_pengawas: ""
   });
   const [isNewType, setIsNewType] = useState(false);
 
@@ -219,6 +221,8 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
     const { error } = await supabase.from("assets").insert([{
       ...newAsset,
       purchase_cost: newAsset.purchase_cost ? Number(newAsset.purchase_cost) : null,
+      checklist_category: newAsset.checklist_category || null,
+      checklist_pengawas: newAsset.checklist_pengawas || null,
       location_id: locationId,
       image_url: uploadedImageUrls[0] || "",
       image_urls: uploadedImageUrls,
@@ -233,7 +237,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       setImageFiles([]);
       setPaymentProofFile(null);
       setPaymentProofPreview(null);
-      setNewAsset({ id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "" });
+      setNewAsset({ id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "", checklist_category: "", checklist_pengawas: "" });
       setIsNewType(false);
       fetchAssets();
       fetchTypes();
@@ -372,6 +376,32 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                 <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Lokasi Aset</label>
                 <input type="text" value={realLocationName} disabled className="w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm text-[#94A3B8] font-bold" />
              </div>
+
+             {/* KATEGORI CHECKLIST HARIAN — menentukan template field checklist statis.
+                 Kosongkan jika aset ini tidak butuh checklist harian. */}
+             <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Kategori Checklist</label>
+                <div className="relative">
+                  <select
+                    value={newAsset.checklist_category}
+                    onChange={(e) => setNewAsset({ ...newAsset, checklist_category: e.target.value })}
+                    className="w-full appearance-none px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white cursor-pointer"
+                  >
+                    <option value="">-- Tidak Ada / Aset Tidak Butuh Checklist --</option>
+                    {CHECKLIST_CATEGORY_OPTIONS.map((opt: ChecklistCategoryOption) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+                </div>
+             </div>
+
+             <FormInput
+              label="Pengawas Default"
+              placeholder="Nama pengawas checklist harian"
+              value={newAsset.checklist_pengawas}
+              onChange={(e: any) => setNewAsset({ ...newAsset, checklist_pengawas: e.target.value })}
+             />
           </div>
           <div className="lg:col-span-1 flex flex-col gap-5 text-left">
              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Aset ({imagePreviews.length}/{MAX_PHOTOS})</label>

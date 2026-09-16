@@ -4,7 +4,7 @@ import React, { useState, use, useEffect, useRef } from "react";
 import { 
   ChevronLeft, ChevronRight, Edit3, PowerOff, Power, Trash2, Calendar, MapPin, Tag, 
   Image as LucideImage, ChevronDown, Wrench, AlertTriangle, X, Camera as CameraIcon,
-  ClipboardList, Plus, ArrowUp, ArrowDown, Check
+  ClipboardList
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -13,6 +13,7 @@ import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { CHECKLIST_CATEGORY_OPTIONS, ChecklistCategoryOption } from "@/constants/checklistTemplates";
 
 export default function AssetDetailPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = use(params);
@@ -59,13 +60,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   // --- STATE CAROUSEL FOTO (TAMPILAN DETAIL) ---
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
 
-  // --- STATE PART CHECKLIST HARIAN (khusus administrator yang bisa kelola) ---
-  const [checklistParts, setChecklistParts] = useState<any[]>([]);
-  const [isChecklistPartsLoading, setIsChecklistPartsLoading] = useState(true);
-  const [newPartName, setNewPartName] = useState("");
-  const [isAddingPart, setIsAddingPart] = useState(false);
-  const [editingPartId, setEditingPartId] = useState<string | null>(null);
-  const [editingPartName, setEditingPartName] = useState("");
+  // --- HAK AKSES KHUSUS ADMINISTRATOR (mis. untuk field checklist di bawah) ---
   const canManageChecklistParts = user?.role === "administrator";
 
   // --- AMBIL DATA DARI DB ---
@@ -99,86 +94,10 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     if (data) setAvailableTypes(data);
   };
 
-  // --- AMBIL DAFTAR PART CHECKLIST HARIAN UNTUK ASET INI ---
-  const fetchChecklistParts = async () => {
-    setIsChecklistPartsLoading(true);
-    const { data } = await supabase
-      .from("asset_checklist_parts")
-      .select("*")
-      .eq("asset_id", id)
-      .eq("is_active", true)
-      .order("urutan", { ascending: true });
-    if (data) setChecklistParts(data);
-    setIsChecklistPartsLoading(false);
-  };
-
   useEffect(() => {
     fetchDetail();
     fetchTypes();
-    fetchChecklistParts();
   }, [id]);
-
-  // --- TAMBAH PART CHECKLIST BARU ---
-  const handleAddChecklistPart = async () => {
-    const name = newPartName.trim();
-    if (!name) return;
-    setIsAddingPart(true);
-    const nextUrutan = checklistParts.length > 0 ? Math.max(...checklistParts.map(p => p.urutan)) + 1 : 0;
-    const { error } = await supabase.from("asset_checklist_parts").insert({
-      asset_id: id,
-      part_name: name,
-      urutan: nextUrutan,
-    });
-    if (error) {
-      alert("Gagal menambah part: " + error.message);
-    } else {
-      setNewPartName("");
-      await fetchChecklistParts();
-    }
-    setIsAddingPart(false);
-  };
-
-  // --- EDIT NAMA PART ---
-  const handleStartEditPart = (part: any) => {
-    setEditingPartId(part.id);
-    setEditingPartName(part.part_name);
-  };
-
-  const handleSaveEditPart = async (partId: string) => {
-    const name = editingPartName.trim();
-    if (!name) return;
-    const { error } = await supabase.from("asset_checklist_parts").update({ part_name: name }).eq("id", partId);
-    if (error) {
-      alert("Gagal menyimpan perubahan: " + error.message);
-    } else {
-      setEditingPartId(null);
-      setEditingPartName("");
-      await fetchChecklistParts();
-    }
-  };
-
-  // --- HAPUS PART (soft-delete via is_active, supaya riwayat checklist lama tetap utuh) ---
-  const handleDeletePart = async (partId: string, partName: string) => {
-    if (!confirm(`Hapus part "${partName}" dari daftar checklist harian aset ini?`)) return;
-    const { error } = await supabase.from("asset_checklist_parts").update({ is_active: false }).eq("id", partId);
-    if (error) alert("Gagal menghapus part: " + error.message);
-    else await fetchChecklistParts();
-  };
-
-  // --- UBAH URUTAN (TUKAR POSISI DENGAN TETANGGA) ---
-  const handleMovePart = async (index: number, direction: "up" | "down") => {
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= checklistParts.length) return;
-    const current = checklistParts[index];
-    const target = checklistParts[targetIndex];
-
-    const [{ error: err1 }, { error: err2 }] = await Promise.all([
-      supabase.from("asset_checklist_parts").update({ urutan: target.urutan }).eq("id", current.id),
-      supabase.from("asset_checklist_parts").update({ urutan: current.urutan }).eq("id", target.id),
-    ]);
-    if (err1 || err2) alert("Gagal mengubah urutan.");
-    else await fetchChecklistParts();
-  };
 
   // --- FUNGSI LIGHTBOX ---
   const openLightbox = (src: string) => {
@@ -274,6 +193,8 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       type: editData.type,
       specification: editData.specification,
       status: editData.status,
+      checklist_category: editData.checklist_category || null,
+      checklist_pengawas: editData.checklist_pengawas || null,
       image_url: finalImageUrls[0] || "",
       image_urls: finalImageUrls
     }).eq("id", id);
@@ -543,87 +464,34 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
             </div>
           </div>
 
-          {/* PART CHECKLIST HARIAN — kelola daftar part yang diperiksa tiap hari untuk aset ini.
-              Hanya Administrator yang bisa tambah/edit/hapus/urutkan. Role lain lihat read-only. */}
+          {/* KONFIGURASI CHECKLIST HARIAN — kategori checklist bersifat statis (mengikuti
+              template baku per kategori aset), aset hanya memilih kategorinya.
+              Hanya Administrator yang bisa mengubah lewat modal Edit Informasi Utama Aset. */}
           <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-8 py-5 border-b border-gray-100 dark:border-[#334155] bg-[#F8FAFC] dark:bg-[#0F172A]">
               <div className="flex items-center gap-2">
                 <ClipboardList size={18} className="text-[#0D9488]" />
-                <h2 className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] uppercase tracking-tight">Part Checklist Harian</h2>
+                <h2 className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] uppercase tracking-tight">Checklist Harian</h2>
               </div>
               {!canManageChecklistParts && (
                 <span className="text-[10px] font-bold text-[#94A3B8] italic">Hanya administrator yang bisa mengubah</span>
               )}
             </div>
 
-            <div className="flex flex-col">
-              {isChecklistPartsLoading ? (
-                <p className="p-8 text-center text-sm text-secondary italic">Memuat...</p>
-              ) : checklistParts.length === 0 ? (
-                <p className="p-8 text-center text-sm text-secondary italic">Belum ada part checklist untuk aset ini.</p>
-              ) : (
-                checklistParts.map((part, index) => (
-                  <div key={part.id} className="flex items-center justify-between gap-3 px-8 py-4 border-b border-gray-50 dark:border-[#334155] last:border-0">
-                    {editingPartId === part.id ? (
-                      <input
-                        type="text"
-                        value={editingPartName}
-                        onChange={(e) => setEditingPartName(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") handleSaveEditPart(part.id); }}
-                        autoFocus
-                        className="flex-1 px-3 py-2 border border-gray-200 dark:border-[#334155] rounded-lg text-sm font-bold outline-none focus:border-primary bg-white dark:bg-[#0F172A] dark:text-white"
-                      />
-                    ) : (
-                      <span className="flex-1 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{part.part_name}</span>
-                    )}
-
-                    {canManageChecklistParts && (
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button type="button" onClick={() => handleMovePart(index, "up")} disabled={index === 0} className="p-1.5 text-[#94A3B8] hover:text-[#0D9488] disabled:opacity-25 disabled:cursor-not-allowed transition-colors">
-                          <ArrowUp size={15} />
-                        </button>
-                        <button type="button" onClick={() => handleMovePart(index, "down")} disabled={index === checklistParts.length - 1} className="p-1.5 text-[#94A3B8] hover:text-[#0D9488] disabled:opacity-25 disabled:cursor-not-allowed transition-colors">
-                          <ArrowDown size={15} />
-                        </button>
-                        {editingPartId === part.id ? (
-                          <button type="button" onClick={() => handleSaveEditPart(part.id)} className="p-1.5 text-[#0D9488] hover:bg-teal-50 dark:hover:bg-teal-950/30 rounded-lg transition-colors">
-                            <Check size={15} />
-                          </button>
-                        ) : (
-                          <button type="button" onClick={() => handleStartEditPart(part)} className="p-1.5 text-[#94A3B8] hover:text-[#0D9488] transition-colors">
-                            <Edit3 size={15} />
-                          </button>
-                        )}
-                        <button type="button" onClick={() => handleDeletePart(part.id, part.part_name)} className="p-1.5 text-[#94A3B8] hover:text-red-500 transition-colors">
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 px-8 py-6">
+              <DetailItem
+                label="Kategori Checklist"
+                val={
+                  CHECKLIST_CATEGORY_OPTIONS.find((o: ChecklistCategoryOption) => o.value === asset.checklist_category)?.label ||
+                  "Belum diatur"
+                }
+              />
+              <DetailItem label="Pengawas Default" val={asset.checklist_pengawas} />
             </div>
-
-            {canManageChecklistParts && (
-              <div className="flex items-center gap-3 px-8 py-5 bg-[#F8FAFC] dark:bg-[#0F172A] border-t border-gray-100 dark:border-[#334155]">
-                <input
-                  type="text"
-                  value={newPartName}
-                  onChange={(e) => setNewPartName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleAddChecklistPart(); }}
-                  placeholder="Nama part baru, mis. Oli Mesin, Rem, Ban..."
-                  className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary bg-white dark:bg-[#1E293B] font-bold text-[#0F172A] dark:text-white"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddChecklistPart}
-                  disabled={isAddingPart || !newPartName.trim()}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-[#0D9488] text-white rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all disabled:opacity-50 flex-shrink-0"
-                >
-                  <Plus size={16} /> Tambah
-                </button>
-              </div>
-            )}
+            <p className="px-8 pb-6 -mt-2 text-[11px] text-[#94A3B8]">
+              Field checklist mengikuti template baku sesuai kategori di atas. Ubah lewat tombol
+              "Edit Informasi Utama Aset".
+            </p>
           </div>
         </div>
       </div>
@@ -663,6 +531,28 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                    <option>Beroperasi</option><option>Idle</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
                 </select>
              </div>
+
+             {/* KATEGORI CHECKLIST HARIAN — menentukan template field checklist statis yang
+                 dipakai aset ini. Kosongkan jika aset tidak butuh checklist harian. */}
+             <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Kategori Checklist</label>
+                <select
+                  value={editData.checklist_category || ""}
+                  onChange={(e) => setEditField({ ...editData, checklist_category: e.target.value || null })}
+                  className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white font-poppins"
+                >
+                  <option value="">-- Tidak Ada / Aset Tidak Butuh Checklist --</option>
+                  {CHECKLIST_CATEGORY_OPTIONS.map((opt: ChecklistCategoryOption) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+             </div>
+
+             <EditField
+              label="Pengawas Default"
+              val={editData.checklist_pengawas}
+              onChange={(e: any) => setEditField({ ...editData, checklist_pengawas: e.target.value })}
+             />
           </div>
 
           <div className="lg:col-span-1 flex flex-col gap-5">

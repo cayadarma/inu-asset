@@ -6,13 +6,16 @@ import Link from "next/link";
 import { ChevronLeft, CheckCircle2, Circle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import {
+  BCK_OPTIONS,
+  NORMAL_TINDAKAN_OPTIONS,
+  getChecklistTemplate,
+  ChecklistTemplateField,
+} from "@/constants/checklistTemplates";
 
-type Kondisi = "baik" | "cukup" | "kurang";
-
-interface PartRow {
-  id: string;
-  part_name: string;
-  urutan: number;
+interface AnswerState {
+  value: string | null;
+  tindakan: string;
 }
 
 function getTodayDateString() {
@@ -23,11 +26,16 @@ function getTodayDateString() {
   return `${year}-${month}-${day}`;
 }
 
-const KONDISI_OPTIONS: { value: Kondisi; label: string; activeClass: string }[] = [
-  { value: "baik", label: "Baik", activeClass: "bg-[#D1FAE5] dark:bg-[#115E59]/40 border-[#0D9488] text-[#065F46] dark:text-[#37BAAE]" },
-  { value: "cukup", label: "Cukup", activeClass: "bg-[#FFF7D6] dark:bg-[#F59E0B]/25 border-[#F59E0B] text-[#E28E00] dark:text-[#F59E0B]" },
-  { value: "kurang", label: "Kurang", activeClass: "bg-[#FEE2E2] dark:bg-[#EF4444]/25 border-[#EF4444] text-[#991B1B] dark:text-[#EF4444]" },
-];
+// Kelas warna tombol pilihan, dipetakan dari nilai (mis. "Baik", "Normal", dst) —
+// dipakai bareng untuk field tipe "bck" maupun "normal_tindakan" karena keduanya
+// sama-sama radio/pilihan dengan makna baik/buruk.
+const VALUE_ACTIVE_CLASS: Record<string, string> = {
+  Baik: "bg-[#D1FAE5] dark:bg-[#115E59]/40 border-[#0D9488] text-[#065F46] dark:text-[#37BAAE]",
+  Normal: "bg-[#D1FAE5] dark:bg-[#115E59]/40 border-[#0D9488] text-[#065F46] dark:text-[#37BAAE]",
+  Cukup: "bg-[#FFF7D6] dark:bg-[#F59E0B]/25 border-[#F59E0B] text-[#E28E00] dark:text-[#F59E0B]",
+  Kurang: "bg-[#FEE2E2] dark:bg-[#EF4444]/25 border-[#EF4444] text-[#991B1B] dark:text-[#EF4444]",
+  "Tidak Normal": "bg-[#FEE2E2] dark:bg-[#EF4444]/25 border-[#EF4444] text-[#991B1B] dark:text-[#EF4444]",
+};
 
 export default function ChecklistHarianFormPage({ params }: { params: Promise<{ assetId: string }> }) {
   const { assetId } = use(params);
@@ -35,52 +43,61 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
   const { user } = useAuth();
 
   const [asset, setAsset] = useState<any>(null);
-  const [parts, setParts] = useState<PartRow[]>([]);
   const [existingChecklist, setExistingChecklist] = useState<any>(null);
-  const [existingItems, setExistingItems] = useState<Record<string, { kondisi: Kondisi; catatan: string }>>({});
-  const [answers, setAnswers] = useState<Record<string, { kondisi: Kondisi | null; catatan: string }>>({});
+  const [existingItems, setExistingItems] = useState<Record<string, { field_label: string; field_type: string; value: string | null; tindakan: string | null }>>({});
+  const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
+  const [pengawas, setPengawas] = useState("");
+  const [keterangan, setKeterangan] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const today = getTodayDateString();
   const sudahDiisi = !!existingChecklist;
+  const template = getChecklistTemplate(asset?.checklist_category);
 
   const fetchData = async () => {
     setIsLoading(true);
 
-    const [{ data: assetData }, { data: partsData }, { data: checklistData }] = await Promise.all([
-      supabase.from("assets").select("id, name, type").eq("id", assetId).maybeSingle(),
+    const [{ data: assetData }, { data: checklistData }] = await Promise.all([
       supabase
-        .from("asset_checklist_parts")
-        .select("id, part_name, urutan")
-        .eq("asset_id", assetId)
-        .eq("is_active", true)
-        .order("urutan", { ascending: true }),
+        .from("assets")
+        .select("id, name, type, checklist_category, checklist_pengawas")
+        .eq("id", assetId)
+        .maybeSingle(),
       supabase
         .from("daily_checklists")
-        .select("*, daily_checklist_items ( asset_checklist_part_id, kondisi, catatan )")
+        .select("*, daily_checklist_items ( field_key, field_label, field_type, value, tindakan )")
         .eq("asset_id", assetId)
         .eq("tanggal", today)
         .maybeSingle(),
     ]);
 
     if (assetData) setAsset(assetData);
-    if (partsData) setParts(partsData);
 
     if (checklistData) {
       setExistingChecklist(checklistData);
-      const itemsMap: Record<string, { kondisi: Kondisi; catatan: string }> = {};
+      const itemsMap: Record<string, { field_label: string; field_type: string; value: string | null; tindakan: string | null }> = {};
       (checklistData.daily_checklist_items || []).forEach((item: any) => {
-        itemsMap[item.asset_checklist_part_id] = { kondisi: item.kondisi, catatan: item.catatan || "" };
+        itemsMap[item.field_key] = {
+          field_label: item.field_label,
+          field_type: item.field_type,
+          value: item.value,
+          tindakan: item.tindakan,
+        };
       });
       setExistingItems(itemsMap);
+      setPengawas(checklistData.pengawas || "");
+      setKeterangan(checklistData.keterangan || "");
     } else {
-      // Siapkan state jawaban kosong untuk part yang ada
-      const initialAnswers: Record<string, { kondisi: Kondisi | null; catatan: string }> = {};
-      (partsData || []).forEach((p: any) => {
-        initialAnswers[p.id] = { kondisi: null, catatan: "" };
+      // Siapkan state jawaban kosong sesuai template kategori aset
+      const tmpl = getChecklistTemplate(assetData?.checklist_category);
+      const initialAnswers: Record<string, AnswerState> = {};
+      (tmpl?.fields || []).forEach((f) => {
+        initialAnswers[f.key] = { value: null, tindakan: "" };
       });
       setAnswers(initialAnswers);
+      setPengawas(assetData?.checklist_pengawas || "");
+      setKeterangan("");
     }
 
     setIsLoading(false);
@@ -91,23 +108,29 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId]);
 
-  const handleSetKondisi = (partId: string, kondisi: Kondisi) => {
-    setAnswers((prev) => ({ ...prev, [partId]: { ...prev[partId], kondisi } }));
+  const handleSetValue = (fieldKey: string, value: string) => {
+    setAnswers((prev) => ({ ...prev, [fieldKey]: { ...prev[fieldKey], value } }));
   };
 
-  const handleSetCatatan = (partId: string, catatan: string) => {
-    setAnswers((prev) => ({ ...prev, [partId]: { ...prev[partId], catatan } }));
+  const handleSetTindakan = (fieldKey: string, tindakan: string) => {
+    setAnswers((prev) => ({ ...prev, [fieldKey]: { ...prev[fieldKey], tindakan } }));
   };
 
-  const allAnswered = parts.length > 0 && parts.every((p) => answers[p.id]?.kondisi);
+  const allAnswered =
+    !!template &&
+    template.fields.length > 0 &&
+    template.fields.every((f) => {
+      const val = answers[f.key]?.value;
+      return f.type === "text" ? !!val && val.trim() !== "" : !!val;
+    });
 
   const handleSubmit = async () => {
     if (!user) {
       alert("Sesi login tidak ditemukan. Silakan login ulang.");
       return;
     }
-    if (!allAnswered) {
-      alert("Semua part wajib dinilai (Baik/Cukup/Kurang) sebelum disimpan.");
+    if (!template || !allAnswered) {
+      alert("Semua field wajib diisi sebelum disimpan.");
       return;
     }
 
@@ -121,6 +144,8 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
         tanggal: today,
         diisi_oleh_id: user.id,
         diisi_oleh_nama: user.name,
+        pengawas: pengawas.trim() || null,
+        keterangan: keterangan.trim() || null,
       })
       .select()
       .single();
@@ -133,12 +158,14 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
       return;
     }
 
-    // 2. Simpan item-item penilaian per part
-    const itemsToInsert = parts.map((p) => ({
-      daily_checklist_id: checklistRow.id,
-      asset_checklist_part_id: p.id,
-      kondisi: answers[p.id]?.kondisi,
-      catatan: answers[p.id]?.catatan?.trim() || null,
+    // 2. Simpan item-item penilaian per field, generik sesuai template kategori
+    const itemsToInsert = template.fields.map((f) => ({
+      checklist_id: checklistRow.id,
+      field_key: f.key,
+      field_label: f.label,
+      field_type: f.type,
+      value: answers[f.key]?.value ?? null,
+      tindakan: f.type === "normal_tindakan" ? answers[f.key]?.tindakan?.trim() || null : null,
     }));
 
     const { error: itemsError } = await supabase.from("daily_checklist_items").insert(itemsToInsert);
@@ -172,10 +199,10 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
         </p>
       </div>
 
-      {parts.length === 0 ? (
+      {!template ? (
         <div className="bg-white dark:bg-[#1E293B] p-10 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm text-center">
           <p className="text-sm text-secondary italic">
-            Belum ada daftar part checklist untuk aset ini. Hubungi administrator untuk menambahkannya di halaman Registrasi Aset.
+            Aset ini belum memiliki Kategori Checklist. Hubungi administrator untuk mengaturnya di halaman Registrasi Aset.
           </p>
         </div>
       ) : sudahDiisi ? (
@@ -188,18 +215,23 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
           </div>
 
           <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm overflow-hidden">
-            {parts.map((part) => {
-              const item = existingItems[part.id];
-              const opt = KONDISI_OPTIONS.find((o) => o.value === item?.kondisi);
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 px-6 py-5 border-b border-gray-50 dark:border-[#334155]">
+              <DetailItem label="Pengawas" val={existingChecklist.pengawas} />
+              <DetailItem label="Keterangan" val={existingChecklist.keterangan} />
+            </div>
+
+            {template.fields.map((field) => {
+              const item = existingItems[field.key];
+              const valueClass = item?.value ? VALUE_ACTIVE_CLASS[item.value] : undefined;
               return (
-                <div key={part.id} className="flex flex-col gap-2 px-6 py-5 border-b border-gray-50 dark:border-[#334155] last:border-0">
+                <div key={field.key} className="flex flex-col gap-2 px-6 py-5 border-b border-gray-50 dark:border-[#334155] last:border-0">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px]">{part.part_name}</span>
-                    <span className={`px-3 py-1 rounded-full text-[11px] font-bold border ${opt?.activeClass || "bg-gray-100 border-gray-200 text-gray-500"}`}>
-                      {opt?.label || "-"}
+                    <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px]">{field.label}</span>
+                    <span className={`px-3 py-1 rounded-full text-[11px] font-bold border ${valueClass || "bg-gray-100 border-gray-200 text-gray-500"}`}>
+                      {item?.value || "-"}
                     </span>
                   </div>
-                  {item?.catatan && <p className="text-xs text-[#94A3B8] italic">Catatan: {item.catatan}</p>}
+                  {item?.tindakan && <p className="text-xs text-[#94A3B8] italic">Tindakan: {item.tindakan}</p>}
                 </div>
               );
             })}
@@ -207,40 +239,39 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
         </>
       ) : (
         <>
+          <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm p-6 flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pengawas</label>
+              <input
+                type="text"
+                value={pengawas}
+                onChange={(e) => setPengawas(e.target.value)}
+                placeholder="Nama pengawas"
+                className="px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary bg-white dark:bg-[#0F172A] font-medium text-[#0F172A] dark:text-white"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Keterangan</label>
+              <input
+                type="text"
+                value={keterangan}
+                onChange={(e) => setKeterangan(e.target.value)}
+                placeholder="Catatan umum hari ini (opsional)"
+                className="px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary bg-white dark:bg-[#0F172A] font-medium text-[#0F172A] dark:text-white"
+              />
+            </div>
+          </div>
+
           <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm overflow-hidden">
-            {parts.map((part) => {
-              const answer = answers[part.id];
-              return (
-                <div key={part.id} className="flex flex-col gap-3 px-6 py-5 border-b border-gray-50 dark:border-[#334155] last:border-0">
-                  <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px]">{part.part_name}</span>
-                  <div className="flex gap-2">
-                    {KONDISI_OPTIONS.map((opt) => {
-                      const isActive = answer?.kondisi === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => handleSetKondisi(part.id, opt.value)}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
-                            isActive ? opt.activeClass : "bg-white dark:bg-[#0F172A] border-gray-200 dark:border-[#334155] text-[#94A3B8]"
-                          }`}
-                        >
-                          {isActive ? <CheckCircle2 size={15} /> : <Circle size={15} />}
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <input
-                    type="text"
-                    value={answer?.catatan || ""}
-                    onChange={(e) => handleSetCatatan(part.id, e.target.value)}
-                    placeholder="Catatan tambahan (opsional)"
-                    className="px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary bg-white dark:bg-[#0F172A] font-medium text-[#0F172A] dark:text-white"
-                  />
-                </div>
-              );
-            })}
+            {template.fields.map((field) => (
+              <ChecklistFieldInput
+                key={field.key}
+                field={field}
+                answer={answers[field.key]}
+                onSetValue={(v) => handleSetValue(field.key, v)}
+                onSetTindakan={(v) => handleSetTindakan(field.key, v)}
+              />
+            ))}
           </div>
 
           <div className="bg-white dark:bg-[#1E293B] p-5 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex items-center justify-between gap-4">
@@ -257,6 +288,80 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
             </button>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function DetailItem({ label, val }: { label: string; val: string | null | undefined }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[11px] font-bold text-[#94A3B8] uppercase tracking-wider">{label}</span>
+      <span className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{val || "-"}</span>
+    </div>
+  );
+}
+
+// Merender satu baris field checklist sesuai field_type-nya: "bck" (radio Baik/Cukup/Kurang),
+// "normal_tindakan" (radio Normal/Tidak Normal + textbox tindakan), atau "text" (textbox bebas).
+function ChecklistFieldInput({
+  field,
+  answer,
+  onSetValue,
+  onSetTindakan,
+}: {
+  field: ChecklistTemplateField;
+  answer: AnswerState | undefined;
+  onSetValue: (value: string) => void;
+  onSetTindakan: (value: string) => void;
+}) {
+  if (field.type === "text") {
+    return (
+      <div className="flex flex-col gap-2 px-6 py-5 border-b border-gray-50 dark:border-[#334155] last:border-0">
+        <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px]">{field.label}</span>
+        <input
+          type="text"
+          value={answer?.value || ""}
+          onChange={(e) => onSetValue(e.target.value)}
+          placeholder={`Isi ${field.label.toLowerCase()}...`}
+          className="px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary bg-white dark:bg-[#0F172A] font-medium text-[#0F172A] dark:text-white"
+        />
+      </div>
+    );
+  }
+
+  const options = field.type === "bck" ? BCK_OPTIONS : NORMAL_TINDAKAN_OPTIONS;
+  const showTindakan = field.type === "normal_tindakan" && answer?.value === "Tidak Normal";
+
+  return (
+    <div className="flex flex-col gap-3 px-6 py-5 border-b border-gray-50 dark:border-[#334155] last:border-0">
+      <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px]">{field.label}</span>
+      <div className="flex gap-2">
+        {options.map((opt) => {
+          const isActive = answer?.value === opt;
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onSetValue(opt)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                isActive ? VALUE_ACTIVE_CLASS[opt] : "bg-white dark:bg-[#0F172A] border-gray-200 dark:border-[#334155] text-[#94A3B8]"
+              }`}
+            >
+              {isActive ? <CheckCircle2 size={15} /> : <Circle size={15} />}
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+      {showTindakan && (
+        <input
+          type="text"
+          value={answer?.tindakan || ""}
+          onChange={(e) => onSetTindakan(e.target.value)}
+          placeholder="Tindakan yang dilakukan (wajib jika tidak normal)"
+          className="px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary bg-white dark:bg-[#0F172A] font-medium text-[#0F172A] dark:text-white"
+        />
       )}
     </div>
   );

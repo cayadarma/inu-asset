@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, CalendarDays, Plus, Trash2 } from "lucide-re
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
+import MaintenanceTabs from "@/components/maintenance/MaintenanceTabs";
 import { supabase } from "@/lib/supabase";
 
 interface AgendaItem {
@@ -197,10 +198,7 @@ function MaintenanceContent() {
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pemeliharaan Pencegahan</h1>
           <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Monitoring jadwal pemeliharaan rutin seluruh aset</p>
         </div>
-        <div className="flex bg-[#E2E8F0] dark:bg-[#334155] p-1 rounded-xl">
-          <button className="px-6 py-2 bg-white dark:bg-[#1E293B] rounded-lg text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] shadow-sm">Pemeliharaan Pencegahan</button>
-          <Link href="/pemeliharaan/korektif" className="px-6 py-2 rounded-lg text-sm font-medium text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A]">Pemeliharaan Korektif</Link>
-        </div>
+        <MaintenanceTabs active="pencegahan" />
       </div>
 
       {/* Main Section */}

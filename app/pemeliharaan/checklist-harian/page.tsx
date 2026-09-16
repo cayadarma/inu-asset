@@ -4,12 +4,14 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ClipboardCheck, ClipboardX, Search } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import MaintenanceTabs from "@/components/maintenance/MaintenanceTabs";
 
 interface AssetRow {
   id: string;
   name: string;
   type: string;
   location_id: string | null;
+  checklist_category: string | null;
   locations: { name: string } | null;
 }
 
@@ -37,8 +39,9 @@ export default function ChecklistHarianListPage() {
     const [{ data: assetData }, { data: checklistData }] = await Promise.all([
       supabase
         .from("assets")
-        .select("id, name, type, location_id, locations ( name )")
+        .select("id, name, type, location_id, checklist_category, locations ( name )")
         .eq("is_active", true)
+        .not("checklist_category", "is", null)
         .order("name", { ascending: true }),
       supabase
         .from("daily_checklists")
@@ -74,11 +77,15 @@ export default function ChecklistHarianListPage() {
   return (
     <div className="flex flex-col gap-6 pb-10 font-poppins text-left">
       {/* HEADER */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Checklist Harian Aset</h1>
-        <p className="text-sm text-[#94A3B8]">
-          Pemeriksaan kondisi harian per part untuk setiap aset. Wajib diisi setiap hari.
-        </p>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Checklist Harian Aset</h1>
+          <p className="text-sm text-[#94A3B8]">
+            Pemeriksaan kondisi harian per part untuk setiap aset. Wajib diisi setiap hari.
+            Hanya menampilkan aset yang sudah punya Kategori Checklist.
+          </p>
+        </div>
+        <MaintenanceTabs active="checklist-harian" />
       </div>
 
       {/* RINGKASAN */}

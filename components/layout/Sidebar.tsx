@@ -10,7 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { resolveAvatarUrl } from "@/lib/auth";
 import { 
   LayoutDashboard, Box, HeartPulse, Wrench, Package, 
-  CircleDollarSign, Wallet, FileText, Settings, X, Sun, Moon, LogOut, ClipboardCheck
+  CircleDollarSign, Wallet, FileText, Settings, X, Sun, Moon, LogOut
 } from "lucide-react";
 
 interface SidebarProps {
@@ -29,7 +29,6 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     { name: t("menu.registrasiAset"), icon: <Box size={20} />, href: "/registrasi-aset" },
     { name: t("menu.bukuSakit"), icon: <HeartPulse size={20} />, href: "/buku-sakit" },
     { name: t("menu.pemeliharaan"), icon: <Wrench size={20} />, href: "/pemeliharaan" },
-    { name: t("menu.checklistHarian"), icon: <ClipboardCheck size={20} />, href: "/pemeliharaan/checklist-harian" },
     { name: t("menu.stok"), icon: <Package size={20} />, href: "/stok" },
     { name: t("menu.analisisBiaya"), icon: <CircleDollarSign size={20} />, href: "/analisis-biaya" },
     { name: t("menu.anggaran"), icon: <Wallet size={20} />, href: "/anggaran" },

@@ -6,6 +6,7 @@ import { Plus, Search, ChevronDown, Eye, Calendar, User, Briefcase, DollarSign, 
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
+import MaintenanceTabs from "@/components/maintenance/MaintenanceTabs";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
 
@@ -237,10 +238,7 @@ function CorrectiveContent() {
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pemeliharaan Korektif</h1>
           <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Kelola tiket perbaikan dan Work Order aset secara reaktif</p>
         </div>
-        <div className="flex bg-[#E2E8F0] dark:bg-[#334155] p-1 rounded-xl">
-          <Link href="/pemeliharaan" className="px-6 py-2 rounded-lg text-sm font-medium text-[#475569] dark:text-[#94A3B8]">Pemeliharaan Pencegahan</Link>
-          <button className="px-6 py-2 bg-white dark:bg-[#1E293B] rounded-lg text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] shadow-sm">Pemeliharaan Korektif</button>
-        </div>
+        <MaintenanceTabs active="korektif" />
       </div>
 
       {/* 2. SUMMARY */}
