@@ -10,7 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { resolveAvatarUrl } from "@/lib/auth";
 import { 
   LayoutDashboard, Box, HeartPulse, Wrench, Package, 
-  CircleDollarSign, Wallet, FileText, Settings, X, Sun, Moon, LogOut
+  CircleDollarSign, Wallet, FileText, Settings, X, Sun, Moon, LogOut, ClipboardCheck
 } from "lucide-react";
 
 interface SidebarProps {
@@ -29,6 +29,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     { name: t("menu.registrasiAset"), icon: <Box size={20} />, href: "/registrasi-aset" },
     { name: t("menu.bukuSakit"), icon: <HeartPulse size={20} />, href: "/buku-sakit" },
     { name: t("menu.pemeliharaan"), icon: <Wrench size={20} />, href: "/pemeliharaan" },
+    { name: t("menu.checklistHarian"), icon: <ClipboardCheck size={20} />, href: "/pemeliharaan/checklist-harian" },
     { name: t("menu.stok"), icon: <Package size={20} />, href: "/stok" },
     { name: t("menu.analisisBiaya"), icon: <CircleDollarSign size={20} />, href: "/analisis-biaya" },
     { name: t("menu.anggaran"), icon: <Wallet size={20} />, href: "/anggaran" },
@@ -65,7 +66,13 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
           <nav className="flex flex-col gap-1.5">
             {menuItems.map((item) => {
-              const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              // Cari href menu yang paling spesifik (paling panjang) yang cocok dengan
+              // path saat ini, supaya menu "Pemeliharaan" dan "Checklist Harian" (yang
+              // hrefnya bersarang) tidak sama-sama menyala bersamaan.
+              const matchingItem = menuItems
+                .filter((m) => (m.href === "/" ? pathname === "/" : pathname.startsWith(m.href)))
+                .sort((a, b) => b.href.length - a.href.length)[0];
+              const isActive = matchingItem?.href === item.href;
               return (
                 <Link key={item.href} href={item.href} onClick={() => setIsOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive ? "bg-[#CCFBF1] dark:bg-[#115E59] text-[#0D9488] dark:text-[#CCFBF1] font-semibold" : "text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]"}`}>
                   {item.icon} <span className="text-[14px]">{item.name}</span>

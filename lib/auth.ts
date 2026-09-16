@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { supabase } from "@/lib/supabase";
 
-export type Role = "administrator" | "operator";
+export type Role = "administrator" | "manajemen" | "operator";
 
 export interface SessionUser {
   id: string;
@@ -21,6 +21,15 @@ export interface SessionUser {
 }
 
 const SESSION_KEY = "inu_asset_session";
+
+// Label tampilan untuk tiap role (dipakai di Sidebar, Manajemen User, dll)
+export const ROLE_LABELS: Record<Role, string> = {
+  administrator: "Administrator",
+  manajemen: "Manajemen",
+  operator: "Operator",
+};
+
+export const ALL_ROLES: Role[] = ["administrator", "manajemen", "operator"];
 
 // Buat hash password (dipakai saat membuat/mengganti akun)
 export async function hashPassword(plain: string): Promise<string> {
