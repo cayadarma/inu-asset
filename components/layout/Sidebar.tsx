@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "../../context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
-import { resolveAvatarUrl } from "@/lib/auth";
+import Avatar from "@/components/ui/Avatar";
 import { 
   LayoutDashboard, Box, HeartPulse, Wrench, Package, 
   CircleDollarSign, Wallet, FileText, Settings, X, Sun, Moon, LogOut
@@ -88,7 +88,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             className="flex items-center gap-3 min-w-0 flex-1 rounded-xl hover:bg-gray-50 dark:hover:bg-[#334155] transition-all p-1.5 -m-1.5"
             title={t("menu.pengaturan")}
           >
-            <img src={resolveAvatarUrl(user)} alt="Avatar" className="w-11 h-11 rounded-full border-2 border-gray-50 dark:border-[#334155] flex-shrink-0 object-cover" />
+            <Avatar name={user?.name || ""} avatarUrl={user?.avatar_url} size={44} className="border-2 border-gray-50 dark:border-[#334155]" />
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-[14px] font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate">{user?.name || "-"}</span>
               <span className="text-[11px] text-[#94A3B8] italic truncate capitalize">{user?.role}</span>

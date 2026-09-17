@@ -3,11 +3,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronDown, User, Globe, Bell, Check, LoaderCircle, Camera, ZoomIn } from "lucide-react";
 import Modal from "@/components/ui/Modal";
+import SettingsTabs from "@/components/layout/SettingsTabs";
 import { useTheme } from "../../context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { resolveAvatarUrl, hashPassword } from "@/lib/auth";
+import { hashPassword, ROLE_LABELS } from "@/lib/auth";
+import Avatar from "@/components/ui/Avatar";
 import { Lang } from "@/lib/i18n/dictionary";
 import imageCompression from "browser-image-compression";
 
@@ -241,9 +243,12 @@ export default function SettingsPage() {
       )}
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("settings.title")}</h1>
-        <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">{t("settings.subtitle")}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("settings.title")}</h1>
+          <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">{t("settings.subtitle")}</p>
+        </div>
+        <SettingsTabs active="profil" role={user?.role} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -256,18 +261,14 @@ export default function SettingsPage() {
             </h3>
             <div className="flex items-center gap-6">
               <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-[#F1F5F9] dark:border-[#334155] shadow-sm">
-                <img
-                  src={resolveAvatarUrl(user)}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                />
+                <Avatar name={user?.name || ""} avatarUrl={user?.avatar_url} size={80} className="w-full h-full" />
               </div>
               <div className="flex flex-col gap-1">
                 <h4 className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC]">{user?.name}</h4>
                 <p className="text-sm text-[#94A3B8] font-medium">{user?.email || "-"}</p>
                 <div className="mt-1">
                   <span className="px-3 py-1 bg-[#CCFBF1] dark:bg-[#115E59]/30 text-[#0D9488] dark:text-[#CCFBF1] text-[11px] font-bold rounded-md uppercase">
-                    {user?.role === "administrator" ? t("settings.role.administrator") : t("settings.role.operator")}
+                    {user?.role ? ROLE_LABELS[user.role] : ""}
                   </span>
                 </div>
               </div>
@@ -358,11 +359,11 @@ export default function SettingsPage() {
           <div className="md:col-span-1 flex flex-col gap-4 items-center">
             <div className="relative w-32 h-32">
               <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-[#F8FAFC] shadow-md bg-gray-100 flex items-center justify-center">
-                <img
-                  src={previewUrl || resolveAvatarUrl(user)}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                />
+                {previewUrl ? (
+                  <img src={previewUrl} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <Avatar name={user?.name || ""} avatarUrl={user?.avatar_url} size={128} className="w-full h-full" />
+                )}
               </div>
               {isUploadingPhoto && (
                 <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
