@@ -34,6 +34,37 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ALL_ROLES: Role[] = ["super_admin", "administrator", "manajemen", "operator"];
 
+// =====================================================================
+// Pembatasan halaman untuk role Operator
+// Operator hanya boleh mengakses: Dashboard, Buku Sakit (hanya bagian
+// tambah kerusakan aset), Pemeliharaan (semua halaman kecuali form
+// "Terbitkan Work Order" di Pemeliharaan Korektif), dan Pengaturan
+// (hanya tab Profil Saya — halaman Manajemen User tetap tertutup).
+// =====================================================================
+
+// Prefix path yang boleh diakses oleh role operator. Path lain otomatis
+// di-redirect ke Dashboard oleh <RoleGuard /> di AppShell.
+const OPERATOR_ALLOWED_PREFIXES = [
+  "/", // dashboard (exact match, ditangani khusus di isPathAllowedForOperator)
+  "/buku-sakit",
+  "/pemeliharaan",
+  "/pengaturan", // /pengaturan/manajemen-user tetap diblokir terpisah (lihat di bawah)
+];
+
+// Path yang secara eksplisit TETAP diblokir untuk operator walau prefix-nya
+// termasuk yang diizinkan di atas.
+const OPERATOR_BLOCKED_EXACT = [
+  "/pengaturan/manajemen-user",
+];
+
+export function isPathAllowedForOperator(pathname: string): boolean {
+  if (pathname === "/") return true;
+  if (OPERATOR_BLOCKED_EXACT.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    return false;
+  }
+  return OPERATOR_ALLOWED_PREFIXES.some((prefix) => prefix !== "/" && pathname.startsWith(prefix));
+}
+
 // Buat hash password (dipakai saat membuat/mengganti akun)
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 10);

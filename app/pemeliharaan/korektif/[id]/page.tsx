@@ -73,6 +73,8 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     keterangan: "Dalam Proses",
     biaya: 0,
   });
+  // --- TANGGAL SELESAI PERBAIKAN (DIISI MANUAL OLEH USER, TIDAK OTOMATIS PAKAI WAKTU SISTEM) ---
+  const [completionDate, setCompletionDate] = useState(new Date().toISOString().split("T")[0]);
   const [photoUrl, setPhotoUrl] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -140,6 +142,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     setUpdateForm({ tindak_lanjut: "", keterangan: "Dalam Proses", biaya: 0 });
     setPhotoUrl("");
     setPaymentProofUrl("");
+    setCompletionDate(new Date().toISOString().split("T")[0]);
   };
 
   const openUpdateModal = () => {
@@ -227,6 +230,11 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
       alert("Ada biaya yang dimasukkan, jadi foto bukti pembayaran/nota pembayaran wajib diunggah.");
       return;
     }
+    // --- VALIDASI: TANGGAL SELESAI WAJIB DIISI KALAU MENYELESAIKAN PERBAIKAN ---
+    if (isFinishing && !completionDate) {
+      alert("Tanggal selesai perbaikan wajib diisi.");
+      return;
+    }
 
     const finalKeterangan = forceStatus || updateForm.keterangan;
 
@@ -271,7 +279,8 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
       updatePayload.payment_proof_url = paymentProofUrl;
     }
     if (isFinishing) {
-      updatePayload.completed_at = nowIso;
+      // --- PAKAI TANGGAL YANG DIPILIH USER, BUKAN WAKTU SISTEM SAAT INI ---
+      updatePayload.completed_at = new Date(completionDate).toISOString();
     }
 
     const { error } = await supabase.from("work_orders").update(updatePayload).eq("id", id);
@@ -544,6 +553,19 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
               <option value="Menunggu Part">Menunggu Suku Cadang</option>
               <option value="Selesai">Selesai</option>
             </select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
+              Tanggal Selesai <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={completionDate}
+              onChange={(e) => setCompletionDate(e.target.value)}
+              className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white font-bold"
+            />
+            <span className="text-[11px] text-[#94A3B8] italic">Dipakai sebagai tanggal work order selesai kalau perbaikan ini diselesaikan sekarang.</span>
           </div>
 
           <div className="flex flex-col gap-2">

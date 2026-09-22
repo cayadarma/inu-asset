@@ -183,7 +183,8 @@ function CorrectiveContent() {
   useEffect(() => {
     fetchData();
 
-    if (searchParams.get("openModal") === "true") {
+    // Operator tidak boleh menerbitkan Work Order, jadi auto-open modal ini diabaikan untuknya
+    if (searchParams.get("openModal") === "true" && user?.role !== "operator") {
       setIsAddModalOpen(true);
       setFormData(prev => ({ 
         ...prev, 
@@ -320,9 +321,11 @@ function CorrectiveContent() {
           <button onClick={() => { setEmergencyForm(prev => ({ ...prev, reporter_name: user?.name || prev.reporter_name })); setIsEmergencyModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#EF4444] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
             <Zap size={18} /> Perbaikan Mendadak
           </button>
-          <button onClick={() => { setFormData(prev => ({ ...prev, id: `WO-${Date.now().toString().slice(-4)}`, asset_id: "", trouble: "", damage_report_id: null, issued_by: user?.name || prev.issued_by })); setIsAddModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
-            <Plus size={18} /> Buat Work Order
-          </button>
+          {user?.role !== "operator" && (
+            <button onClick={() => { setFormData(prev => ({ ...prev, id: `WO-${Date.now().toString().slice(-4)}`, asset_id: "", trouble: "", damage_report_id: null, issued_by: user?.name || prev.issued_by })); setIsAddModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
+              <Plus size={18} /> Buat Work Order
+            </button>
+          )}
         </div>
       </div>
 
@@ -385,7 +388,7 @@ function CorrectiveContent() {
       </div>
 
       {/* 5. MODAL PENERBITAN WO */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Penerbitan Work Order">
+      <Modal isOpen={isAddModalOpen && user?.role !== "operator"} onClose={() => setIsAddModalOpen(false)} title="Penerbitan Work Order">
         <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
           <div className="lg:col-span-2 flex flex-col gap-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -47,6 +47,8 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [operatorName, setOperatorName] = useState("");
+  // --- TANGGAL SELESAI PEMELIHARAAN (DIISI MANUAL OLEH USER, TIDAK OTOMATIS PAKAI WAKTU SISTEM) ---
+  const [completionDate, setCompletionDate] = useState(new Date().toISOString().split("T")[0]);
   const [isSavingOperator, setIsSavingOperator] = useState(false);
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
@@ -251,11 +253,17 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
       return;
     }
 
+    // --- VALIDASI WAJIB: TANGGAL SELESAI HARUS DIISI ---
+    if (!completionDate) {
+      alert("Tanggal selesai pemeliharaan wajib diisi.");
+      return;
+    }
+
     if (!confirm("Yakin ingin menyelesaikan pemeliharaan ini? Data tidak bisa diubah lagi setelah ini.")) return;
 
     const { error } = await supabase
       .from("maintenance_schedules")
-      .update({ status: "Selesai", completed_at: new Date().toISOString(), operator_name: operatorName })
+      .update({ status: "Selesai", completed_at: new Date(completionDate).toISOString(), operator_name: operatorName })
       .eq("id", id);
 
     if (error) {
@@ -409,6 +417,31 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
             />
             {isSavingOperator && <span className="text-[11px] text-[#94A3B8] italic">Menyimpan...</span>}
           </div>
+
+          {/* TANGGAL SELESAI PEMELIHARAAN */}
+          {!isLocked && (
+            <div className="flex flex-col gap-3">
+              <label className="text-[11px] font-black text-[#94A3B8] uppercase tracking-[0.2em] flex items-center gap-2">
+                <CheckCheck size={14} className="text-[#0D9488]" /> Tanggal Selesai
+              </label>
+              <input
+                type="date"
+                value={completionDate}
+                onChange={(e) => setCompletionDate(e.target.value)}
+                className={`w-full px-5 py-4 rounded-2xl text-sm font-bold outline-none focus:border-primary transition-all text-[#0F172A] dark:text-[#F8FAFC] ${innerBoxStyle}`}
+              />
+            </div>
+          )}
+          {isLocked && schedule.completed_at && (
+            <div className="flex flex-col gap-3">
+              <label className="text-[11px] font-black text-[#94A3B8] uppercase tracking-[0.2em] flex items-center gap-2">
+                <CheckCheck size={14} className="text-[#0D9488]" /> Tanggal Selesai
+              </label>
+              <div className={`w-full px-5 py-4 rounded-2xl text-sm font-bold text-[#94A3B8] ${innerBoxStyle}`}>
+                {new Date(schedule.completed_at).toLocaleDateString("id-ID")}
+              </div>
+            </div>
+          )}
 
           {/* CHECKLIST */}
           <div className="flex flex-col gap-4">

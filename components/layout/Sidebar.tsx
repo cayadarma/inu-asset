@@ -24,7 +24,9 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const { t } = useLanguage();
   const { user, logout } = useAuth();
 
-  const menuItems = [
+  const isOperator = user?.role === "operator";
+
+  const fullMenuItems = [
     { name: t("menu.dashboard"), icon: <LayoutDashboard size={20} />, href: "/" },
     { name: t("menu.registrasiAset"), icon: <Box size={20} />, href: "/registrasi-aset" },
     { name: t("menu.bukuSakit"), icon: <HeartPulse size={20} />, href: "/buku-sakit" },
@@ -35,6 +37,12 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     { name: t("menu.laporan"), icon: <FileText size={20} />, href: "/laporan" },
     { name: t("menu.pengaturan"), icon: <Settings size={20} />, href: "/pengaturan" },
   ];
+
+  // --- OPERATOR HANYA MELIHAT: DASHBOARD, BUKU SAKIT, PEMELIHARAAN, PENGATURAN ---
+  const OPERATOR_MENU_HREFS = ["/", "/buku-sakit", "/pemeliharaan", "/pengaturan"];
+  const menuItems = isOperator
+    ? fullMenuItems.filter((item) => OPERATOR_MENU_HREFS.includes(item.href))
+    : fullMenuItems;
 
   return (
     <>

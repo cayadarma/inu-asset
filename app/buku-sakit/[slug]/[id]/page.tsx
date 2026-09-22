@@ -18,6 +18,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
   const { slug, id } = use(params);
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const isOperator = user?.role === "operator";
   
   const locationName = searchParams.get("name") || slug;
 
@@ -165,20 +166,30 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                 </div>
             </div>
         </div>
-        <Link href={`/registrasi-aset/${slug}/${id}?name=${encodeURIComponent(locationName)}&assetName=${encodeURIComponent(asset?.name || "")}`} className="px-5 py-2 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-white hover:bg-gray-50 dark:hover:bg-[#0F172A]">Lihat Profil Aset</Link>
+        {!isOperator && (
+          <Link href={`/registrasi-aset/${slug}/${id}?name=${encodeURIComponent(locationName)}&assetName=${encodeURIComponent(asset?.name || "")}`} className="px-5 py-2 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-white hover:bg-gray-50 dark:hover:bg-[#0F172A]">Lihat Profil Aset</Link>
+        )}
       </div>
 
-      {/* 3. TABEL RECORD */}
+      {/* 3. TABEL RECORD — UNTUK OPERATOR, HANYA TOMBOL TAMBAH RECORD YANG DITAMPILKAN
+          (RIWAYAT GANGGUAN, TAB PEMELIHARAAN, DAN LIHAT DETAIL LAPORAN DISEMBUNYIKAN) */}
       <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm overflow-hidden">
         <div className="px-6 bg-[#F8FAFC] dark:bg-[#0F172A] border-b border-gray-200 dark:border-[#334155] flex justify-between items-center">
-          <div className="flex">
-            <button onClick={() => { setActiveTab("gangguan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "gangguan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Record Gangguan</button>
-            <button onClick={() => { setActiveTab("pemeliharaan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "pemeliharaan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Record Pemeliharaan</button>
-          </div>
+          {isOperator ? (
+            <div className="py-5">
+              <h3 className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Laporkan Kerusakan Aset</h3>
+              <p className="text-[12px] text-[#94A3B8]">Tambahkan laporan kerusakan baru untuk aset ini.</p>
+            </div>
+          ) : (
+            <div className="flex">
+              <button onClick={() => { setActiveTab("gangguan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "gangguan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Record Gangguan</button>
+              <button onClick={() => { setActiveTab("pemeliharaan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "pemeliharaan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Record Pemeliharaan</button>
+            </div>
+          )}
           <button onClick={() => { setReportData(prev => ({ ...prev, reporter_name: user?.name || prev.reporter_name })); setIsRecordModalOpen(true); }} className="flex items-center gap-2 bg-[#0D9488] text-white px-4 py-2 rounded-xl text-[13px] font-bold shadow-md hover:bg-teal-700 transition-all"><Plus size={18} /> Tambah Record</button>
         </div>
         
-        <div className="overflow-x-auto">
+        {isOperator ? null : <div className="overflow-x-auto">
           {activeTab === "gangguan" ? (
             damageReports.length > 0 ? (
               <>
@@ -255,7 +266,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
               </>
             ) : <div className="p-20 text-center text-[#94A3B8] italic font-medium">Belum ada riwayat pemeliharaan pencegahan.</div>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* 4. MODAL TAMBAH RECORD */}
