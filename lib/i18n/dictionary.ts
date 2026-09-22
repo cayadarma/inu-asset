@@ -63,6 +63,12 @@ export const dictionary = {
     "settings.passwordMismatch": "Konfirmasi kata sandi tidak cocok",
     "settings.passwordTooShort": "Kata sandi minimal 6 karakter",
     "settings.adjustPhoto": "Sesuaikan Ukuran Foto",
+    "settings.photoPendingHint": "Foto profil baru belum tersimpan. Klik \"Simpan Perubahan\" untuk menyimpannya.",
+    "settings.dragToAdjust": "Seret gambar untuk menyesuaikan",
+    "settings.resetAdjust": "Atur Ulang",
+    "settings.zoomIn": "Perbesar",
+    "settings.zoomOut": "Perkecil",
+    "settings.confirmAdjust": "Konfirmasi",
 
     // Notifikasi
     "notif.title": "Pusat Notifikasi",
@@ -133,6 +139,12 @@ export const dictionary = {
     "settings.passwordMismatch": "Password confirmation does not match",
     "settings.passwordTooShort": "Password must be at least 6 characters",
     "settings.adjustPhoto": "Adjust Photo Size",
+    "settings.photoPendingHint": "New profile photo not saved yet. Click \"Save Changes\" to apply it.",
+    "settings.dragToAdjust": "Drag photo to adjust",
+    "settings.resetAdjust": "Reset",
+    "settings.zoomIn": "Zoom in",
+    "settings.zoomOut": "Zoom out",
+    "settings.confirmAdjust": "Confirm",
 
     "notif.title": "Notification Center",
     "notif.subtitle": "You have {count} new messages",

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { ChevronDown, User, Globe, Bell, Check, LoaderCircle, Camera, ZoomIn } from "lucide-react";
+import { ChevronDown, User, Globe, Bell, Check, LoaderCircle, Camera, Plus, Minus, X, RotateCcw } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import SettingsTabs from "@/components/layout/SettingsTabs";
 import { useTheme } from "../../context/ThemeContext";
@@ -37,8 +37,18 @@ export default function SettingsPage() {
   const [zoom, setZoom] = useState(1);
   const pendingFileRef = useRef<File | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const CROP_BOX = 240; // ukuran kotak pratinjau (px)
+  // File foto profil hasil crop yang MENUNGGU disimpan (baru benar-benar
+  // diupload & disimpan ke database saat tombol "Simpan Perubahan" ditekan).
+  const pendingAvatarFileRef = useRef<File | null>(null);
+  const [hasPendingAvatarChange, setHasPendingAvatarChange] = useState(false);
+  const CROP_BOX = 280; // ukuran kotak pratinjau (px)
   const OUTPUT_SIZE = 480; // ukuran hasil akhir foto (px)
+
+  // --- Geser (drag/pan) posisi gambar di dalam kotak crop, ala WhatsApp ---
+  const [position, setPosition] = useState({ x: 0, y: 0 }); // offset (px, pada skala CROP_BOX)
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const positionStartRef = useRef({ x: 0, y: 0 });
 
   const switches = user?.notification_settings || {
     notifEmail: true,
@@ -71,6 +81,7 @@ export default function SettingsPage() {
         setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
         setRawImageSrc(objectUrl);
         setZoom(1);
+        setPosition({ x: 0, y: 0 });
         setIsAdjustOpen(true);
       };
       img.src = objectUrl;
@@ -89,7 +100,60 @@ export default function SettingsPage() {
     return baseScale * zoom;
   };
 
-  // --- Terapkan penyesuaian ukuran: render ke canvas persegi, lalu upload ---
+  // Batas geser maksimum (px, skala CROP_BOX) agar gambar tidak lepas dari kotak crop
+  const getMaxOffset = (boxSize: number) => {
+    const scale = getDisplayScale(boxSize);
+    const drawW = naturalSize.w * scale;
+    const drawH = naturalSize.h * scale;
+    return { x: Math.max(0, (drawW - boxSize) / 2), y: Math.max(0, (drawH - boxSize) / 2) };
+  };
+
+  const clampPosition = (pos: { x: number; y: number }) => {
+    const max = getMaxOffset(CROP_BOX);
+    return {
+      x: Math.min(max.x, Math.max(-max.x, pos.x)),
+      y: Math.min(max.y, Math.max(-max.y, pos.y)),
+    };
+  };
+
+  // --- Geser gambar (drag/pan) di dalam kotak crop, mendukung mouse & sentuhan ---
+  const handleDragStart = (clientX: number, clientY: number) => {
+    isDraggingRef.current = true;
+    dragStartRef.current = { x: clientX, y: clientY };
+    positionStartRef.current = position;
+  };
+
+  const handleDragMove = (clientX: number, clientY: number) => {
+    if (!isDraggingRef.current) return;
+    const dx = clientX - dragStartRef.current.x;
+    const dy = clientY - dragStartRef.current.y;
+    setPosition(clampPosition({ x: positionStartRef.current.x + dx, y: positionStartRef.current.y + dy }));
+  };
+
+  const handleDragEnd = () => {
+    isDraggingRef.current = false;
+  };
+
+  const handleZoomChange = (newZoom: number) => {
+    const clamped = Math.min(3, Math.max(1, newZoom));
+    setZoom(clamped);
+  };
+
+  // Setiap kali zoom berubah, pastikan posisi geser masih dalam batas yang valid
+  useEffect(() => {
+    setPosition((prev) => clampPosition(prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, naturalSize.w, naturalSize.h]);
+
+  const handleResetAdjust = () => {
+    setZoom(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  // --- Terapkan penyesuaian ukuran: render ke canvas persegi, simpan sebagai PENDING ---
+  // Catatan: foto TIDAK langsung diupload/disimpan ke database di sini.
+  // Foto baru hanya berupa pratinjau lokal (belum permanen) sampai user menekan
+  // tombol "Simpan Perubahan" pada form profil (handleSaveProfile).
   const handleApplyAdjust = async () => {
     if (!rawImageSrc || !user || !pendingFileRef.current) return;
 
@@ -110,10 +174,11 @@ export default function SettingsPage() {
       if (!ctx) throw new Error("Konteks canvas tidak tersedia");
 
       const scale = getDisplayScale(OUTPUT_SIZE);
+      const outputScaleRatio = OUTPUT_SIZE / CROP_BOX;
       const drawW = naturalSize.w * scale;
       const drawH = naturalSize.h * scale;
-      const dx = (OUTPUT_SIZE - drawW) / 2;
-      const dy = (OUTPUT_SIZE - drawH) / 2;
+      const dx = (OUTPUT_SIZE - drawW) / 2 + position.x * outputScaleRatio;
+      const dy = (OUTPUT_SIZE - drawH) / 2 + position.y * outputScaleRatio;
 
       ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
       ctx.drawImage(img, dx, dy, drawW, drawH);
@@ -125,23 +190,17 @@ export default function SettingsPage() {
       const croppedFile = new File([blob], `avatar-${Date.now()}.jpg`, { type: "image/jpeg" });
       const compressedFile = await imageCompression(croppedFile, { maxSizeMB: 0.4, maxWidthOrHeight: 600, useWebWorker: true });
 
-      const fileName = `${Date.now()}-avatar-${user.id}`;
-      const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, compressedFile);
-      if (uploadError) throw uploadError;
+      // Simpan file hasil crop sebagai PENDING (belum diupload ke storage/db).
+      // Bersihkan preview blob lama (jika ada) sebelum menggantinya dengan yang baru.
+      if (previewUrl && previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+      pendingAvatarFileRef.current = compressedFile;
+      setPreviewUrl(URL.createObjectURL(compressedFile));
+      setHasPendingAvatarChange(true);
 
-      const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
-
-      const { error: dbError } = await supabase.from("users").update({ avatar_url: publicUrl }).eq("id", user.id);
-      if (dbError) throw dbError;
-
-      const updatedUser = { ...user, avatar_url: publicUrl };
-      setUser(updatedUser);
-      localStorage.setItem("inu_asset_session", JSON.stringify(updatedUser));
-      setPreviewUrl(publicUrl);
       setIsAdjustOpen(false);
       if (rawImageSrc) URL.revokeObjectURL(rawImageSrc);
       setRawImageSrc(null);
-      showToast("success", t("settings.saved"));
+      pendingFileRef.current = null;
     } catch (err: any) {
       showToast("error", t("settings.saveFailed"));
     } finally {
@@ -152,6 +211,7 @@ export default function SettingsPage() {
   const handleCancelAdjust = () => {
     if (rawImageSrc) URL.revokeObjectURL(rawImageSrc);
     setRawImageSrc(null);
+    setPosition({ x: 0, y: 0 });
     setIsAdjustOpen(false);
   };
 
@@ -183,6 +243,27 @@ export default function SettingsPage() {
       updatePayload.password_hash = await hashPassword(passwordForm.newPassword);
     }
 
+    // --- Jika ada foto profil baru yang masih PENDING, upload sekarang ---
+    // Ini satu-satunya titik di mana foto profil benar-benar disimpan permanen.
+    let newAvatarUrl: string | null = null;
+    if (pendingAvatarFileRef.current) {
+      try {
+        const fileName = `${Date.now()}-avatar-${user.id}`;
+        const { error: uploadError } = await supabase.storage
+          .from("asset-images")
+          .upload(fileName, pendingAvatarFileRef.current);
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+        newAvatarUrl = publicUrl;
+        updatePayload.avatar_url = publicUrl;
+      } catch (err: any) {
+        setIsSavingProfile(false);
+        showToast("error", t("settings.saveFailed"));
+        return;
+      }
+    }
+
     const { error } = await supabase.from("users").update(updatePayload).eq("id", user.id);
 
     setIsSavingProfile(false);
@@ -192,12 +273,33 @@ export default function SettingsPage() {
       return;
     }
 
-    const updatedUser = { ...user, name: profileForm.name, email: profileForm.email };
+    const updatedUser = {
+      ...user,
+      name: profileForm.name,
+      email: profileForm.email,
+      ...(newAvatarUrl ? { avatar_url: newAvatarUrl } : {}),
+    };
     setUser(updatedUser);
     localStorage.setItem("inu_asset_session", JSON.stringify(updatedUser));
     setPasswordForm({ newPassword: "", confirmPassword: "" });
+
+    // Bersihkan state pending foto setelah berhasil disimpan
+    pendingAvatarFileRef.current = null;
+    setHasPendingAvatarChange(false);
+    if (previewUrl && previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+
     setIsEditModalOpen(false);
     showToast("success", t("settings.saved"));
+  };
+
+  // --- Batal edit profil: buang perubahan foto yang belum disimpan ---
+  const handleCancelEditProfile = () => {
+    pendingAvatarFileRef.current = null;
+    setHasPendingAvatarChange(false);
+    if (previewUrl && previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setIsEditModalOpen(false);
   };
 
   // --- Ganti Bahasa ---
@@ -243,7 +345,7 @@ export default function SettingsPage() {
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("settings.title")}</h1>
           <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">{t("settings.subtitle")}</p>
@@ -278,6 +380,8 @@ export default function SettingsPage() {
               onClick={() => {
                 setProfileForm({ name: user?.name || "", email: user?.email || "" });
                 setPasswordForm({ newPassword: "", confirmPassword: "" });
+                pendingAvatarFileRef.current = null;
+                setHasPendingAvatarChange(false);
                 setPreviewUrl(null);
                 setIsEditModalOpen(true);
               }}
@@ -354,7 +458,7 @@ export default function SettingsPage() {
       </div>
 
       {/* MODAL EDIT PROFIL */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={t("settings.editProfile")}>
+      <Modal isOpen={isEditModalOpen} onClose={handleCancelEditProfile} title={t("settings.editProfile")}>
         <form onSubmit={handleSaveProfile} className="grid grid-cols-1 md:grid-cols-3 gap-10 text-left">
           <div className="md:col-span-1 flex flex-col gap-4 items-center">
             <div className="relative w-32 h-32">
@@ -464,74 +568,163 @@ export default function SettingsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setIsEditModalOpen(false)}
+                onClick={handleCancelEditProfile}
                 className="flex-1 py-3 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] rounded-xl font-bold text-sm"
               >
                 {t("settings.cancel")}
               </button>
             </div>
+            {hasPendingAvatarChange && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium -mt-2">
+                {t("settings.photoPendingHint")}
+              </p>
+            )}
           </div>
         </form>
       </Modal>
 
-      {/* MODAL PENYESUAIAN UKURAN FOTO */}
-      <Modal isOpen={isAdjustOpen} onClose={handleCancelAdjust} title={t("settings.adjustPhoto")}>
-        <div className="flex flex-col items-center gap-6">
-          <div
-            className="rounded-full overflow-hidden border-4 border-[#F1F5F9] dark:border-[#334155] bg-gray-100 relative"
-            style={{ width: CROP_BOX, height: CROP_BOX }}
-          >
-            {rawImageSrc && naturalSize.w > 0 && (
-              <img
-                src={rawImageSrc}
-                alt="Pratinjau"
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  top: "50%",
-                  width: naturalSize.w * getDisplayScale(CROP_BOX),
-                  height: naturalSize.h * getDisplayScale(CROP_BOX),
-                  transform: "translate(-50%, -50%)",
-                  maxWidth: "none",
-                }}
-              />
-            )}
+      {/* MODAL PENYESUAIAN UKURAN FOTO — gaya seperti WhatsApp: layar penuh gelap, bisa digeser & dizoom */}
+      {isAdjustOpen && (
+        <div className="fixed inset-0 z-[300] bg-[#111B21] flex flex-col select-none">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
+            <button
+              type="button"
+              onClick={handleCancelAdjust}
+              disabled={isUploadingPhoto}
+              className="text-white p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors disabled:opacity-60"
+              title={t("settings.cancel")}
+            >
+              <X size={22} />
+            </button>
+            <h2 className="text-white text-sm sm:text-base font-medium flex-1 text-center px-2 truncate">
+              {t("settings.dragToAdjust")}
+            </h2>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleResetAdjust}
+                disabled={isUploadingPhoto}
+                className="text-white p-2 rounded-full hover:bg-white/10 transition-colors disabled:opacity-60"
+                title={t("settings.resetAdjust")}
+              >
+                <RotateCcw size={18} />
+              </button>
+            </div>
           </div>
 
-          <div className="w-full flex items-center gap-3">
-            <ZoomIn size={18} className="text-[#94A3B8] flex-shrink-0" />
+          {/* Area gambar (bisa digeser) */}
+          <div className="flex-1 flex items-center justify-center relative overflow-hidden">
+            <div
+              className="relative overflow-hidden bg-black touch-none"
+              style={{ width: CROP_BOX, height: CROP_BOX, cursor: isUploadingPhoto ? "default" : "grab" }}
+              onMouseDown={(e) => {
+                if (isUploadingPhoto) return;
+                e.preventDefault();
+                handleDragStart(e.clientX, e.clientY);
+              }}
+              onMouseMove={(e) => handleDragMove(e.clientX, e.clientY)}
+              onMouseUp={handleDragEnd}
+              onMouseLeave={handleDragEnd}
+              onTouchStart={(e) => {
+                if (isUploadingPhoto) return;
+                const touch = e.touches[0];
+                handleDragStart(touch.clientX, touch.clientY);
+              }}
+              onTouchMove={(e) => {
+                const touch = e.touches[0];
+                handleDragMove(touch.clientX, touch.clientY);
+              }}
+              onTouchEnd={handleDragEnd}
+            >
+              {rawImageSrc && naturalSize.w > 0 && (
+                <img
+                  src={rawImageSrc}
+                  alt="Pratinjau"
+                  draggable={false}
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    top: "50%",
+                    width: naturalSize.w * getDisplayScale(CROP_BOX),
+                    height: naturalSize.h * getDisplayScale(CROP_BOX),
+                    transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px))`,
+                    maxWidth: "none",
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+
+              {/* Overlay gelap dengan lubang bundar di tengah (area yang akan jadi foto profil) */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  boxShadow: `0 0 0 9999px rgba(17,27,33,0.75)`,
+                  borderRadius: "9999px",
+                  width: CROP_BOX,
+                  height: CROP_BOX,
+                }}
+              />
+              <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{ boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.7)" }}
+              />
+            </div>
+          </div>
+
+          {/* Kontrol Zoom +/- */}
+          <div className="flex items-center justify-center gap-4 pb-4">
+            <button
+              type="button"
+              onClick={() => handleZoomChange(zoom - 0.2)}
+              disabled={isUploadingPhoto}
+              className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-colors disabled:opacity-40"
+              title={t("settings.zoomOut")}
+            >
+              <Minus size={18} />
+            </button>
             <input
               type="range"
               min={1}
               max={3}
               step={0.05}
               value={zoom}
-              onChange={(e) => setZoom(parseFloat(e.target.value))}
-              className="w-full accent-[#0D9488]"
+              onChange={(e) => handleZoomChange(parseFloat(e.target.value))}
+              className="w-40 accent-[#25D366]"
             />
-          </div>
-
-          <div className="flex gap-3 w-full">
             <button
               type="button"
-              onClick={handleApplyAdjust}
+              onClick={() => handleZoomChange(zoom + 0.2)}
               disabled={isUploadingPhoto}
-              className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 disabled:opacity-60"
+              className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-colors disabled:opacity-40"
+              title={t("settings.zoomIn")}
             >
-              {isUploadingPhoto && <LoaderCircle size={16} className="animate-spin" />}
-              {t("settings.save")}
+              <Plus size={18} />
             </button>
+          </div>
+
+          {/* Tombol Batal & Konfirmasi */}
+          <div className="flex items-center justify-between px-6 pb-8 sm:pb-10">
             <button
               type="button"
               onClick={handleCancelAdjust}
               disabled={isUploadingPhoto}
-              className="flex-1 py-3 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] rounded-xl font-bold text-sm"
+              className="px-5 py-3 text-white/80 font-bold text-sm rounded-xl hover:bg-white/10 transition-colors disabled:opacity-60"
             >
               {t("settings.cancel")}
             </button>
+            <button
+              type="button"
+              onClick={handleApplyAdjust}
+              disabled={isUploadingPhoto}
+              className="w-14 h-14 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-lg hover:bg-[#1FBF5C] transition-colors disabled:opacity-60"
+              title={t("settings.confirmAdjust")}
+            >
+              {isUploadingPhoto ? <LoaderCircle size={22} className="animate-spin" /> : <Check size={24} strokeWidth={3} />}
+            </button>
           </div>
         </div>
-      </Modal>
+      )}
 
       {/* Canvas tersembunyi untuk merender hasil crop */}
       <canvas ref={canvasRef} className="hidden" />

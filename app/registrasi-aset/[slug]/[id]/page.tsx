@@ -38,7 +38,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState("");
 
-  // --- STATE HAPUS PERMANEN (khusus administrator, hanya untuk aset tanpa riwayat) ---
+  // --- STATE HAPUS PERMANEN (khusus administrator & super_admin, hanya untuk aset tanpa riwayat) ---
   const [isPermaDeleteModalOpen, setIsPermaDeleteModalOpen] = useState(false);
   const [isCheckingDeletable, setIsCheckingDeletable] = useState(false);
   const [isDeletingPermanently, setIsDeletingPermanently] = useState(false);
@@ -60,8 +60,9 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   // --- STATE CAROUSEL FOTO (TAMPILAN DETAIL) ---
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
 
-  // --- HAK AKSES KHUSUS ADMINISTRATOR (mis. untuk field checklist di bawah) ---
-  const canManageChecklistParts = user?.role === "administrator";
+  // --- HAK AKSES KHUSUS ADMINISTRATOR & SUPER ADMIN (mis. untuk field checklist di bawah, dan hapus aset) ---
+  const canManageChecklistParts = user?.role === "administrator" || user?.role === "super_admin";
+  const canDeleteAsset = user?.role === "administrator" || user?.role === "super_admin";
 
   // --- AMBIL DATA DARI DB ---
   const fetchDetail = async () => {
@@ -594,10 +595,10 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
              </div>
           </div>
 
-          {/* ZONA BERBAHAYA — khusus administrator. Sengaja dipisah jauh dari tombol
+          {/* ZONA BERBAHAYA — khusus administrator & super_admin. Sengaja dipisah jauh dari tombol
               Simpan/Batal (di kolom lain, di baris paling bawah) supaya tidak ada risiko
               salah klik untuk aksi yang sifatnya permanen/tidak bisa dibatalkan. */}
-          {user?.role === "administrator" && (
+          {canDeleteAsset && (
             <div className="lg:col-span-3 mt-2 p-5 rounded-2xl border-2 border-dashed border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-black uppercase tracking-wider text-red-600">Zona Berbahaya</span>

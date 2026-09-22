@@ -10,12 +10,14 @@ import imageCompression from 'browser-image-compression';
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 import { useSearchParams } from "next/navigation";
 import Pagination from "@/components/ui/Pagination"; // Pastikan file ini sudah ada
 
 export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug: string, id: string }> }) {
   const { slug, id } = use(params);
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   
   const locationName = searchParams.get("name") || slug;
 
@@ -130,7 +132,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
       alert("Laporan disimpan!");
       setIsRecordModalOpen(false);
       setImagePreview(null);
-      setReportData({ urgency: "Sedang", reporter_name: "", incident_date: "", issue_title: "", description: "" });
+      setReportData({ urgency: "Sedang", reporter_name: user?.name || "", incident_date: "", issue_title: "", description: "" });
       fetchData();
     }
     setIsLoading(false);
@@ -173,7 +175,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
             <button onClick={() => { setActiveTab("gangguan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "gangguan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Record Gangguan</button>
             <button onClick={() => { setActiveTab("pemeliharaan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "pemeliharaan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Record Pemeliharaan</button>
           </div>
-          <button onClick={() => setIsRecordModalOpen(true)} className="flex items-center gap-2 bg-[#0D9488] text-white px-4 py-2 rounded-xl text-[13px] font-bold shadow-md hover:bg-teal-700 transition-all"><Plus size={18} /> Tambah Record</button>
+          <button onClick={() => { setReportData(prev => ({ ...prev, reporter_name: user?.name || prev.reporter_name })); setIsRecordModalOpen(true); }} className="flex items-center gap-2 bg-[#0D9488] text-white px-4 py-2 rounded-xl text-[13px] font-bold shadow-md hover:bg-teal-700 transition-all"><Plus size={18} /> Tambah Record</button>
         </div>
         
         <div className="overflow-x-auto">
@@ -276,6 +278,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-white">Nama Pelapor</label>
                 <input required type="text" value={reportData.reporter_name} onChange={(e) => setReportData({...reportData, reporter_name: e.target.value})} placeholder="Nama pelapor" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" />
+                <span className="text-[11px] text-[#94A3B8] italic">Otomatis terisi nama akun yang login, bisa diubah bila melapor atas nama orang lain.</span>
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-white">Tanggal Kejadian</label>

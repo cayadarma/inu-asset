@@ -312,12 +312,13 @@ export default function ManajemenUserPage() {
         </div>
       )}
 
-      <div>
-        <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pengaturan</h1>
-        <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Kelola akun pengguna sistem</p>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pengaturan</h1>
+          <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Kelola akun pengguna sistem</p>
+        </div>
+        <SettingsTabs active="manajemen-user" role={actorRole} />
       </div>
-
-      <SettingsTabs active="manajemen-user" role={actorRole} />
 
       {/* HEADER + TOMBOL TAMBAH */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

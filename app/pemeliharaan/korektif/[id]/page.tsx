@@ -21,12 +21,14 @@ interface WorkOrder {
   tindak_lanjut: string | null;
   tech_name: string | null;
   supervisor: string | null;
+  issued_by: string | null;
   priority: string;
   cost_part: number;
   cost_service: number;
   status: string;
   actual_cost: number | null;
   proof_photo_url: string | null;
+  payment_proof_url: string | null;
   updated_at: string | null;
   completed_at: string | null;
   created_at: string;
@@ -46,6 +48,7 @@ interface WorkOrderUpdate {
   keterangan: string | null;
   biaya: number;
   proof_photo_url: string | null;
+  payment_proof_url: string | null;
   created_at: string;
 }
 
@@ -75,31 +78,48 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
+  // --- FOTO BUKTI PEMBAYARAN / NOTA PEMBAYARAN (WAJIB SAAT MENYELESAIKAN PERBAIKAN) ---
+  const [paymentProofUrl, setPaymentProofUrl] = useState("");
+  const [isUploadingPaymentProof, setIsUploadingPaymentProof] = useState(false);
+  const paymentProofFileInputRef = useRef<HTMLInputElement | null>(null);
+  const paymentProofCameraInputRef = useRef<HTMLInputElement | null>(null);
+
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState("");
+
+  // --- ERROR PENGAMBILAN DATA (biar tidak diam-diam terlihat "tidak ditemukan" kalau query gagal) ---
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const isLocked = workOrder?.status === "Selesai";
 
   const fetchDetail = async () => {
     setIsLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("work_orders")
       .select(`*, assets ( name, type, location_id, locations ( name ) )`)
       .eq("id", id)
       .maybeSingle();
 
+    if (error) {
+      console.error("Gagal mengambil detail Work Order:", error);
+      setFetchError(
+        `Gagal memuat detail Work Order dari database: ${error.message}. ` +
+        `Kemungkinan ada kolom yang direferensikan kode tapi belum ada di tabel Supabase (mis. issued_by/payment_proof_url), atau masalah RLS/koneksi.`
+      );
+    }
     if (data) setWorkOrder(data as any);
     setIsLoading(false);
   };
 
   // --- AMBIL SEMUA RIWAYAT UPDATE PERBAIKAN (BUKAN HANYA YANG TERBARU) ---
   const fetchUpdates = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("work_order_updates")
       .select("*")
       .eq("work_order_id", id)
       .order("created_at", { ascending: false });
 
+    if (error) console.error("Gagal mengambil riwayat update perbaikan:", error);
     if (data) setUpdates(data as WorkOrderUpdate[]);
   };
 
@@ -119,6 +139,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
   const resetUpdateForm = () => {
     setUpdateForm({ tindak_lanjut: "", keterangan: "Dalam Proses", biaya: 0 });
     setPhotoUrl("");
+    setPaymentProofUrl("");
   };
 
   const openUpdateModal = () => {
@@ -154,6 +175,34 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     }
   };
 
+  // --- UPLOAD FOTO BUKTI PEMBAYARAN / NOTA PEMBAYARAN ---
+  const handlePaymentProofChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingPaymentProof(true);
+    try {
+      if (file.name.toLowerCase().endsWith(".heic")) {
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      }
+      const compressedFile = await imageCompression(file, { maxSizeMB: 0.6, maxWidthOrHeight: 1200, useWebWorker: true });
+
+      const fileName = `${Date.now()}-wo-payment-${id}`;
+      const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, compressedFile);
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+      setPaymentProofUrl(publicUrl);
+    } catch (err: any) {
+      alert("Gagal mengunggah foto bukti pembayaran: " + (err?.message || "Terjadi kesalahan"));
+    } finally {
+      setIsUploadingPaymentProof(false);
+      if (paymentProofFileInputRef.current) paymentProofFileInputRef.current.value = "";
+    }
+  };
+
   // --- SIMPAN PEMBARUAN PERBAIKAN (BISA DIPAKSA STATUS "Selesai") ---
   const handleSaveUpdate = async (forceStatus?: string) => {
     if (!workOrder) return;
@@ -169,9 +218,13 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
       alert("Foto bukti perbaikan wajib diunggah.");
       return;
     }
-    // --- VALIDASI TAMBAHAN: BIAYA WAJIB DIISI KHUSUS SAAT MENYELESAIKAN PERBAIKAN ---
-    if (isFinishing && (!updateForm.biaya || updateForm.biaya <= 0)) {
-      alert("Biaya yang dikeluarkan wajib diisi untuk menyelesaikan perbaikan.");
+    // --- VALIDASI: FOTO BUKTI PEMBAYARAN WAJIB KALAU-KALAU ADA BIAYA YANG DIMASUKKAN
+    // (BERAPA PUN NOMINALNYA), TIDAK PEDULI STATUSNYA "SELESAI" ATAU BELUM. KALAU
+    // PERBAIKANNYA MEMANG TIDAK KELUAR DANA, BIAYA BOLEH DIKOSONGKAN/0 DAN FOTO INI
+    // TIDAK DIWAJIBKAN. INI UNTUK MEMVALIDASI APAKAH PEMBAYARAN BENAR-BENAR SUDAH
+    // DILAKUKAN ATAU BELUM SETIAP ADA BIAYA YANG DICATAT. ---
+    if (updateForm.biaya > 0 && !paymentProofUrl) {
+      alert("Ada biaya yang dimasukkan, jadi foto bukti pembayaran/nota pembayaran wajib diunggah.");
       return;
     }
 
@@ -192,6 +245,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
       keterangan: updateForm.tindak_lanjut.trim(),
       biaya: updateForm.biaya || 0,
       proof_photo_url: photoUrl,
+      payment_proof_url: paymentProofUrl || null,
       created_at: nowIso,
     }]);
 
@@ -213,6 +267,9 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
       proof_photo_url: photoUrl,
       updated_at: nowIso,
     };
+    if (paymentProofUrl) {
+      updatePayload.payment_proof_url = paymentProofUrl;
+    }
     if (isFinishing) {
       updatePayload.completed_at = nowIso;
     }
@@ -267,7 +324,14 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
   };
 
   if (isLoading) return <div className="p-20 text-center font-bold dark:text-white font-poppins">Memuat detail work order...</div>;
-  if (!workOrder) return <div className="p-20 text-center text-red-500 font-bold font-poppins">Work order tidak ditemukan.</div>;
+  if (!workOrder) return (
+    <div className="p-20 text-center font-poppins">
+      <p className="text-red-500 font-bold">Work order tidak ditemukan.</p>
+      {fetchError && (
+        <p className="text-xs text-[#94A3B8] mt-3 max-w-lg mx-auto italic">{fetchError}</p>
+      )}
+    </div>
+  );
 
   const totalEstimasi = (workOrder.cost_part || 0) + (workOrder.cost_service || 0);
 
@@ -332,6 +396,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
           <RowItem label="Kategori" value={workOrder.kategori || "-"} />
           <RowItem label="Pengawas" value={workOrder.supervisor || "-"} />
           <RowItem label="Pelaksana" value={workOrder.tech_name || "-"} />
+          <RowItem label="Diterbitkan Oleh" value={workOrder.issued_by || "-"} />
 
           <div className="flex flex-col gap-2 mt-2">
             <span className="text-xs font-bold text-[#94A3B8] uppercase">Masalah (Trouble)</span>
@@ -411,6 +476,36 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
                     <div className="w-full aspect-video rounded-xl border border-dashed border-gray-200 dark:border-[#334155] flex items-center justify-center text-[#94A3B8] text-xs italic">
                       Belum ada foto
                     </div>
+                  )}
+
+                  {u.biaya > 0 && (
+                    <>
+                      <span className="text-xs font-bold text-[#94A3B8] uppercase flex items-center gap-1 mt-2">
+                        <ImageIcon size={14} /> Foto Bukti Pembayaran
+                      </span>
+                      {u.payment_proof_url ? (
+                        <div className="relative group w-full">
+                          <img
+                            src={u.payment_proof_url}
+                            onClick={() => openLightbox(u.payment_proof_url)}
+                            className="w-full aspect-video object-cover rounded-xl border border-gray-200 dark:border-[#334155] cursor-zoom-in"
+                            alt="Bukti Pembayaran"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => openLightbox(u.payment_proof_url)}
+                            className="absolute bottom-2 right-2 p-2 bg-black/60 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                            title="Perbesar foto"
+                          >
+                            <ZoomIn size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-full aspect-video rounded-xl border border-dashed border-gray-200 dark:border-[#334155] flex items-center justify-center text-[#94A3B8] text-xs italic">
+                          Belum ada foto
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -510,10 +605,76 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
             )}
           </div>
 
+          {/* FOTO BUKTI PEMBAYARAN / NOTA PEMBAYARAN — wajib diisi begitu ada biaya
+              yang dimasukkan (berapa pun nominalnya), untuk memvalidasi apakah
+              pembayaran perbaikan ini benar-benar sudah dilakukan atau belum. Kalau
+              perbaikannya memang tidak keluar dana, biaya boleh dikosongkan/0 dan
+              foto ini tidak wajib. */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
+              Foto Bukti Pembayaran / Nota Pembayaran
+              {updateForm.biaya > 0 && <span className="text-red-500"> *</span>}
+            </label>
+            <input
+              type="file"
+              ref={paymentProofFileInputRef}
+              onChange={handlePaymentProofChange}
+              className="hidden"
+              accept="image/*,.heic"
+            />
+            <input
+              type="file"
+              ref={paymentProofCameraInputRef}
+              onChange={handlePaymentProofChange}
+              className="hidden"
+              accept="image/*"
+              capture="environment"
+            />
+            <div className="flex items-center gap-3">
+              {paymentProofUrl && (
+                <div className="relative group">
+                  <img src={paymentProofUrl} className="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-[#334155]" alt="Pratinjau Bukti Pembayaran" />
+                  <button
+                    type="button"
+                    onClick={() => openLightbox(paymentProofUrl)}
+                    title="Lihat resolusi asli"
+                    className="absolute -top-2 -right-2 p-1.5 bg-[#0D9488] text-white rounded-full shadow-md hover:bg-teal-700 transition-all"
+                  >
+                    <ZoomIn size={12} />
+                  </button>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isUploadingPaymentProof}
+                  onClick={() => paymentProofFileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ImageIcon size={16} />
+                  {isUploadingPaymentProof ? "Mengunggah..." : paymentProofUrl ? "Ganti Foto" : "Pilih dari Galeri"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isUploadingPaymentProof}
+                  onClick={() => paymentProofCameraInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Camera size={16} />
+                  Kamera
+                </button>
+              </div>
+            </div>
+            <span className="text-[11px] text-[#94A3B8] italic">
+              {updateForm.biaya > 0
+                ? "Wajib diunggah karena ada biaya yang dimasukkan, untuk memvalidasi bahwa pembayarannya benar-benar sudah dilakukan."
+                : "Wajib diunggah begitu kolom \"Biaya yang Dikeluarkan\" diisi lebih dari 0. Kalau perbaikan ini tidak keluar dana, boleh dikosongkan."}
+            </span>
+          </div>
+
           <div className="flex flex-col gap-2">
             <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
               Biaya yang Dikeluarkan (Rp)
-              {updateForm.keterangan === "Selesai" && <span className="text-red-500"> *</span>}
             </label>
             <input
               type="text"
@@ -523,7 +684,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
               placeholder="0"
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white font-bold"
             />
-            <span className="text-[11px] text-[#94A3B8] italic">Wajib diisi saat menyelesaikan perbaikan.</span>
+            <span className="text-[11px] text-[#94A3B8] italic">Opsional — kosongkan/isi 0 kalau perbaikan ini tidak keluar dana sama sekali. Kalau diisi, foto bukti pembayaran di bawah wajib diunggah.</span>
           </div>
 
           <div className="flex flex-col gap-3 mt-4">

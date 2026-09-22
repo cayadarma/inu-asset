@@ -9,9 +9,11 @@ import Modal from "@/components/ui/Modal";
 import MaintenanceTabs from "@/components/maintenance/MaintenanceTabs";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 
 function CorrectiveContent() {
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
@@ -19,7 +21,8 @@ function CorrectiveContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingEmergency, setIsSavingEmergency] = useState(false);
 
-  // --- STATE DATA REAL ---
+  // --- STATE ERROR PENGAMBILAN DATA (biar tidak diam-diam kosong kalau query gagal) ---
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [workOrders, setWorkOrders] = useState<any[]>([]);
   const [assetsList, setAssetsList] = useState<any[]>([]);
   const [locationsList, setLocationsList] = useState<any[]>([]);
@@ -45,6 +48,7 @@ function CorrectiveContent() {
     costService: 0,
     tindak_lanjut: "",
     damage_report_id: "" as string | null, // diisi otomatis kalau WO ini diterbitkan dari sebuah laporan kerusakan
+    issued_by: "", // admin yang menerbitkan WO ini di sistem — otomatis dari akun yang login, bisa diedit
   });
 
   // --- STATE FORM PERBAIKAN MENDADAK (TANPA WORK ORDER FORMAL DI AWAL) ---
@@ -63,7 +67,7 @@ function CorrectiveContent() {
   const emergencyCameraInputRef = useRef<HTMLInputElement>(null);
 
   const resetEmergencyForm = () => {
-    setEmergencyForm({ asset_id: "", reporter_name: "", trouble: "", description: "", oleh: "", costPart: 0, costService: 0 });
+    setEmergencyForm({ asset_id: "", reporter_name: user?.name || "", trouble: "", description: "", oleh: "", costPart: 0, costService: 0 });
     setEmergencyImageFile(null);
     setEmergencyImagePreview(null);
   };
@@ -133,6 +137,7 @@ function CorrectiveContent() {
         tindak_lanjut: emergencyForm.description,
         status: "Dalam Proses",
         is_emergency: true,
+        issued_by: user?.name || null,
       }]);
       if (woError) throw woError;
 
@@ -152,9 +157,22 @@ function CorrectiveContent() {
 
   const fetchData = async () => {
     setIsLoading(true);
-    const { data: woData } = await supabase.from("work_orders").select(`*, assets(name, type, location_id, locations(name))`).order("created_at", { ascending: false });
-    const { data: assetData } = await supabase.from("assets").select("id, name, type").eq("is_active", true);
-    const { data: locationData } = await supabase.from("locations").select("id, name").order("name", { ascending: true });
+    setFetchError(null);
+
+    const { data: woData, error: woError } = await supabase.from("work_orders").select(`*, assets(name, type, location_id, locations(name))`).order("created_at", { ascending: false });
+    const { data: assetData, error: assetError } = await supabase.from("assets").select("id, name, type").eq("is_active", true);
+    const { data: locationData, error: locationError } = await supabase.from("locations").select("id, name").order("name", { ascending: true });
+
+    if (woError) {
+      console.error("Gagal mengambil daftar Work Order:", woError);
+      setFetchError(
+        `Gagal memuat daftar Work Order dari database: ${woError.message}. ` +
+        `Kemungkinan ada kolom yang direferensikan kode tapi belum ada di tabel Supabase (mis. issued_by/payment_proof_url), atau masalah RLS/koneksi. ` +
+        `Data tidak hilang, hanya gagal ditampilkan — cek console browser (F12) atau Table Editor di Supabase untuk detail lebih lanjut.`
+      );
+    }
+    if (assetError) console.error("Gagal mengambil daftar aset:", assetError);
+    if (locationError) console.error("Gagal mengambil daftar lokasi:", locationError);
 
     if (woData) setWorkOrders(woData);
     if (assetData) setAssetsList(assetData);
@@ -172,10 +190,12 @@ function CorrectiveContent() {
         asset_id: searchParams.get("assetId") || "", 
         trouble: searchParams.get("problem") || "",
         damage_report_id: searchParams.get("reportId") || null,
-        id: `WO-${Date.now().toString().slice(-4)}`
+        id: `WO-${Date.now().toString().slice(-4)}`,
+        issued_by: user?.name || prev.issued_by,
       }));
     }
-  }, [searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, user?.name]);
 
   // Auto fill Jenis Barang berdasarkan pilihan Kode Aset
   useEffect(() => {
@@ -202,6 +222,7 @@ function CorrectiveContent() {
       cost_service: formData.costService,
       tindak_lanjut: formData.tindak_lanjut,
       damage_report_id: formData.damage_report_id || null,
+      issued_by: formData.issued_by || null,
       status: "Dalam Proses"
     }]);
 
@@ -240,6 +261,15 @@ function CorrectiveContent() {
         </div>
         <MaintenanceTabs active="korektif" />
       </div>
+
+      {/* BANNER ERROR — muncul kalau pengambilan data Work Order gagal, supaya tidak
+          terlihat seolah datanya kosong padahal sebenarnya query-nya gagal. */}
+      {fetchError && (
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-xl text-xs text-red-700 dark:text-red-300 font-medium flex items-start gap-2">
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          {fetchError}
+        </div>
+      )}
 
       {/* 2. SUMMARY */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
@@ -287,10 +317,10 @@ function CorrectiveContent() {
         </div>
         {/* TOMBOL TAMBAH WORK ORDER & PERBAIKAN MENDADAK */}
         <div className="flex gap-3 w-full md:w-auto">
-          <button onClick={() => setIsEmergencyModalOpen(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#EF4444] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
+          <button onClick={() => { setEmergencyForm(prev => ({ ...prev, reporter_name: user?.name || prev.reporter_name })); setIsEmergencyModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#EF4444] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
             <Zap size={18} /> Perbaikan Mendadak
           </button>
-          <button onClick={() => { setFormData(prev => ({ ...prev, id: `WO-${Date.now().toString().slice(-4)}`, asset_id: "", trouble: "", damage_report_id: null })); setIsAddModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
+          <button onClick={() => { setFormData(prev => ({ ...prev, id: `WO-${Date.now().toString().slice(-4)}`, asset_id: "", trouble: "", damage_report_id: null, issued_by: user?.name || prev.issued_by })); setIsAddModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#0D9488] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all">
             <Plus size={18} /> Buat Work Order
           </button>
         </div>
@@ -418,6 +448,19 @@ function CorrectiveContent() {
                   />
                </div>
             </div>
+
+            {/* DITERBITKAN OLEH — otomatis diisi nama akun admin yang sedang login, tetap bisa diedit */}
+            <div className="flex flex-col gap-2">
+               <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Diterbitkan Oleh</label>
+               <input
+                 type="text"
+                 placeholder="Nama admin yang menerbitkan WO ini"
+                 value={formData.issued_by}
+                 onChange={e => setFormData({...formData, issued_by: e.target.value})}
+                 className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white"
+               />
+               <span className="text-[11px] text-[#94A3B8] italic">Otomatis terisi nama akun yang login, bisa diubah bila menerbitkan atas nama admin lain.</span>
+            </div>
           </div>
 
           <div className="lg:col-span-1 flex flex-col gap-6 bg-[#F8FAFC] dark:bg-[#0F172A] p-6 rounded-2xl border border-gray-100 dark:border-[#334155]">
@@ -491,6 +534,7 @@ function CorrectiveContent() {
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Yang Menemukan/Melapor</label>
                 <input type="text" value={emergencyForm.reporter_name} onChange={e => setEmergencyForm({...emergencyForm, reporter_name: e.target.value})} placeholder="Nama pelapor" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white" />
+                <span className="text-[11px] text-[#94A3B8] italic">Otomatis terisi nama akun yang login, bisa diubah bila melapor atas nama orang lain.</span>
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Pelaksana Perbaikan</label>

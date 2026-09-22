@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Wallet, Save, Pencil, ChevronDown, AlertCircle } from "lucide-react";
+import { Wallet, Save, Pencil, Trash2, ChevronDown, AlertCircle, AlertTriangle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import Modal from "@/components/ui/Modal";
 
 interface BudgetRow {
   id: string;
@@ -42,6 +43,9 @@ export default function AnggaranPage() {
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedBudget, setSelectedBudget] = useState<BudgetRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchBudgets = async () => {
     setIsLoading(true);
@@ -85,6 +89,35 @@ export default function AnggaranPage() {
     setEditingId(b.id);
     setForm({ year: b.year, month: b.month, amount: String(b.amount) });
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleDeleteClick = (b: BudgetRow) => {
+    setSelectedBudget(b);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!selectedBudget) return;
+    setIsDeleting(true);
+
+    const { error } = await supabase.from("company_budgets").delete().eq("id", selectedBudget.id);
+
+    setIsDeleting(false);
+
+    if (error) {
+      alert("Gagal menghapus: " + error.message);
+      return;
+    }
+
+    // Kalau anggaran yang dihapus sedang diedit di form, kosongkan form
+    if (editingId === selectedBudget.id) {
+      setEditingId(null);
+      setForm({ year: now.getFullYear(), month: now.getMonth() + 1, amount: "" });
+    }
+
+    setIsDeleteModalOpen(false);
+    setSelectedBudget(null);
+    fetchBudgets();
   };
 
   const yearOptions = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 2 + i);
@@ -194,7 +227,7 @@ export default function AnggaranPage() {
               <thead className="bg-[#F8FAFC] dark:bg-[#0F172A] border-b text-[#475569] dark:text-[#94A3B8] font-bold">
                 <tr>
                   <th className="px-6 py-4">Periode</th>
-                  <th className="px-6 py-4 text-right">Nominal Anggaran</th>
+                  <th className="px-6 py-4 text-right pr-10 md:pr-16">Nominal Anggaran</th>
                   <th className="px-6 py-4 text-center">Aksi</th>
                 </tr>
               </thead>
@@ -202,7 +235,11 @@ export default function AnggaranPage() {
                 {isLoading ? (
                   <tr><td colSpan={3} className="px-6 py-10 text-center text-[#94A3B8] italic">Memuat data...</td></tr>
                 ) : budgets.length === 0 ? (
-                  <tr><td colSpan={3} className="px-6 py-10 text-center text-[#94A3B8] italic">Belum ada anggaran yang diinput.</td></tr>
+                  <tr>
+                    <td className="px-6 py-10 text-[#94A3B8] italic">Belum ada anggaran yang diinput.</td>
+                    <td className="px-6 py-10 text-right pr-10 md:pr-16 text-[#94A3B8]">-</td>
+                    <td className="px-6 py-10 text-center text-[#94A3B8]">-</td>
+                  </tr>
                 ) : (
                   budgets.map((b) => {
                     const isCurrent = b.year === now.getFullYear() && b.month === now.getMonth() + 1;
@@ -212,11 +249,16 @@ export default function AnggaranPage() {
                           {BULAN[b.month - 1]} {b.year}
                           {isCurrent && <span className="ml-2 text-[10px] font-black text-[#0D9488] bg-[#CCFBF1] dark:bg-[#115E59]/30 px-2 py-0.5 rounded-full uppercase">Bulan Ini</span>}
                         </td>
-                        <td className="px-6 py-4 text-right font-black text-[#0D9488]">{formatRupiah(b.amount)}</td>
+                        <td className="px-6 py-4 text-right pr-10 md:pr-16 font-black text-[#0D9488]">{formatRupiah(b.amount)}</td>
                         <td className="px-6 py-4 text-center">
-                          <button onClick={() => handleEditClick(b)} className="p-2 text-[#94A3B8] hover:text-[#0D9488] hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg transition-all">
-                            <Pencil size={16} />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button onClick={() => handleEditClick(b)} className="p-2 text-[#94A3B8] hover:text-[#0D9488] hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg transition-all" title="Edit Anggaran">
+                              <Pencil size={16} />
+                            </button>
+                            <button onClick={() => handleDeleteClick(b)} className="p-2 text-[#94A3B8] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-all" title="Hapus Anggaran">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -227,6 +269,37 @@ export default function AnggaranPage() {
           </div>
         </div>
       </div>
+
+      {/* MODAL KONFIRMASI HAPUS ANGGARAN */}
+      <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Hapus Anggaran">
+        <div className="flex flex-col items-center text-center gap-5 py-4">
+          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center"><AlertTriangle size={32} /></div>
+          <div>
+            <h3 className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+              Hapus Anggaran {selectedBudget ? `${BULAN[selectedBudget.month - 1]} ${selectedBudget.year}` : ""}?
+            </h3>
+            <p className="text-xs text-[#94A3B8] mt-2 italic">
+              Data anggaran bulan ini akan dihapus permanen dan tidak bisa dikembalikan. Serapan biaya di Dashboard untuk periode ini tidak akan lagi punya pembanding anggaran.
+            </p>
+          </div>
+          <div className="flex gap-4 w-full mt-4">
+            <button
+              onClick={() => setIsDeleteModalOpen(false)}
+              disabled={isDeleting}
+              className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155] disabled:opacity-60"
+            >
+              Batal
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-md disabled:opacity-60"
+            >
+              {isDeleting ? "Menghapus..." : "Ya, Hapus Permanen"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
