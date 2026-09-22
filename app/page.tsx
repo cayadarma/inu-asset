@@ -46,7 +46,7 @@ export default function Home() {
 
   useEffect(() => {
     async function getStats() {
-      const { data } = await supabase.from("assets").select("status, purchase_date, is_active");
+      const { data } = await supabase.from("assets").select("status, purchase_date, is_active, location_id");
       if (!data) return;
 
       // PENTING: aset yang sudah dinonaktifkan (is_active === false) dikeluarkan dari
@@ -196,29 +196,52 @@ export default function Home() {
 
       setCounts((prev) => ({ ...prev, realisasiPct, realisasiSelesai, realisasiTotal }));
 
-      // --- CATAT "POTRET" STATUS ASET HARI INI UNTUK GRAFIK TREN ---
-      // Di-upsert (insert atau update jika sudah ada) berdasarkan snapshot_date,
-      // supaya selalu mencerminkan kondisi terbaru pada hari berjalan.
+      // --- CATAT "POTRET" STATUS ASET HARI INI UNTUK GRAFIK TREN, PER LOKASI ---
+      // Di-upsert (insert atau update jika sudah ada) berdasarkan (snapshot_date, location_id),
+      // supaya selalu mencerminkan kondisi terbaru pada hari berjalan, per lokasi.
+      // "Semua Lokasi" tidak disimpan sebagai baris sendiri -- dijumlahkan on-the-fly
+      // dari baris-baris per lokasi ini saat ditampilkan di grafik.
       const today = new Date().toISOString().slice(0, 10); // format YYYY-MM-DD
-      await supabase.from("asset_status_snapshots").upsert(
-        [{
-          snapshot_date: today,
-          beroperasi: active,
-          idle: idle,
-          pemeliharaan: maintenance,
-          perbaikan: perbaikan,
-          rusak: rusak,
-          total: total,
-          updated_at: new Date().toISOString(),
-        }],
-        { onConflict: "snapshot_date" }
-      );
+      const byLocation = new Map<
+        string | null,
+        { beroperasi: number; idle: number; pemeliharaan: number; perbaikan: number; rusak: number; total: number }
+      >();
+      operationalAssets.forEach((a: any) => {
+        const locId = a.location_id ?? null;
+        const entry = byLocation.get(locId) || { beroperasi: 0, idle: 0, pemeliharaan: 0, perbaikan: 0, rusak: 0, total: 0 };
+        entry.total += 1;
+        if (a.status === "Beroperasi") entry.beroperasi += 1;
+        else if (a.status === "Idle") entry.idle += 1;
+        else if (a.status === "Pemeliharaan") entry.pemeliharaan += 1;
+        else if (a.status === "Perbaikan") entry.perbaikan += 1;
+        else if (a.status === "Rusak") entry.rusak += 1;
+        byLocation.set(locId, entry);
+      });
+
+      const snapshotRows = Array.from(byLocation.entries()).map(([location_id, c]) => ({
+        snapshot_date: today,
+        location_id,
+        beroperasi: c.beroperasi,
+        idle: c.idle,
+        pemeliharaan: c.pemeliharaan,
+        perbaikan: c.perbaikan,
+        rusak: c.rusak,
+        total: c.total,
+        updated_at: new Date().toISOString(),
+      }));
+
+      if (snapshotRows.length > 0) {
+        await supabase.from("asset_status_snapshots").upsert(
+          snapshotRows,
+          { onConflict: "snapshot_date,location_id" }
+        );
+      }
     }
     getStats();
   }, []);
 
   return (
-    <div className="flex flex-col gap-8 max-w-[1400px] mx-auto pb-10 font-poppins text-left transition-all duration-300">
+    <main className="flex flex-col gap-8 max-w-[1400px] mx-auto pb-10 font-poppins text-left transition-all duration-300">
       
       {/* HEADER */}
       <div>
@@ -364,6 +387,6 @@ export default function Home() {
         <RecentActivity />
       </div>
 
-    </div>
+    </main>
   );
 }

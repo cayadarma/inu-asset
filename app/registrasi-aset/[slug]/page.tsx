@@ -10,6 +10,10 @@ import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
 import { CHECKLIST_CATEGORY_OPTIONS, ChecklistCategoryOption } from "@/constants/checklistTemplates";
 
+// Status awal aset saat registrasi -- default "Beroperasi", tapi bisa dipilih
+// "Idle" untuk aset yang baru didaftarkan tapi belum langsung dipakai (mis. stok).
+const ASSET_STATUS_OPTIONS = ["Beroperasi", "Idle", "Pemeliharaan", "Perbaikan", "Rusak"];
+
 export default function AssetListPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
   const locationId = resolvedParams.slug;
@@ -360,6 +364,25 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
              </div>
 
              <FormInput label="Spesifikasi" placeholder="Detail spek" value={newAsset.specification} onChange={(e: any) => setNewAsset({...newAsset, specification: e.target.value})} multiline />
+
+             {/* STATUS AWAL ASET -- default Beroperasi, tapi aset baru bisa saja
+                 belum langsung dipakai (mis. disimpan sebagai stok -> Idle). */}
+             <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Status Awal</label>
+                <div className="relative">
+                  <select
+                    value={newAsset.status}
+                    onChange={(e) => setNewAsset({ ...newAsset, status: e.target.value })}
+                    className="w-full appearance-none px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm outline-none focus:border-primary dark:text-white cursor-pointer font-bold"
+                  >
+                    {ASSET_STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+                </div>
+             </div>
+
              <FormInput label="Tanggal Pembelian" type="date" value={newAsset.purchase_date} onChange={(e: any) => { setNewAsset({...newAsset, purchase_date: e.target.value}); setTempAge(calculateAge(e.target.value)); }} />
              <FormInput label="Umur Aset" value={tempAge} disabled />
              <FormInput label="Biaya Pembelian" type="number" placeholder="Contoh: 5000000" value={newAsset.purchase_cost} onChange={(e: any) => setNewAsset({...newAsset, purchase_cost: e.target.value})} />
