@@ -20,6 +20,7 @@ function CorrectiveContent() {
   const [selectedWO, setSelectedWO] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingEmergency, setIsSavingEmergency] = useState(false);
+  const [isSavingWO, setIsSavingWO] = useState(false);
 
   // --- STATE ERROR PENGAMBILAN DATA (biar tidak diam-diam kosong kalau query gagal) ---
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -95,6 +96,7 @@ function CorrectiveContent() {
   // --- SUBMIT PERBAIKAN MENDADAK: OTOMATIS BIKIN 2 RECORD (BUKU SAKIT + WORK ORDER) ---
   const handleEmergencySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingEmergency) return; // cegah submit dobel
     if (!emergencyForm.asset_id) return alert("Pilih aset terlebih dahulu!");
     if (!emergencyForm.trouble.trim()) return alert("Kejadian/masalah wajib diisi!");
 
@@ -208,7 +210,8 @@ function CorrectiveContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    if (isSavingWO) return; // cegah submit dobel
+    setIsSavingWO(true);
     
     const { error } = await supabase.from("work_orders").insert([{
       id: formData.id || `WO-${Date.now().toString().slice(-4)}`,
@@ -234,7 +237,7 @@ function CorrectiveContent() {
     } else {
       alert(error.message);
     }
-    setIsLoading(false);
+    setIsSavingWO(false);
   };
 
   // --- FILTER WORK ORDER SESUAI SEARCH, STATUS, DAN LOKASI ---
@@ -498,7 +501,7 @@ function CorrectiveContent() {
             </div>
             
             <div className="flex flex-col gap-3 mt-auto pt-6">
-              <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all active:scale-95">Terbitkan Work Order</button>
+              <button type="submit" disabled={isSavingWO} className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all active:scale-95 disabled:opacity-50">{isSavingWO ? "Menyimpan..." : "Terbitkan Work Order"}</button>
               <button type="button" onClick={() => setIsAddModalOpen(false)} className="w-full py-4 border border-gray-200 dark:border-[#334155] rounded-xl text-[#475569] dark:text-[#94A3B8] text-sm font-bold hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
             </div>
           </div>

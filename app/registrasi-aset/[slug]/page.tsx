@@ -24,6 +24,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   const [availableTypes, setAvailableTypes] = useState<any[]>([]);
   const [realLocationName, setRealLocationName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmittingAsset, setIsSubmittingAsset] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempAge, setTempAge] = useState("Pilih tanggal pembelian aset!");
 
@@ -187,6 +188,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingAsset) return; // cegah submit dobel
 
     // Validasi: kalau biaya pembelian diisi, bukti pembayaran wajib ada
     if (newAsset.purchase_cost && Number(newAsset.purchase_cost) > 0 && !paymentProofFile) {
@@ -194,7 +196,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmittingAsset(true);
 
     if (isNewType && newAsset.type) {
       await supabase.from("asset_types").insert([{ name: newAsset.type }]);
@@ -246,7 +248,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       fetchAssets();
       fetchTypes();
     }
-    setIsLoading(false);
+    setIsSubmittingAsset(false);
   };
 
   return (
@@ -452,7 +454,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
              </div>
              <p className="text-[10px] text-[#94A3B8] -mt-3">Maksimal {MAX_PHOTOS} foto per aset.</p>
              <div className="flex flex-col gap-3 mt-auto pt-10">
-                <button type="submit" className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">Simpan Aset</button>
+                <button type="submit" disabled={isSubmittingAsset} className="w-full bg-[#0D9488] text-white py-4 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all disabled:opacity-50">{isSubmittingAsset ? "Menyimpan..." : "Simpan Aset"}</button>
                 <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-4 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
              </div>
           </div>

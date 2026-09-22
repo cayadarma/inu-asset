@@ -17,6 +17,8 @@ export default function RegistrasiAsetPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedLoc, setSelectedLoc] = useState<any>(null); // Untuk Edit/Hapus
   const [newLocName, setNewLocName] = useState("");
+  const [isSavingLoc, setIsSavingLoc] = useState(false);
+  const [isDeletingLoc, setIsDeletingLoc] = useState(false);
 
   // --- STATE UNTUK TOGGLE TOMBOL EDIT/HAPUS ---
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -34,6 +36,8 @@ export default function RegistrasiAsetPage() {
   const handleSaveLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLocName) return;
+    if (isSavingLoc) return; // cegah submit dobel
+    setIsSavingLoc(true);
 
     if (selectedLoc) {
       // LOGIKA EDIT (UPDATE)
@@ -46,12 +50,15 @@ export default function RegistrasiAsetPage() {
     setNewLocName("");
     setSelectedLoc(null);
     setIsModalOpen(false);
+    setIsSavingLoc(false);
     fetchLocations();
   };
 
   // --- FUNGSI DELETE ---
   const handleDelete = async () => {
     if (!selectedLoc) return;
+    if (isDeletingLoc) return; // cegah klik dobel
+    setIsDeletingLoc(true);
     const { error } = await supabase.from("locations").delete().eq("id", selectedLoc.id);
     
     if (error) {
@@ -61,6 +68,7 @@ export default function RegistrasiAsetPage() {
       setSelectedLoc(null);
       fetchLocations();
     }
+    setIsDeletingLoc(false);
   };
 
   return (
@@ -155,9 +163,9 @@ export default function RegistrasiAsetPage() {
             />
           </div>
           <div className="flex gap-3">
-             <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-secondary dark:text-[#94A3B8] font-bold text-sm hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batalkan</button>
-             <button type="submit" className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">
-                {selectedLoc ? "Simpan Perubahan" : "Simpan Lokasi"}
+             <button type="button" disabled={isSavingLoc} onClick={() => setIsModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-secondary dark:text-[#94A3B8] font-bold text-sm hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batalkan</button>
+             <button type="submit" disabled={isSavingLoc} className="flex-1 py-3 bg-[#0D9488] text-white rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all disabled:opacity-50">
+                {isSavingLoc ? "Menyimpan..." : selectedLoc ? "Simpan Perubahan" : "Simpan Lokasi"}
              </button>
           </div>
         </form>
@@ -172,8 +180,8 @@ export default function RegistrasiAsetPage() {
               <p className="text-xs text-[#94A3B8] mt-2 italic">Perhatian: Anda tidak bisa menghapus lokasi yang masih berisi aset. Pindahkan atau hapus aset terlebih dahulu.</p>
            </div>
            <div className="flex gap-4 w-full mt-4">
-              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]">Batal</button>
-              <button onClick={handleDelete} className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-md">Ya, Hapus Permanen</button>
+              <button onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingLoc} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] rounded-xl font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155] disabled:opacity-50">Batal</button>
+              <button onClick={handleDelete} disabled={isDeletingLoc} className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-md disabled:opacity-50">{isDeletingLoc ? "Menghapus..." : "Ya, Hapus Permanen"}</button>
            </div>
         </div>
       </Modal>

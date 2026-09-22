@@ -27,6 +27,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
   const [damageReports, setDamageReports] = useState<any[]>([]);
   const [maintenanceReports, setMaintenanceReports] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingReport, setIsSavingReport] = useState(false);
   const [activeTab, setActiveTab] = useState<"gangguan" | "pemeliharaan">("gangguan");
 
   // --- 1. TAMBAHKAN STATE PAGINATION DI SINI (AGAR TIDAK MERAH) ---
@@ -108,7 +109,8 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
 
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    if (isSavingReport) return; // cegah submit dobel
+    setIsSavingReport(true);
     let finalImageUrl = "";
     if (imageFile) {
       const fileName = `${Date.now()}-detail-report-${id}`;
@@ -135,8 +137,10 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
       setImagePreview(null);
       setReportData({ urgency: "Sedang", reporter_name: user?.name || "", incident_date: "", issue_title: "", description: "" });
       fetchData();
+    } else {
+      alert("Gagal menyimpan laporan: " + error.message);
     }
-    setIsLoading(false);
+    setIsSavingReport(false);
   };
 
   const openLightbox = (src: string) => {
@@ -318,7 +322,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
               <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white"><CameraIcon size={14} /> Kamera</button>
             </div>
             <div className="flex flex-col gap-3 mt-auto pt-6">
-              <button type="submit" className="w-full bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-red-600">Simpan Record</button>
+              <button type="submit" disabled={isSavingReport} className="w-full bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-red-600 disabled:opacity-50">{isSavingReport ? "Menyimpan..." : "Simpan Record"}</button>
               <button type="button" onClick={() => setIsRecordModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">Batal</button>
             </div>
           </div>

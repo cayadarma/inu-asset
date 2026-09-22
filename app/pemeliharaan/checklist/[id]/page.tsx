@@ -50,6 +50,7 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
   // --- TANGGAL SELESAI PEMELIHARAAN (DIISI MANUAL OLEH USER, TIDAK OTOMATIS PAKAI WAKTU SISTEM) ---
   const [completionDate, setCompletionDate] = useState(new Date().toISOString().split("T")[0]);
   const [isSavingOperator, setIsSavingOperator] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -225,6 +226,7 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
   // --- SELESAIKAN PEMELIHARAAN (KUNCI FORM) ---
   const handleCompleteMaintenance = async () => {
     if (!schedule) return;
+    if (isCompleting) return; // cegah klik dobel
 
     // --- VALIDASI WAJIB: NAMA OPERATOR ---
     if (!operatorName.trim()) {
@@ -261,6 +263,8 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
 
     if (!confirm("Yakin ingin menyelesaikan pemeliharaan ini? Data tidak bisa diubah lagi setelah ini.")) return;
 
+    setIsCompleting(true);
+
     const { error } = await supabase
       .from("maintenance_schedules")
       .update({ status: "Selesai", completed_at: new Date(completionDate).toISOString(), operator_name: operatorName })
@@ -268,13 +272,15 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
 
     if (error) {
       alert("Gagal menyelesaikan pemeliharaan: " + error.message);
+      setIsCompleting(false);
       return;
     }
 
     // Kembalikan status aset ke Beroperasi
     await supabase.from("assets").update({ status: "Beroperasi" }).eq("id", schedule.asset_id);
 
-    fetchDetail();
+    await fetchDetail();
+    setIsCompleting(false);
   };
 
   // --- BUKA KEMBALI (EDIT) PEMELIHARAAN YANG SUDAH SELESAI ---
@@ -593,9 +599,10 @@ export default function AgendaDetailPage({ params }: { params: Promise<{ id: str
           ) : (
             <button
               onClick={handleCompleteMaintenance}
-              className="group flex items-center gap-3 px-10 py-4 bg-[#0D9488] text-white rounded-2xl font-bold text-sm shadow-xl hover:bg-teal-700 active:scale-95 transition-all"
+              disabled={isCompleting}
+              className="group flex items-center gap-3 px-10 py-4 bg-[#0D9488] text-white rounded-2xl font-bold text-sm shadow-xl hover:bg-teal-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <CheckCheck size={20} /> Pemeliharaan Selesai
+              <CheckCheck size={20} /> {isCompleting ? "Menyimpan..." : "Pemeliharaan Selesai"}
             </button>
           )}
         </div>

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "../../context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
+import { isPathAllowedForRole } from "@/lib/auth";
 import Avatar from "@/components/ui/Avatar";
 import { 
   LayoutDashboard, Box, HeartPulse, Wrench, Package, 
@@ -24,8 +25,6 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const { t } = useLanguage();
   const { user, logout } = useAuth();
 
-  const isOperator = user?.role === "operator";
-
   const fullMenuItems = [
     { name: t("menu.dashboard"), icon: <LayoutDashboard size={20} />, href: "/" },
     { name: t("menu.registrasiAset"), icon: <Box size={20} />, href: "/registrasi-aset" },
@@ -38,10 +37,9 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     { name: t("menu.pengaturan"), icon: <Settings size={20} />, href: "/pengaturan" },
   ];
 
-  // --- OPERATOR HANYA MELIHAT: DASHBOARD, BUKU SAKIT, PEMELIHARAAN, PENGATURAN ---
-  const OPERATOR_MENU_HREFS = ["/", "/buku-sakit", "/pemeliharaan", "/pengaturan"];
-  const menuItems = isOperator
-    ? fullMenuItems.filter((item) => OPERATOR_MENU_HREFS.includes(item.href))
+  // --- MENU DIFILTER SESUAI ROLE (operator & manajemen dibatasi, role lain bebas) ---
+  const menuItems = user
+    ? fullMenuItems.filter((item) => isPathAllowedForRole(item.href, user.role))
     : fullMenuItems;
 
   return (

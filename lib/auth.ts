@@ -35,34 +35,60 @@ export const ROLE_LABELS: Record<Role, string> = {
 export const ALL_ROLES: Role[] = ["super_admin", "administrator", "manajemen", "operator"];
 
 // =====================================================================
-// Pembatasan halaman untuk role Operator
-// Operator hanya boleh mengakses: Dashboard, Buku Sakit (hanya bagian
-// tambah kerusakan aset), Pemeliharaan (semua halaman kecuali form
-// "Terbitkan Work Order" di Pemeliharaan Korektif), dan Pengaturan
-// (hanya tab Profil Saya — halaman Manajemen User tetap tertutup).
+// Pembatasan halaman per role
+// - Operator hanya boleh mengakses: Dashboard, Buku Sakit (hanya bagian
+//   tambah kerusakan aset), Pemeliharaan (semua halaman kecuali form
+//   "Terbitkan Work Order" di Pemeliharaan Korektif), dan Pengaturan
+//   (hanya tab Profil Saya — halaman Manajemen User tetap tertutup).
+// - Manajemen hanya boleh mengakses: Dashboard, Analisis Biaya, Anggaran,
+//   Laporan, dan Pengaturan (hanya tab Profil Saya).
 // =====================================================================
 
-// Prefix path yang boleh diakses oleh role operator. Path lain otomatis
-// di-redirect ke Dashboard oleh <RoleGuard /> di AppShell.
-const OPERATOR_ALLOWED_PREFIXES = [
-  "/", // dashboard (exact match, ditangani khusus di isPathAllowedForOperator)
-  "/buku-sakit",
-  "/pemeliharaan",
-  "/pengaturan", // /pengaturan/manajemen-user tetap diblokir terpisah (lihat di bawah)
-];
+// Prefix path yang boleh diakses per role. Path lain otomatis
+// di-redirect ke Dashboard oleh guard di AppShell.
+const ROLE_ALLOWED_PREFIXES: Partial<Record<Role, string[]>> = {
+  operator: [
+    "/", // dashboard (exact match, ditangani khusus di isPathAllowedForRole)
+    "/buku-sakit",
+    "/pemeliharaan",
+    "/pengaturan", // /pengaturan/manajemen-user tetap diblokir terpisah (lihat di bawah)
+  ],
+  manajemen: [
+    "/", // dashboard (exact match, ditangani khusus di isPathAllowedForRole)
+    "/analisis-biaya",
+    "/anggaran",
+    "/laporan",
+    "/pengaturan", // /pengaturan/manajemen-user tetap diblokir terpisah (lihat di bawah)
+  ],
+};
 
-// Path yang secara eksplisit TETAP diblokir untuk operator walau prefix-nya
-// termasuk yang diizinkan di atas.
-const OPERATOR_BLOCKED_EXACT = [
-  "/pengaturan/manajemen-user",
-];
+// Path yang secara eksplisit TETAP diblokir untuk role tertentu walau
+// prefix-nya termasuk yang diizinkan di atas.
+const ROLE_BLOCKED_EXACT: Partial<Record<Role, string[]>> = {
+  operator: ["/pengaturan/manajemen-user"],
+  manajemen: ["/pengaturan/manajemen-user"],
+};
 
-export function isPathAllowedForOperator(pathname: string): boolean {
+// Cek apakah suatu path boleh diakses oleh role tertentu. Role yang tidak
+// terdaftar di ROLE_ALLOWED_PREFIXES (super_admin, administrator) dianggap
+// bebas akses ke semua halaman.
+export function isPathAllowedForRole(pathname: string, role: Role): boolean {
+  const allowedPrefixes = ROLE_ALLOWED_PREFIXES[role];
+  if (!allowedPrefixes) return true; // role tanpa pembatasan (super_admin, administrator)
+
   if (pathname === "/") return true;
-  if (OPERATOR_BLOCKED_EXACT.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+
+  const blockedExact = ROLE_BLOCKED_EXACT[role] || [];
+  if (blockedExact.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
     return false;
   }
-  return OPERATOR_ALLOWED_PREFIXES.some((prefix) => prefix !== "/" && pathname.startsWith(prefix));
+
+  return allowedPrefixes.some((prefix) => prefix !== "/" && pathname.startsWith(prefix));
+}
+
+// Dipertahankan untuk kompatibilitas kode lama yang masih memanggil nama ini.
+export function isPathAllowedForOperator(pathname: string): boolean {
+  return isPathAllowedForRole(pathname, "operator");
 }
 
 // Buat hash password (dipakai saat membuat/mengganti akun)
@@ -71,9 +97,13 @@ export async function hashPassword(plain: string): Promise<string> {
 }
 
 // Login: cek username + password ke tabel `users`
+// rememberMe = true  -> sesi disimpan di localStorage, bertahan 30 hari walau browser ditutup
+// rememberMe = false -> sesi disimpan di sessionStorage, otomatis hilang saat tab/browser ditutup
+//                        (ditambah expiry 12 jam sebagai lapisan keamanan tambahan)
 export async function login(
   username: string,
-  password: string
+  password: string,
+  rememberMe: boolean = false
 ): Promise<{ user?: SessionUser; error?: string }> {
   const { data, error } = await supabase
     .from("users")
@@ -122,9 +152,7 @@ export async function login(
     },
   };
 
-  if (typeof window !== "undefined") {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-  }
+  saveSession(user, rememberMe);
 
   return { user };
 }
@@ -132,23 +160,83 @@ export async function login(
 export function logout() {
   if (typeof window !== "undefined") {
     localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+}
+
+// Wrapper penyimpanan sesi: menyimpan user + waktu kadaluarsa (expiresAt).
+// - "Ingat saya" dicentang -> disimpan di localStorage, expiresAt = 30 hari ke depan.
+// - "Ingat saya" tidak dicentang -> disimpan di sessionStorage (otomatis hilang saat
+//   tab/browser ditutup), expiresAt = 12 jam ke depan sebagai lapisan keamanan tambahan
+//   (misalnya kalau komputer dibiarkan menyala lama tanpa ditutup).
+interface StoredSession {
+  user: SessionUser;
+  expiresAt: string; // ISO timestamp
+}
+
+const REMEMBER_ME_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
+const SESSION_ONLY_DURATION_MS = 12 * 60 * 60 * 1000; // 12 jam
+
+export function saveSession(user: SessionUser, rememberMe: boolean = false) {
+  if (typeof window === "undefined") return;
+
+  const durationMs = rememberMe ? REMEMBER_ME_DURATION_MS : SESSION_ONLY_DURATION_MS;
+  const payload: StoredSession = {
+    user,
+    expiresAt: new Date(Date.now() + durationMs).toISOString(),
+  };
+
+  // Pastikan tidak ada sesi lama tersisa di storage yang lain, supaya tidak
+  // konflik / ambigu soal sesi mana yang berlaku.
+  localStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_KEY);
+
+  if (rememberMe) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+  } else {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
   }
 }
 
 export function getSession(): SessionUser | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(SESSION_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as SessionUser;
-  } catch {
-    return null;
-  }
+
+  // Cek localStorage (sesi "Ingat saya") dulu, baru sessionStorage.
+  const fromLocal = readStoredSession(localStorage);
+  if (fromLocal) return fromLocal;
+
+  const fromSession = readStoredSession(sessionStorage);
+  if (fromSession) return fromSession;
+
+  return null;
 }
 
-export function saveSession(user: SessionUser) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+function readStoredSession(storage: Storage): SessionUser | null {
+  const raw = storage.getItem(SESSION_KEY);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    // Kompatibilitas mundur: sesi lama (sebelum fitur ini ada) tersimpan
+    // langsung sebagai objek SessionUser tanpa expiresAt. Anggap masih valid
+    // sekali ini saja, lalu akan otomatis diselamatkan ulang dengan expiry
+    // saat login berikutnya.
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!("expiresAt" in parsed) || !("user" in parsed)) {
+      return parsed as SessionUser;
+    }
+
+    const stored = parsed as StoredSession;
+    if (new Date(stored.expiresAt).getTime() < Date.now()) {
+      storage.removeItem(SESSION_KEY);
+      return null;
+    }
+
+    return stored.user;
+  } catch {
+    storage.removeItem(SESSION_KEY);
+    return null;
   }
 }
 

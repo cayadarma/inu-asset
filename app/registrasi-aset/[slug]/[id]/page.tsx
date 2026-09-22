@@ -34,6 +34,8 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   // --- STATE MODAL & LIGHTBOX ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeactivateModalOpen, setIsDeactivateModalOpen] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
+  const [deactivationNote, setDeactivationNote] = useState("");
   const [isReactivating, setIsReactivating] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState("");
@@ -219,22 +221,39 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   // kondisi operasionalnya, supaya tidak bentrok dengan alur-alur lain yang otomatis mengubah
   // `status` (mis. selesai Work Order -> "Beroperasi", lapor kerusakan -> "Rusak", dst).
   const handleDeactivate = async () => {
-    setIsLoading(true);
-    const { error } = await supabase.from("assets").update({ is_active: false }).eq("id", id);
+    if (isDeactivating) return; // cegah klik dobel
+    if (!deactivationNote.trim()) {
+      alert("Keterangan alasan nonaktif wajib diisi (mis. alasan & apakah aset masih berada di lokasi perusahaan atau sudah dilelang).");
+      return;
+    }
+    setIsDeactivating(true);
+    const { error } = await supabase.from("assets").update({
+      is_active: false,
+      deactivation_note: deactivationNote.trim(),
+      deactivated_at: new Date().toISOString(),
+      deactivated_by: user?.name || null,
+    }).eq("id", id);
     if (error) {
       alert("Gagal menonaktifkan aset: " + error.message);
-      setIsLoading(false);
+      setIsDeactivating(false);
     } else {
       setIsDeactivateModalOpen(false);
+      setDeactivationNote("");
       await fetchDetail();
-      setIsLoading(false);
+      setIsDeactivating(false);
     }
   };
 
   // --- AKTIFKAN KEMBALI ASET ---
   const handleReactivate = async () => {
+    if (isReactivating) return; // cegah klik dobel
     setIsReactivating(true);
-    const { error } = await supabase.from("assets").update({ is_active: true }).eq("id", id);
+    const { error } = await supabase.from("assets").update({
+      is_active: true,
+      deactivation_note: null,
+      deactivated_at: null,
+      deactivated_by: null,
+    }).eq("id", id);
     if (error) alert("Gagal mengaktifkan kembali aset: " + error.message);
     else await fetchDetail();
     setIsReactivating(false);
@@ -389,11 +408,23 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
           </div>
 
           {asset.is_active === false && (
-            <div className="flex items-start gap-3 p-4 bg-[#F1F5F9] dark:bg-[#0F172A] rounded-2xl border border-gray-200 dark:border-[#334155]">
-              <AlertTriangle size={16} className="text-[#94A3B8] mt-0.5 flex-shrink-0" />
-              <p className="text-[12px] text-[#475569] dark:text-[#94A3B8] font-medium leading-relaxed">
-                Aset ini sudah dinonaktifkan. Aset tidak akan muncul di daftar/dropdown pemilihan aset untuk Work Order, jadwal pemeliharaan, atau lapor kerusakan baru, tapi seluruh riwayatnya tetap tersimpan.
-              </p>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-3 p-4 bg-[#F1F5F9] dark:bg-[#0F172A] rounded-2xl border border-gray-200 dark:border-[#334155]">
+                <AlertTriangle size={16} className="text-[#94A3B8] mt-0.5 flex-shrink-0" />
+                <p className="text-[12px] text-[#475569] dark:text-[#94A3B8] font-medium leading-relaxed">
+                  Aset ini sudah dinonaktifkan. Aset tidak akan muncul di daftar/dropdown pemilihan aset untuk Work Order, jadwal pemeliharaan, atau lapor kerusakan baru, tapi seluruh riwayatnya tetap tersimpan.
+                </p>
+              </div>
+              {asset.deactivation_note && (
+                <div className="flex flex-col gap-1.5 p-4 bg-red-50 dark:bg-red-950/20 rounded-2xl border border-red-100 dark:border-red-900/40">
+                  <span className="text-[11px] font-black text-red-600 dark:text-red-400 uppercase tracking-wider">Keterangan Nonaktif</span>
+                  <p className="text-[13px] text-[#475569] dark:text-[#F8FAFC] font-medium leading-relaxed whitespace-pre-wrap">{asset.deactivation_note}</p>
+                  <span className="text-[11px] text-[#94A3B8] mt-1">
+                    {asset.deactivated_at && new Date(asset.deactivated_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                    {asset.deactivated_by ? ` · oleh ${asset.deactivated_by}` : ""}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -652,16 +683,30 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       </Modal>
 
       {/* MODAL KONFIRMASI NONAKTIFKAN */}
-      <Modal isOpen={isDeactivateModalOpen} onClose={() => setIsDeactivateModalOpen(false)} title="Konfirmasi Nonaktifkan Aset">
+      <Modal isOpen={isDeactivateModalOpen} onClose={() => { setIsDeactivateModalOpen(false); setDeactivationNote(""); }} title="Konfirmasi Nonaktifkan Aset">
         <div className="flex flex-col items-center text-center gap-6 py-4">
            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center"><PowerOff size={32} /></div>
            <p className="dark:text-white font-poppins text-lg">Yakin nonaktifkan <span className="font-bold text-red-600">{asset.name}</span>?</p>
            <p className="text-sm text-[#94A3B8] -mt-4">
              Aset tidak akan dihapus. Seluruh riwayat pemeliharaan, kerusakan, dan biaya tetap tersimpan. Aset hanya akan disembunyikan dari daftar aktif dan dropdown pemilihan aset baru. Kamu bisa mengaktifkannya kembali kapan saja.
            </p>
+           <div className="w-full flex flex-col gap-2 text-left">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                Keterangan Nonaktif <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                required
+                rows={3}
+                value={deactivationNote}
+                onChange={(e) => setDeactivationNote(e.target.value)}
+                placeholder="Contoh: Sudah dilelang pada Januari 2026, sudah tidak berada di lokasi perusahaan. / Rusak berat, masih tersimpan di gudang menunggu proses lelang."
+                className="w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white resize-none"
+              />
+              <p className="text-[11px] text-[#94A3B8]">Jelaskan alasan nonaktif dan apakah aset masih berada di lokasi perusahaan atau sudah dilelang/dipindahkan.</p>
+           </div>
            <div className="flex gap-4 w-full">
-              <button onClick={() => setIsDeactivateModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
-              <button onClick={handleDeactivate} disabled={isLoading} className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold shadow-md disabled:opacity-50">{isLoading ? "Memproses..." : "Ya, Nonaktifkan"}</button>
+              <button onClick={() => { setIsDeactivateModalOpen(false); setDeactivationNote(""); }} disabled={isDeactivating} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batal</button>
+              <button onClick={handleDeactivate} disabled={isDeactivating} className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold shadow-md disabled:opacity-50">{isDeactivating ? "Memproses..." : "Ya, Nonaktifkan"}</button>
            </div>
         </div>
       </Modal>

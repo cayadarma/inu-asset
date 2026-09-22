@@ -12,6 +12,7 @@ export default function LoginPage() {
   const { setUser } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -21,7 +22,7 @@ export default function LoginPage() {
     setError("");
     setIsLoading(true);
 
-    const result = await login(username, password);
+    const result = await login(username, password, rememberMe);
 
     if (result.error || !result.user) {
       setError("username atau password salah!");
@@ -83,6 +84,23 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="flex items-center gap-2.5 select-none cursor-pointer w-fit">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 rounded accent-[#0D9488] cursor-pointer"
+              />
+              <span className="text-sm font-medium text-[#475569] dark:text-[#94A3B8]">Ingat saya di perangkat ini</span>
+            </label>
+            <p className="text-[11px] text-[#94A3B8] pl-6">
+              {rememberMe
+                ? "Sesi akan tetap masuk selama 30 hari, walau browser ditutup."
+                : "Sesi akan otomatis keluar saat tab/browser ditutup. Disarankan untuk perangkat bersama/publik."}
+            </p>
           </div>
 
           {error && (

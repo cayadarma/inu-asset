@@ -132,7 +132,7 @@ export default function AnggaranPage() {
 
       <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl text-xs text-amber-700 dark:text-amber-300 font-medium flex items-start gap-2">
         <AlertCircle size={16} className="shrink-0 mt-0.5" />
-        Anggaran diinput manual per bulan oleh admin. Nantinya kalau sistem role management sudah aktif, halaman ini akan dibatasi khusus untuk role administrator.
+        Anggaran diinput manual per bulan. Halaman ini hanya dapat diakses oleh role Super Admin, Administrator, dan Manajemen.
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
