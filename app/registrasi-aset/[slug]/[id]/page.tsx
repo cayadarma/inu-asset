@@ -49,6 +49,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   // --- STATE FORM EDIT & TIPE (SAMA SEPERTI TAMBAH ASET) ---
   const [editData, setEditField] = useState<any>({});
   const [availableTypes, setAvailableTypes] = useState<any[]>([]);
+  const [availableLocations, setAvailableLocations] = useState<any[]>([]);
   const [isNewTypeEdit, setIsNewTypeEdit] = useState(false);
 
   // --- STATE FOTO EDIT (MULTI, MAKS 5) ---
@@ -97,9 +98,15 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     if (data) setAvailableTypes(data);
   };
 
+  const fetchLocations = async () => {
+    const { data } = await supabase.from("locations").select("id, name").order("name", { ascending: true });
+    if (data) setAvailableLocations(data);
+  };
+
   useEffect(() => {
     fetchDetail();
     fetchTypes();
+    fetchLocations();
   }, [id]);
 
   // --- FUNGSI LIGHTBOX ---
@@ -196,22 +203,35 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       type: editData.type,
       specification: editData.specification,
       status: editData.status,
+      purchase_date: editData.purchase_date || null,
+      location_id: editData.location_id,
       checklist_category: editData.checklist_category || null,
       checklist_pengawas: editData.checklist_pengawas || null,
       image_url: finalImageUrls[0] || "",
       image_urls: finalImageUrls
     }).eq("id", id);
 
-    if (error) alert("Gagal: " + error.message);
-    else {
-      alert("Berhasil diperbarui!");
-      setIsEditModalOpen(false);
-      setEditNewFiles([]);
-      setEditNewPreviews([]);
-      setIsNewTypeEdit(false);
-      fetchDetail();
-      fetchTypes();
+    if (error) {
+      alert("Gagal: " + error.message);
+      setIsLoading(false);
+      return;
     }
+
+    alert("Berhasil diperbarui!");
+    setIsEditModalOpen(false);
+    setEditNewFiles([]);
+    setEditNewPreviews([]);
+    setIsNewTypeEdit(false);
+
+    // Kalau lokasi aset berubah, redirect ke URL detail dengan slug lokasi baru
+    if (editData.location_id && String(editData.location_id) !== String(slug)) {
+      const newLocName = availableLocations.find((l) => String(l.id) === String(editData.location_id))?.name || "";
+      router.push(`/registrasi-aset/${editData.location_id}/${id}?name=${encodeURIComponent(newLocName)}&assetName=${encodeURIComponent(editData.name || "")}`);
+      return;
+    }
+
+    fetchDetail();
+    fetchTypes();
     setIsLoading(false);
   };
 
@@ -557,6 +577,27 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
              </div>
 
              <EditField label="Spesifikasi" val={editData.specification} onChange={(e:any) => setEditField({...editData, specification: e.target.value})} multiline />
+             <EditField label="Tanggal Pembelian" type="date" val={editData.purchase_date} onChange={(e:any) => setEditField({...editData, purchase_date: e.target.value})} />
+             <EditField key={editData.purchase_date} label="Usia Aset" val={calculateAge(editData.purchase_date)} disabled />
+
+             {/* Lokasi Aset — bisa dipindah ke lokasi lain. Kalau diubah, setelah simpan
+                 halaman akan redirect ke URL detail dengan slug lokasi baru. */}
+             <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Lokasi Aset</label>
+                <div className="relative">
+                  <select
+                    value={editData.location_id ?? slug}
+                    onChange={(e) => setEditField({ ...editData, location_id: e.target.value })}
+                    className="w-full appearance-none px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white cursor-pointer"
+                  >
+                    {availableLocations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+                </div>
+             </div>
+
              <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Status</label>
                 <select value={editData.status} onChange={(e) => setEditField({...editData, status: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white font-poppins">

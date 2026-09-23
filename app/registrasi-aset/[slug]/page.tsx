@@ -22,6 +22,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   // --- STATE DATA ---
   const [assets, setAssets] = useState<any[]>([]);
   const [availableTypes, setAvailableTypes] = useState<any[]>([]);
+  const [availableLocations, setAvailableLocations] = useState<any[]>([]);
   const [realLocationName, setRealLocationName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingAsset, setIsSubmittingAsset] = useState(false);
@@ -37,7 +38,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   // --- STATE FORM ---
   const [newAsset, setNewAsset] = useState({
     id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "",
-    checklist_category: "", checklist_pengawas: ""
+    checklist_category: "", checklist_pengawas: "", location_id: ""
   });
   const [isNewType, setIsNewType] = useState(false);
 
@@ -105,10 +106,18 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
     if (data) setAvailableTypes(data);
   };
 
+  const fetchLocations = async () => {
+    const { data } = await supabase.from("locations").select("id, name").order("name", { ascending: true });
+    if (data) setAvailableLocations(data);
+  };
+
   // Reset ke halaman 1 setiap kali pindah lokasi
   useEffect(() => {
     setCurrentPage(1);
     fetchTypes();
+    fetchLocations();
+    // Default lokasi aset baru = lokasi yang sedang dibuka
+    setNewAsset((prev) => ({ ...prev, location_id: locationId }));
   }, [locationId]);
 
   // Ambil ulang data setiap kali locationId ATAU currentPage berubah
@@ -233,12 +242,14 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       }
     }
 
+    const targetLocationId = newAsset.location_id || locationId;
+
     const { error } = await supabase.from("assets").insert([{
       ...newAsset,
       purchase_cost: newAsset.purchase_cost ? Number(newAsset.purchase_cost) : null,
       checklist_category: newAsset.checklist_category || null,
       checklist_pengawas: newAsset.checklist_pengawas || null,
-      location_id: locationId,
+      location_id: targetLocationId,
       image_url: uploadedImageUrls[0] || "",
       image_urls: uploadedImageUrls,
       payment_proof_url: paymentProofUrl || null,
@@ -247,12 +258,18 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
     
     if (error) alert("Gagal: " + error.message);
     else {
+      // Kalau aset disimpan ke lokasi lain (bukan lokasi halaman yang sedang dibuka),
+      // tetap di halaman ini tapi beri tahu penggunanya lewat notifikasi.
+      if (targetLocationId !== locationId) {
+        const savedLocName = availableLocations.find((l) => String(l.id) === String(targetLocationId))?.name || "lokasi lain";
+        alert(`Aset "${newAsset.name}" berhasil disimpan di lokasi "${savedLocName}", bukan di lokasi yang sedang dibuka ini.`);
+      }
       setIsModalOpen(false);
       setImagePreviews([]);
       setImageFiles([]);
       setPaymentProofFile(null);
       setPaymentProofPreview(null);
-      setNewAsset({ id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "", checklist_category: "", checklist_pengawas: "" });
+      setNewAsset({ id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "", checklist_category: "", checklist_pengawas: "", location_id: locationId });
       setIsNewType(false);
       fetchAssets();
       fetchTypes();
@@ -435,7 +452,18 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
              )}
              <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Lokasi Aset</label>
-                <input type="text" value={realLocationName} disabled className="w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm text-[#94A3B8] font-bold" />
+                <div className="relative">
+                  <select
+                    value={newAsset.location_id || locationId}
+                    onChange={(e) => setNewAsset({ ...newAsset, location_id: e.target.value })}
+                    className="w-full appearance-none px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm outline-none focus:border-primary dark:text-white cursor-pointer font-bold"
+                  >
+                    {availableLocations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+                </div>
              </div>
 
              {/* KATEGORI CHECKLIST HARIAN — menentukan template field checklist statis.
