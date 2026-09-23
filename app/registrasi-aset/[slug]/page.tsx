@@ -88,14 +88,15 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       }
     }
 
-    const { data: assetData, error } = await supabase
+    const { data: assetData, error, count } = await supabase
       .from("assets")
-      .select("*")
+      .select("*", { count: "exact" })
       .eq("location_id", locationId)
       .order("created_at", { ascending: true })
       .range(from, to);
 
     if (!error && assetData) setAssets(assetData);
+    if (typeof count === "number") setTotalCount(count);
     setIsLoading(false);
   };
 
@@ -104,10 +105,18 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
     if (data) setAvailableTypes(data);
   };
 
+  // Reset ke halaman 1 setiap kali pindah lokasi
   useEffect(() => {
-    fetchAssets();
+    setCurrentPage(1);
     fetchTypes();
   }, [locationId]);
+
+  // Ambil ulang data setiap kali locationId ATAU currentPage berubah
+  useEffect(() => {
+    fetchAssets();
+  }, [locationId, currentPage]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage));
 
   // --- LOGIKA FILTERING (DIPASTIKAN BERJALAN) ---
   const filteredAssets = assets.filter((asset) => {
@@ -334,6 +343,33 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
             </table>
           )}
         </div>
+
+        {/* PAGINATION */}
+        {!isLoading && totalCount > 0 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-[#334155]">
+            <p className="text-xs text-[#94A3B8]">
+              Halaman {currentPage} dari {totalPages} ({totalCount} aset)
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-[#334155] text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft size={16} /> Sebelumnya
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-[#334155] text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Selanjutnya <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal Tambah Aset & Lightbox tetap sama */}

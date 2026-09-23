@@ -227,6 +227,7 @@ export default function Home() {
         perbaikan: c.perbaikan,
         rusak: c.rusak,
         total: c.total,
+        source: "live", // penanda: baris ini dari pantauan real-time, JANGAN ditimpa oleh trigger recompute historis
         updated_at: new Date().toISOString(),
       }));
 
