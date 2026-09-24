@@ -13,14 +13,23 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { useSearchParams } from "next/navigation";
 import Pagination from "@/components/ui/Pagination"; // Pastikan file ini sudah ada
+import { useLanguage } from "@/context/LanguageContext";
+import { translateEnum } from "@/lib/i18n/enumTranslate";
+import { useDynamicText, useDynamicTextMap } from "@/lib/i18n/useDynamicText";
+
+// Urgensi tersimpan di DB dalam Bahasa Indonesia (nilai tetap), label ditampilkan via translateEnum
+const URGENCY_OPTIONS = ["Berat (Mati Total)", "Sedang", "Ringan"];
 
 export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug: string, id: string }> }) {
   const { slug, id } = use(params);
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const isOperator = user?.role === "operator";
+  const { t, lang } = useLanguage();
+  const dateLocale = lang === "en" ? "en-US" : "id-ID";
   
-  const locationName = searchParams.get("name") || slug;
+  const locationNameFromUrl = searchParams.get("name") || slug;
+  const locationName = useDynamicText(locationNameFromUrl);
 
   // --- STATE DATA ---
   const [asset, setAsset] = useState<any>(null);
@@ -132,13 +141,13 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
 
     if (!error) {
       await supabase.from("assets").update({ status: "Rusak" }).eq("id", id);
-      alert("Laporan disimpan!");
+      alert(t("bukuSakit.detail.alertLaporanDisimpan"));
       setIsRecordModalOpen(false);
       setImagePreview(null);
       setReportData({ urgency: "Sedang", reporter_name: user?.name || "", incident_date: "", issue_title: "", description: "" });
       fetchData();
     } else {
-      alert("Gagal menyimpan laporan: " + error.message);
+      alert(t("bukuSakit.detail.gagalMenyimpanLaporan", { message: error.message }));
     }
     setIsSavingReport(false);
   };
@@ -149,7 +158,17 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
     setIsLightboxOpen(true);
   };
 
-  if (isLoading && !asset) return <div className="p-20 text-center font-bold dark:text-white">Memuat...</div>;
+  // Terjemahkan teks bebas dari DB (nama/tipe aset, judul & pelapor laporan, operator pemeliharaan) sekaligus
+  const dynamicMap = useDynamicTextMap([
+    asset?.name,
+    asset?.type,
+    ...damageReports.map((r) => r.issue_title),
+    ...damageReports.map((r) => r.reporter_name),
+    ...maintenanceReports.map((m) => m.operator_name),
+  ]);
+  const dt = (text: string | null | undefined) => (text ? dynamicMap.get(text.trim()) ?? text : text);
+
+  if (isLoading && !asset) return <div className="p-20 text-center font-bold dark:text-white">{t("bukuSakit.common.memuat")}</div>;
 
   return (
     <div className="flex flex-col gap-6 pb-10 font-poppins text-left">
@@ -161,17 +180,17 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
             </div>
             <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-3">
-                    <h1 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset?.name || "Memuat..."}</h1>
+                    <h1 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset?.name ? dt(asset.name) : t("bukuSakit.common.memuat")}</h1>
                     <Badge status={asset?.status || "Rusak"} />
                 </div>
                 <div className="text-sm text-[#475569] dark:text-[#94A3B8] flex gap-3">
-                    <span className="font-bold">{id}</span><span>|</span><span>Tipe: {asset?.type}</span><span>|</span>
-                    <span className="capitalize font-bold text-[#0D9488]">Lokasi: {locationName.toUpperCase()}</span>
+                    <span className="font-bold">{id}</span><span>|</span><span>{t("bukuSakit.detail.tipeLabel", { type: dt(asset?.type) || "" })}</span><span>|</span>
+                    <span className="capitalize font-bold text-[#0D9488]">{t("bukuSakit.detail.lokasiLabel", { location: locationName.toUpperCase() })}</span>
                 </div>
             </div>
         </div>
         {!isOperator && (
-          <Link href={`/registrasi-aset/${slug}/${id}?name=${encodeURIComponent(locationName)}&assetName=${encodeURIComponent(asset?.name || "")}`} className="px-5 py-2 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-white hover:bg-gray-50 dark:hover:bg-[#0F172A]">Lihat Profil Aset</Link>
+          <Link href={`/registrasi-aset/${slug}/${id}?name=${encodeURIComponent(locationNameFromUrl)}&assetName=${encodeURIComponent(asset?.name || "")}`} className="px-5 py-2 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-white hover:bg-gray-50 dark:hover:bg-[#0F172A]">{t("bukuSakit.detail.lihatProfilAset")}</Link>
         )}
       </div>
 
@@ -181,16 +200,16 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
         <div className="px-6 bg-[#F8FAFC] dark:bg-[#0F172A] border-b border-gray-200 dark:border-[#334155] flex justify-between items-center">
           {isOperator ? (
             <div className="py-5">
-              <h3 className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Laporkan Kerusakan Aset</h3>
-              <p className="text-[12px] text-[#94A3B8]">Tambahkan laporan kerusakan baru untuk aset ini.</p>
+              <h3 className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("bukuSakit.detail.laporkanKerusakanTitle")}</h3>
+              <p className="text-[12px] text-[#94A3B8]">{t("bukuSakit.detail.laporkanKerusakanDesc")}</p>
             </div>
           ) : (
             <div className="flex">
-              <button onClick={() => { setActiveTab("gangguan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "gangguan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Record Gangguan</button>
-              <button onClick={() => { setActiveTab("pemeliharaan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "pemeliharaan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Record Pemeliharaan</button>
+              <button onClick={() => { setActiveTab("gangguan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "gangguan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>{t("bukuSakit.detail.recordGangguan")}</button>
+              <button onClick={() => { setActiveTab("pemeliharaan"); setCurrentPage(1); }} className={`px-6 py-5 text-sm font-bold transition-all ${activeTab === "pemeliharaan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>{t("bukuSakit.detail.recordPemeliharaan")}</button>
             </div>
           )}
-          <button onClick={() => { setReportData(prev => ({ ...prev, reporter_name: user?.name || prev.reporter_name })); setIsRecordModalOpen(true); }} className="flex items-center gap-2 bg-[#0D9488] text-white px-4 py-2 rounded-xl text-[13px] font-bold shadow-md hover:bg-teal-700 transition-all"><Plus size={18} /> Tambah Record</button>
+          <button onClick={() => { setReportData(prev => ({ ...prev, reporter_name: user?.name || prev.reporter_name })); setIsRecordModalOpen(true); }} className="flex items-center gap-2 bg-[#0D9488] text-white px-4 py-2 rounded-xl text-[13px] font-bold shadow-md hover:bg-teal-700 transition-all"><Plus size={18} /> {t("bukuSakit.detail.tambahRecord")}</button>
         </div>
         
         {isOperator ? null : <div className="overflow-x-auto">
@@ -199,21 +218,21 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
               <>
                 <table className="w-full text-left text-sm border-collapse">
                   <thead className="bg-[#F1F5F9] dark:bg-[#0F172A]/50 border-b text-[#475569] dark:text-[#94A3B8] font-bold uppercase text-[11px] tracking-widest">
-                    <tr><th className="px-6 py-4">Tanggal</th><th className="px-6 py-4">Masalah</th><th className="px-6 py-4">Pelapor</th><th className="px-6 py-4 text-center">Urgensi</th><th className="px-6 py-4 text-center">Aksi</th></tr>
+                    <tr><th className="px-6 py-4">{t("bukuSakit.common.tanggal")}</th><th className="px-6 py-4">{t("bukuSakit.detail.thMasalah")}</th><th className="px-6 py-4">{t("bukuSakit.common.pelapor")}</th><th className="px-6 py-4 text-center">{t("bukuSakit.common.urgensi")}</th><th className="px-6 py-4 text-center">{t("bukuSakit.common.aksi")}</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
                     {damageReports.map((report, i) => (
                       <tr key={i} className="hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-colors">
                         <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8]">
-                            {report.incident_date ? new Date(report.incident_date).toLocaleDateString('id-ID') : new Date(report.created_at).toLocaleDateString('id-ID')}
+                            {report.incident_date ? new Date(report.incident_date).toLocaleDateString(dateLocale) : new Date(report.created_at).toLocaleDateString(dateLocale)}
                         </td>
-                        <td className="px-6 py-5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{report.issue_title}</td>
-                        <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8]">{report.reporter_name}</td>
+                        <td className="px-6 py-5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{dt(report.issue_title)}</td>
+                        <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8]">{dt(report.reporter_name)}</td>
                         <td className="px-6 py-5 text-center">
-                          <span className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-black rounded uppercase">{report.urgency || 'Sedang'}</span>
+                          <span className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-black rounded uppercase">{translateEnum(report.urgency || 'Sedang', lang)}</span>
                         </td>
                         <td className="px-6 py-5 text-center">
-                           <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${encodeURIComponent(locationName)}&assetName=${encodeURIComponent(asset?.name || "")}&issueTitle=${encodeURIComponent(report.issue_title)}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all">
+                           <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${encodeURIComponent(locationNameFromUrl)}&assetName=${encodeURIComponent(asset?.name || "")}&issueTitle=${encodeURIComponent(report.issue_title)}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all">
                               <Eye size={20} />
                            </Link>
                         </td>
@@ -230,23 +249,23 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                   onPageChange={(page) => setCurrentPage(page)}
                 />
               </>
-            ) : <div className="p-20 text-center text-[#94A3B8] italic font-medium">Belum ada riwayat gangguan.</div>
+            ) : <div className="p-20 text-center text-[#94A3B8] italic font-medium">{t("bukuSakit.detail.belumAdaRiwayatGangguan")}</div>
           ) : (
             maintenanceReports.length > 0 ? (
               <>
                 <table className="w-full text-left text-sm border-collapse">
                   <thead className="bg-[#F1F5F9] dark:bg-[#0F172A]/50 border-b text-[#475569] dark:text-[#94A3B8] font-bold uppercase text-[11px] tracking-widest">
-                    <tr><th className="px-6 py-4">Tanggal Jadwal</th><th className="px-6 py-4">Operator</th><th className="px-6 py-4">Selesai Pada</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-center">Aksi</th></tr>
+                    <tr><th className="px-6 py-4">{t("bukuSakit.detail.thTanggalJadwal")}</th><th className="px-6 py-4">{t("bukuSakit.detail.thOperator")}</th><th className="px-6 py-4">{t("bukuSakit.detail.thSelesaiPada")}</th><th className="px-6 py-4 text-center">{t("bukuSakit.common.status")}</th><th className="px-6 py-4 text-center">{t("bukuSakit.common.aksi")}</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
                     {maintenanceReports.map((sch, i) => (
                       <tr key={i} className="hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-colors">
                         <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8]">
-                          {sch.scheduled_date ? new Date(sch.scheduled_date + "T00:00:00").toLocaleDateString('id-ID') : "-"}
+                          {sch.scheduled_date ? new Date(sch.scheduled_date + "T00:00:00").toLocaleDateString(dateLocale) : "-"}
                         </td>
-                        <td className="px-6 py-5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{sch.operator_name || "-"}</td>
+                        <td className="px-6 py-5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">{sch.operator_name ? dt(sch.operator_name) : "-"}</td>
                         <td className="px-6 py-5 text-[#475569] dark:text-[#94A3B8]">
-                          {sch.completed_at ? new Date(sch.completed_at).toLocaleDateString('id-ID') : "-"}
+                          {sch.completed_at ? new Date(sch.completed_at).toLocaleDateString(dateLocale) : "-"}
                         </td>
                         <td className="px-6 py-5 text-center">
                           <Badge status={sch.status} />
@@ -268,35 +287,35 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                   onPageChange={(page) => setCurrentPage(page)}
                 />
               </>
-            ) : <div className="p-20 text-center text-[#94A3B8] italic font-medium">Belum ada riwayat pemeliharaan pencegahan.</div>
+            ) : <div className="p-20 text-center text-[#94A3B8] italic font-medium">{t("bukuSakit.detail.belumAdaRiwayatPemeliharaan")}</div>
           )}
         </div>}
       </div>
 
       {/* 4. MODAL TAMBAH RECORD */}
-      <Modal isOpen={isRecordModalOpen} onClose={() => setIsRecordModalOpen(false)} title="Laporkan Kerusakan Aset">
+      <Modal isOpen={isRecordModalOpen} onClose={() => setIsRecordModalOpen(false)} title={t("bukuSakit.detail.laporkanKerusakanTitle")}>
         <form onSubmit={handleSubmitReport} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
           <div className="lg:col-span-2 flex flex-col gap-5">
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Aset Terkait</label>
-                <input type="text" value={`${id} - ${asset?.name}`} disabled className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm font-bold text-[#94A3B8] cursor-not-allowed" />
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.detail.asetTerkait")}</label>
+                <input type="text" value={`${id} - ${dt(asset?.name)}`} disabled className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm font-bold text-[#94A3B8] cursor-not-allowed" />
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Tingkat Urgensi</label>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.detail.tingkatUrgensi")}</label>
                 <select value={reportData.urgency} onChange={(e) => setReportData({...reportData, urgency: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white">
-                  <option>Berat (Mati Total)</option><option>Sedang</option><option>Ringan</option>
+                  {URGENCY_OPTIONS.map((u) => <option key={u} value={u}>{translateEnum(u, lang)}</option>)}
                 </select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Nama Pelapor</label>
-                <input required type="text" value={reportData.reporter_name} onChange={(e) => setReportData({...reportData, reporter_name: e.target.value})} placeholder="Nama pelapor" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" />
-                <span className="text-[11px] text-[#94A3B8] italic">Otomatis terisi nama akun yang login, bisa diubah bila melapor atas nama orang lain.</span>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.namaPelapor")}</label>
+                <input required type="text" value={reportData.reporter_name} onChange={(e) => setReportData({...reportData, reporter_name: e.target.value})} placeholder={t("bukuSakit.common.namaPelaporPlaceholder")} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" />
+                <span className="text-[11px] text-[#94A3B8] italic">{t("bukuSakit.detail.namaPelaporHint")}</span>
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Tanggal Kejadian</label>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.detail.tanggalKejadian")}</label>
                 {/* --- 5. MODIFIKASI INPUT: Hubungkan dengan incident_date --- */}
                 <input 
                     required 
@@ -307,63 +326,63 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                 />
               </div>
             </div>
-            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Judul Masalah</label><input required type="text" value={reportData.issue_title} onChange={(e) => setReportData({...reportData, issue_title: e.target.value})} placeholder="Contoh: Mesin Bunyi Kasar" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
-            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Kronologi</label><textarea rows={3} value={reportData.description} onChange={(e) => setReportData({...reportData, description: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white"></textarea></div>
+            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.judulMasalah")}</label><input required type="text" value={reportData.issue_title} onChange={(e) => setReportData({...reportData, issue_title: e.target.value})} placeholder={t("bukuSakit.common.judulMasalahPlaceholder")} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
+            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.detail.kronologi")}</label><textarea rows={3} value={reportData.description} onChange={(e) => setReportData({...reportData, description: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white"></textarea></div>
           </div>
           <div className="lg:col-span-1 flex flex-col gap-5">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-white">Foto Bukti</label>
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.fotoBukti")}</label>
             <div className="w-full aspect-square bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 overflow-hidden relative cursor-zoom-in" onClick={() => imagePreview && openLightbox(imagePreview)}>
-              {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <><LucideImage size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Preview</span></>}
+              {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <><LucideImage size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">{t("bukuSakit.detail.preview")}</span></>}
             </div>
             <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/*" />
             <input type="file" ref={cameraInputRef} onChange={handleImageChange} className="hidden" accept="image/*" capture="environment" />
             <div className="flex gap-2">
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">Pilih dari Galeri</button>
-              <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white"><CameraIcon size={14} /> Kamera</button>
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">{t("bukuSakit.common.pilihGaleri")}</button>
+              <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white"><CameraIcon size={14} /> {t("bukuSakit.common.kamera")}</button>
             </div>
             <div className="flex flex-col gap-3 mt-auto pt-6">
-              <button type="submit" disabled={isSavingReport} className="w-full bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-red-600 disabled:opacity-50">{isSavingReport ? "Menyimpan..." : "Simpan Record"}</button>
-              <button type="button" onClick={() => setIsRecordModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">Batal</button>
+              <button type="submit" disabled={isSavingReport} className="w-full bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-red-600 disabled:opacity-50">{isSavingReport ? t("bukuSakit.detail.menyimpan") : t("bukuSakit.detail.simpanRecord")}</button>
+              <button type="button" onClick={() => setIsRecordModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">{t("bukuSakit.common.batal")}</button>
             </div>
           </div>
         </form>
       </Modal>
 
       {/* 5. MODAL DETAIL GANGGUAN */}
-      <Modal isOpen={isViewDetailOpen} onClose={() => setIsViewDetailOpen(false)} title="Detail Laporan Gangguan">
+      <Modal isOpen={isViewDetailOpen} onClose={() => setIsViewDetailOpen(false)} title={t("bukuSakit.detail.detailLaporanTitle")}>
         {selectedReport && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left font-poppins">
             <div className="flex flex-col gap-4">
               <div>
-                <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">Masalah Utama</span>
-                <p className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC]">{selectedReport.issue_title}</p>
+                <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">{t("bukuSakit.detail.masalahUtama")}</span>
+                <p className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC]">{dt(selectedReport.issue_title)}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">Pelapor</span>
-                  <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{selectedReport.reporter_name}</p>
+                  <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">{t("bukuSakit.common.pelapor")}</span>
+                  <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{dt(selectedReport.reporter_name)}</p>
                 </div>
                 <div>
-                  <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">Tanggal Laporan</span>
+                  <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">{t("bukuSakit.detail.tanggalLaporan")}</span>
                   <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                     {/* --- 6. DISPLAY DETAIL: Gunakan incident_date --- */}
-                    {selectedReport.incident_date ? new Date(selectedReport.incident_date).toLocaleDateString('id-ID') : new Date(selectedReport.created_at).toLocaleDateString('id-ID')}
+                    {selectedReport.incident_date ? new Date(selectedReport.incident_date).toLocaleDateString(dateLocale) : new Date(selectedReport.created_at).toLocaleDateString(dateLocale)}
                   </p>
                 </div>
               </div>
               <div>
-                <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">Kronologi Kejadian</span>
-                <p className="text-sm text-[#475569] dark:text-[#94A3B8] leading-relaxed italic">"{selectedReport.description || "Tidak ada deskripsi detail."}"</p>
+                <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">{t("bukuSakit.detail.kronologiKejadian")}</span>
+                <p className="text-sm text-[#475569] dark:text-[#94A3B8] leading-relaxed italic">"{dt(selectedReport.description) || t("bukuSakit.detail.tidakAdaDeskripsi")}"</p>
               </div>
               <div>
-                 <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">Urgensi</span>
-                 <div className="mt-1"><span className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-black rounded uppercase tracking-tighter">{selectedReport.urgency}</span></div>
+                 <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">{t("bukuSakit.common.urgensi")}</span>
+                 <div className="mt-1"><span className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-black rounded uppercase tracking-tighter">{translateEnum(selectedReport.urgency, lang)}</span></div>
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <span className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Bukti</span>
+              <span className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("bukuSakit.common.fotoBukti")}</span>
               <div className="w-full aspect-[4/3] bg-gray-100 rounded-2xl overflow-hidden border border-gray-200 dark:border-[#334155] cursor-zoom-in" onClick={() => openLightbox(selectedReport.image_url)}>
-                <img src={selectedReport.image_url || "https://placehold.co/400x250?text=No+Photo"} alt="Bukti" className="w-full h-full object-cover" />
+                <img src={selectedReport.image_url || "https://placehold.co/400x250?text=No+Photo"} alt={t("bukuSakit.common.fotoBukti")} className="w-full h-full object-cover" />
               </div>
             </div>
           </div>

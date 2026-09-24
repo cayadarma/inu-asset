@@ -23,6 +23,13 @@ const enumDictionary: Record<string, { id: string; en: string }> = {
   "Selesai": { id: "Selesai", en: "Completed" },
   "Menunggu Part": { id: "Menunggu Part", en: "Awaiting Parts" },
   "Dalam Proses": { id: "Dalam Proses", en: "In Progress" },
+
+  // Urgensi Laporan Kerusakan (Buku Sakit)
+  "Berat (Mati Total)": { id: "Berat (Mati Total)", en: "Severe (Total Failure)" },
+  "Sedang": { id: "Sedang", en: "Medium" },
+  "Ringan": { id: "Ringan", en: "Minor" },
+  "Tinggi": { id: "Tinggi", en: "High" },
+  "Rendah": { id: "Rendah", en: "Low" },
 };
 
 /**

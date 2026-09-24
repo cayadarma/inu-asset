@@ -7,10 +7,17 @@ import imageCompression from 'browser-image-compression';
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/context/LanguageContext";
+import { translateEnum } from "@/lib/i18n/enumTranslate";
+import { useDynamicTextMap } from "@/lib/i18n/useDynamicText";
+
+// Urgensi tersimpan di DB dalam Bahasa Indonesia (nilai tetap), label ditampilkan via translateEnum
+const URGENCY_OPTIONS = ["Berat (Mati Total)", "Sedang", "Ringan"];
 
 export default function AssetSakitListPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const locationId = slug;
+  const { t, lang } = useLanguage();
 
   // --- STATE DATA ---
   const [assets, setAssets] = useState<any[]>([]);
@@ -93,7 +100,7 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return; 
-    if (!reportData.asset_id) return alert("Pilih aset terlebih dahulu!");
+    if (!reportData.asset_id) return alert(t("bukuSakit.assetList.alertPilihAset"));
 
     setIsLoading(true);
     try {
@@ -118,7 +125,7 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
 
       if (!reportError) {
         await supabase.from("assets").update({ status: "Rusak" }).eq("id", reportData.asset_id);
-        alert("Laporan terkirim!");
+        alert(t("bukuSakit.assetList.alertLaporanTerkirim"));
         setIsBrokenModalOpen(false);
         setImagePreview(null);
         setReportData({ asset_id: "", urgency: "Sedang", reporter_name: "", issue_title: "", description: "" });
@@ -136,16 +143,26 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
     return matchesSearch && matchesType && matchesStatus;
   });
 
+  // Terjemahkan teks bebas dari DB (nama lokasi, nama/tipe/spesifikasi aset, tipe aset) sekaligus
+  const dynamicMap = useDynamicTextMap([
+    realLocationName,
+    ...assets.map((a) => a.name),
+    ...assets.map((a) => a.type),
+    ...assets.map((a) => a.specification),
+    ...availableTypes.map((t2) => t2.name),
+  ]);
+  const dt = (text: string | null | undefined) => (text ? dynamicMap.get(text.trim()) ?? text : text);
+
   return (
     <div className="flex flex-col gap-6 pb-10 font-poppins text-left">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link href="/buku-sakit" className="p-2 hover:bg-white rounded-full transition-all border border-transparent hover:border-gray-200 shadow-sm"><ChevronLeft size={24} /></Link>
-          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Daftar Kerusakan — {realLocationName || "Memuat..."}</h1>
+          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("bukuSakit.assetList.title", { location: dt(realLocationName) || t("bukuSakit.common.memuat") })}</h1>
         </div>
         <button onClick={() => setIsBrokenModalOpen(true)} className="bg-[#EF4444] text-white px-5 py-3 rounded-xl font-bold text-sm shadow-md hover:bg-red-600 transition-all flex items-center gap-2">
-          <Plus size={18} /> Tambah Kerusakan Aset
+          <Plus size={18} /> {t("bukuSakit.assetList.tambahKerusakan")}
         </button>
       </div>
 
@@ -153,17 +170,22 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
       <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[300px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" size={18} />
-          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Cari kode/nama aset..." className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary transition-all dark:text-white" />
+          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t("bukuSakit.assetList.cariPlaceholder")} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary transition-all dark:text-white" />
         </div>
         
         <div className="flex gap-2 w-full md:w-auto">
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="flex-1 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
-            <option>Semua Tipe</option>
-            {availableTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+            <option value="Semua Tipe">{translateEnum("Semua Tipe", lang)}</option>
+            {availableTypes.map(t2 => <option key={t2.name} value={t2.name}>{dt(t2.name)}</option>)}
           </select>
 
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="flex-1 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
-            <option>Semua Status</option><option>Beroperasi</option><option>Idle</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
+            <option value="Semua Status">{translateEnum("Semua Status", lang)}</option>
+            <option value="Beroperasi">{translateEnum("Beroperasi", lang)}</option>
+            <option value="Idle">{translateEnum("Idle", lang)}</option>
+            <option value="Pemeliharaan">{translateEnum("Pemeliharaan", lang)}</option>
+            <option value="Rusak">{translateEnum("Rusak", lang)}</option>
+            <option value="Perbaikan">{translateEnum("Perbaikan", lang)}</option>
           </select>
         </div>
       </div>
@@ -172,26 +194,26 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
       <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-200 dark:border-[#334155] shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           {isLoading ? (
-            <div className="p-20 text-center text-[#94A3B8]">Memproses data...</div>
+            <div className="p-20 text-center text-[#94A3B8]">{t("bukuSakit.assetList.memprosesData")}</div>
           ) : filteredAssets.length === 0 ? (
             <div className="p-20 text-center flex flex-col items-center gap-4">
                <AlertCircle size={48} className="text-gray-200" />
-               <p className="text-[#94A3B8] font-medium">Belum ada aset di lokasi ini.</p>
+               <p className="text-[#94A3B8] font-medium">{t("bukuSakit.assetList.belumAdaAset")}</p>
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#F8FAFC] dark:bg-[#0F172A]/50 border-b border-gray-100 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] text-[13px] font-bold uppercase">
                 <tr>
-                  <th className="px-6 py-4">Kode</th><th className="px-6 py-4">Nama Aset</th><th className="px-6 py-4">Tipe</th><th className="px-6 py-4">Spesifikasi</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-center">Aksi</th>
+                  <th className="px-6 py-4">{t("bukuSakit.assetList.thKode")}</th><th className="px-6 py-4">{t("bukuSakit.assetList.thNamaAset")}</th><th className="px-6 py-4">{t("bukuSakit.assetList.thTipe")}</th><th className="px-6 py-4">{t("bukuSakit.assetList.thSpesifikasi")}</th><th className="px-6 py-4 text-center">{t("bukuSakit.common.status")}</th><th className="px-6 py-4 text-center">{t("bukuSakit.common.aksi")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
                 {filteredAssets.map((asset) => (
                   <tr key={asset.id} className={`hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-colors ${asset.is_active === false ? "opacity-60" : ""}`}>
                     <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.id}</td>
-                    <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.name}</td>
-                    <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.type}</td>
-                    <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.specification}</td>
+                    <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{dt(asset.name)}</td>
+                    <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{dt(asset.type)}</td>
+                    <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{dt(asset.specification)}</td>
                     <td className="px-6 py-5 text-center"><Badge status={asset.is_active === false ? "Nonaktif" : asset.status} /></td>
                     <td className="px-6 py-5 text-center">
                       <Link href={`/buku-sakit/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all"><Eye size={20} /></Link>
@@ -205,44 +227,46 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
       </div>
 
       {/* Modal & Lightbox tetap di bawah seperti kode sebelumnya */}
-      <Modal isOpen={isBrokenModalOpen} onClose={() => setIsBrokenModalOpen(false)} title="Laporkan Kerusakan">
+      <Modal isOpen={isBrokenModalOpen} onClose={() => setIsBrokenModalOpen(false)} title={t("bukuSakit.assetList.modalTitle")}>
         <form onSubmit={handleSubmitReport} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
            {/* ... isi form Anda ... */}
            <div className="lg:col-span-2 flex flex-col gap-5">
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Pilih Aset</label>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.assetList.pilihAset")}</label>
                 <select required value={reportData.asset_id} onChange={(e) => setReportData({...reportData, asset_id: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white">
-                  <option value="">-- Pilih Aset --</option>
-                  {assets.filter(a => a.is_active !== false).map(a => <option key={a.id} value={a.id}>{a.id} - {a.name}</option>)}
+                  <option value="">{t("bukuSakit.assetList.pilihAsetPlaceholder")}</option>
+                  {assets.filter(a => a.is_active !== false).map(a => <option key={a.id} value={a.id}>{a.id} - {dt(a.name)}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-white">Urgensi</label>
-                <select value={reportData.urgency} onChange={(e) => setReportData({...reportData, urgency: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white"><option>Berat (Mati Total)</option><option>Sedang</option><option>Ringan</option></select>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.urgensi")}</label>
+                <select value={reportData.urgency} onChange={(e) => setReportData({...reportData, urgency: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white">
+                  {URGENCY_OPTIONS.map((u) => <option key={u} value={u}>{translateEnum(u, lang)}</option>)}
+                </select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Nama Pelapor</label><input required type="text" value={reportData.reporter_name} onChange={(e) => setReportData({...reportData, reporter_name: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
-              <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Tanggal</label><input required type="date" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
+              <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.namaPelapor")}</label><input required type="text" value={reportData.reporter_name} onChange={(e) => setReportData({...reportData, reporter_name: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
+              <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.tanggal")}</label><input required type="date" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
             </div>
-            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Judul Masalah</label><input required type="text" value={reportData.issue_title} onChange={(e) => setReportData({...reportData, issue_title: e.target.value})} placeholder="Contoh: Mesin Bunyi Kasar" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
-            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">Kronologi / Indikasi Masalah</label><textarea rows={3} value={reportData.description} onChange={(e) => setReportData({...reportData, description: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white"></textarea></div>
+            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.judulMasalah")}</label><input required type="text" value={reportData.issue_title} onChange={(e) => setReportData({...reportData, issue_title: e.target.value})} placeholder={t("bukuSakit.common.judulMasalahPlaceholder")} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
+            <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.assetList.kronologiIndikasi")}</label><textarea rows={3} value={reportData.description} onChange={(e) => setReportData({...reportData, description: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white"></textarea></div>
           </div>
           <div className="lg:col-span-1 flex flex-col gap-5">
-            <label className="text-sm font-bold text-[#0F172A] dark:text-white">Foto Aset Rusak</label>
+            <label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.assetList.fotoAsetRusak")}</label>
             <div className="w-full aspect-square bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 overflow-hidden relative cursor-zoom-in" onClick={() => imagePreview && (setLightboxSrc(imagePreview), setIsLightboxOpen(true))}>
-              {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <><LucideImage size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">Upload Foto</span></>}
+              {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <><LucideImage size={48} className="text-[#94A3B8]" /><span className="text-xs font-bold text-[#94A3B8]">{t("bukuSakit.assetList.uploadFoto")}</span></>}
             </div>
             <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/*" />
             <input type="file" ref={cameraInputRef} onChange={handleImageChange} className="hidden" accept="image/*" capture="environment" />
             <div className="flex gap-2">
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">Pilih dari Galeri</button>
-              <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white"><CameraIcon size={14} /> Kamera</button>
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white">{t("bukuSakit.common.pilihGaleri")}</button>
+              <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-white"><CameraIcon size={14} /> {t("bukuSakit.common.kamera")}</button>
             </div>
             <div className="flex flex-col gap-3 mt-auto pt-6">
-              <button type="submit" disabled={isLoading} className={`w-full py-4 rounded-xl font-bold text-sm shadow-md transition-all ${isLoading ? "bg-gray-400" : "bg-[#EF4444] text-white"}`}>Kirim Laporan</button>
-              <button type="button" onClick={() => setIsBrokenModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">Batal</button>
+              <button type="submit" disabled={isLoading} className={`w-full py-4 rounded-xl font-bold text-sm shadow-md transition-all ${isLoading ? "bg-gray-400" : "bg-[#EF4444] text-white"}`}>{t("bukuSakit.assetList.kirimLaporan")}</button>
+              <button type="button" onClick={() => setIsBrokenModalOpen(false)} className="w-full bg-white border border-gray-200 text-[#475569] py-3.5 rounded-xl font-bold text-sm">{t("bukuSakit.common.batal")}</button>
             </div>
           </div>
         </form>
