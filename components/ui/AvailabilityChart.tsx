@@ -47,6 +47,30 @@ const dayShort = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 const todayStr = new Date().toISOString().slice(0, 10);
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
+// --- Ambil SEMUA baris dari sebuah query, walau jumlahnya lebih dari batas default
+// Supabase/PostgREST (1000 baris per request). Tanpa ini, rentang tanggal panjang
+// (mis. mode Tahunan) diam-diam terpotong di baris ke-1000 -- karena data diurutkan
+// ascending, yang kepotong adalah tanggal-tanggal PALING BARU, sehingga grafik terlihat
+// "anjlok ke 0" di bulan-bulan belakangan padahal datanya sebenarnya ada.
+// `queryFactory` menerima (from, to) dan HARUS memanggil .range(from, to) di ujungnya.
+async function fetchAllPages<T>(
+  queryFactory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>
+): Promise<T[]> {
+  const PAGE_SIZE = 1000;
+  let allRows: T[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await queryFactory(from, from + PAGE_SIZE - 1);
+    if (error || !data || data.length === 0) break;
+    allRows = allRows.concat(data);
+    if (data.length < PAGE_SIZE) break; // halaman terakhir
+    from += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
 export default function AvailabilityChart() {
   const [location, setLocation] = useState<string>(ALL_LOCATIONS); // ALL_LOCATIONS atau id lokasi
   const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
@@ -118,19 +142,20 @@ export default function AvailabilityChart() {
   // per tanggal. Untuk tanggal yang belum punya breakdown per lokasi sama sekali (histori
   // lama sebelum backfill per lokasi), fallback ke baris location_id NULL yang lama.
   const fetchSnapshots = async (start: string, end: string): Promise<Map<string, typeof EMPTY_POINT>> => {
-    let query = supabase
-      .from("asset_status_snapshots")
-      .select("snapshot_date, location_id, beroperasi, idle, pemeliharaan, perbaikan, rusak")
-      .gte("snapshot_date", start)
-      .lte("snapshot_date", end)
-      .order("snapshot_date", { ascending: true });
+    const rows = await fetchAllPages<SnapshotRow>((from, to) => {
+      let query = supabase
+        .from("asset_status_snapshots")
+        .select("snapshot_date, location_id, beroperasi, idle, pemeliharaan, perbaikan, rusak")
+        .gte("snapshot_date", start)
+        .lte("snapshot_date", end)
+        .order("snapshot_date", { ascending: true });
 
-    if (location !== ALL_LOCATIONS) {
-      query = query.eq("location_id", location);
-    }
+      if (location !== ALL_LOCATIONS) {
+        query = query.eq("location_id", location);
+      }
 
-    const { data, error } = await query;
-    const rows = (!error && data ? data : []) as SnapshotRow[];
+      return query.range(from, to);
+    });
 
     const result = new Map<string, typeof EMPTY_POINT>();
 

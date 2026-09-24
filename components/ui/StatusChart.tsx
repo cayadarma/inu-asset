@@ -23,14 +23,21 @@ export default function StatusChart() {
   useEffect(() => {
     async function fetchStatusCounts() {
       setIsLoading(true);
-      const { data } = await supabase.from("assets").select("status");
+      const { data } = await supabase.from("assets").select("status, is_active");
 
       if (data) {
-        const beroperasi = data.filter((a) => a.status === "Beroperasi").length;
-        const idle = data.filter((a) => a.status === "Idle").length;
-        const pemeliharaan = data.filter((a) => a.status === "Pemeliharaan").length;
-        const perbaikan = data.filter((a) => a.status === "Perbaikan").length;
-        const rusak = data.filter((a) => a.status === "Rusak").length;
+        // Aset yang sudah dinonaktifkan (is_active === false) dikeluarkan dari perhitungan --
+        // statusnya (mis. "Rusak") sengaja tidak diubah saat dinonaktifkan supaya riwayatnya
+        // tetap akurat, jadi kalau tidak difilter di sini dia akan terus "hantu" muncul di
+        // diagram donat walau asetnya sudah tidak aktif. Konsisten dengan filter yang sama
+        // di app/page.tsx, app/buku-sakit/page.tsx, dst.
+        const activeAssets = data.filter((a) => a.is_active !== false);
+
+        const beroperasi = activeAssets.filter((a) => a.status === "Beroperasi").length;
+        const idle = activeAssets.filter((a) => a.status === "Idle").length;
+        const pemeliharaan = activeAssets.filter((a) => a.status === "Pemeliharaan").length;
+        const perbaikan = activeAssets.filter((a) => a.status === "Perbaikan").length;
+        const rusak = activeAssets.filter((a) => a.status === "Rusak").length;
 
         setStatuses([
           { label: "Beroperasi", count: beroperasi, color: "bg-[#10B981]" },
@@ -39,7 +46,7 @@ export default function StatusChart() {
           { label: "Perbaikan", count: perbaikan, color: "bg-[#F97316]" },
           { label: "Rusak", count: rusak, color: "bg-[#EF4444]" },
         ]);
-        setTotal(data.length);
+        setTotal(activeAssets.length);
       }
       setIsLoading(false);
     }

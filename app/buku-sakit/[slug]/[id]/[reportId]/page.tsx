@@ -111,6 +111,11 @@ export default function FinalReportDetailPage({ params }: { params: Promise<{ sl
                   <p className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{report.assets?.name}</p>
                   <div className="flex items-center gap-3 text-sm text-[#475569] dark:text-[#94A3B8] mt-2 font-medium">
                      <span className="bg-[#CCFBF1] dark:bg-[#115E59]/40 text-[#0D9488] dark:text-[#37BAAE] px-3 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wider">{report.assets?.type}</span>
+                     {report.assets?.id && (
+                       <span className="font-mono bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-100 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] px-3 py-1 rounded-lg text-[11px] font-bold tracking-wider">
+                         #{report.assets.id.slice(0, 8).toUpperCase()}
+                       </span>
+                     )}
                      <span className="w-1.5 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full"></span>
                      <span className="uppercase tracking-widest text-[12px] font-bold text-[#475569] dark:text-[#94A3B8]">{report.assets?.locations?.name}</span>
                   </div>
