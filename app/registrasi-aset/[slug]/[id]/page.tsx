@@ -14,12 +14,17 @@ import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { CHECKLIST_CATEGORY_OPTIONS, ChecklistCategoryOption } from "@/constants/checklistTemplates";
+import { useLanguage } from "@/context/LanguageContext";
+import { translateEnum } from "@/lib/i18n/enumTranslate";
+import { useDynamicTextMap } from "@/lib/i18n/useDynamicText";
 
 export default function AssetDetailPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const { t, lang } = useLanguage();
+  const dateLocale = lang === "en" ? "en-US" : "id-ID";
   
   const locationNameFromUrl = searchParams.get("name") || "";
   const locationName = locationNameFromUrl.toUpperCase() || slug.toUpperCase();
@@ -124,13 +129,13 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     const currentTotal = editExistingUrls.length + editNewFiles.length;
     const remainingSlots = MAX_PHOTOS - currentTotal;
     if (remainingSlots <= 0) {
-      alert(`Maksimal ${MAX_PHOTOS} foto per aset.`);
+      alert(t("registrasiAset.form.maksimalFoto", { max: MAX_PHOTOS }));
       e.target.value = "";
       return;
     }
     const filesToProcess = files.slice(0, remainingSlots);
     if (files.length > remainingSlots) {
-      alert(`Hanya ${remainingSlots} foto yang ditambahkan, karena maksimal ${MAX_PHOTOS} foto per aset.`);
+      alert(t("registrasiAset.form.hanyaFotoDitambahkan", { remaining: remainingSlots, max: MAX_PHOTOS }));
     }
 
     setIsLoading(true);
@@ -212,12 +217,12 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     }).eq("id", id);
 
     if (error) {
-      alert("Gagal: " + error.message);
+      alert(`${t("registrasiAset.common.gagal")}: ${error.message}`);
       setIsLoading(false);
       return;
     }
 
-    alert("Berhasil diperbarui!");
+    alert(t("registrasiAset.detail.berhasilDiperbarui"));
     setIsEditModalOpen(false);
     setEditNewFiles([]);
     setEditNewPreviews([]);
@@ -243,7 +248,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   const handleDeactivate = async () => {
     if (isDeactivating) return; // cegah klik dobel
     if (!deactivationNote.trim()) {
-      alert("Keterangan alasan nonaktif wajib diisi (mis. alasan & apakah aset masih berada di lokasi perusahaan atau sudah dilelang).");
+      alert(t("registrasiAset.detail.alertKeteranganWajib"));
       return;
     }
     setIsDeactivating(true);
@@ -254,7 +259,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       deactivated_by: user?.name || null,
     }).eq("id", id);
     if (error) {
-      alert("Gagal menonaktifkan aset: " + error.message);
+      alert(t("registrasiAset.detail.gagalNonaktifkan", { message: error.message }));
       setIsDeactivating(false);
     } else {
       setIsDeactivateModalOpen(false);
@@ -274,7 +279,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       deactivated_at: null,
       deactivated_by: null,
     }).eq("id", id);
-    if (error) alert("Gagal mengaktifkan kembali aset: " + error.message);
+    if (error) alert(t("registrasiAset.detail.gagalAktifkan", { message: error.message }));
     else await fetchDetail();
     setIsReactivating(false);
   };
@@ -306,10 +311,12 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     const totalHistory = counts.workOrders + counts.damageReports + counts.maintenanceSchedules;
     if (totalHistory > 0) {
       alert(
-        `Aset ini tidak bisa dihapus permanen karena sudah punya riwayat: ` +
-        `${counts.workOrders} Work Order, ${counts.damageReports} laporan kerusakan, ` +
-        `${counts.maintenanceSchedules} jadwal pemeliharaan.\n\n` +
-        `Untuk aset yang sudah pernah dipakai, gunakan "Nonaktifkan" saja supaya riwayatnya tetap tersimpan.`
+        t("registrasiAset.detail.alertTidakBisaHapus", {
+          wo: counts.workOrders,
+          dr: counts.damageReports,
+          ms: counts.maintenanceSchedules,
+          nonaktifkanLabel: t("registrasiAset.detail.nonaktifkan"),
+        })
       );
       return;
     }
@@ -327,7 +334,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     const counts = await checkAssetHistoryCounts();
     const totalHistory = counts.workOrders + counts.damageReports + counts.maintenanceSchedules;
     if (totalHistory > 0) {
-      alert("Aset ini ternyata sudah punya riwayat baru sejak modal ini dibuka, jadi tidak jadi dihapus. Silakan refresh halaman.");
+      alert(t("registrasiAset.detail.alertRiwayatBaru"));
       setIsDeletingPermanently(false);
       setIsPermaDeleteModalOpen(false);
       return;
@@ -335,7 +342,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
 
     const { error } = await supabase.from("assets").delete().eq("id", id);
     if (error) {
-      alert("Gagal menghapus aset: " + error.message);
+      alert(t("registrasiAset.detail.gagalMenghapusAset", { message: error.message }));
       setIsDeletingPermanently(false);
     } else {
       router.push(`/registrasi-aset/${slug}?name=${locationNameFromUrl}`);
@@ -349,11 +356,31 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
     let years = today.getFullYear() - start.getFullYear();
     let months = today.getMonth() - start.getMonth();
     if (months < 0) { years--; months += 12; }
-    return years === 0 ? `${months} bulan` : months === 0 ? `${years} tahun` : `${years} thn ${months} bln`;
+    return years === 0
+      ? t("registrasiAset.form.usiaBulan", { n: months })
+      : months === 0
+      ? t("registrasiAset.form.usiaTahun", { n: years })
+      : t("registrasiAset.form.usiaTahunBulan", { tahun: years, bulan: months });
   };
 
-  if (isLoading && !asset) return <div className="p-20 text-center font-bold dark:text-white">Memuat...</div>;
-  if (!asset) return <div className="p-20 text-center text-red-500 font-bold">Aset tidak ditemukan.</div>;
+  // Teks dinamis dari DB (nama aset, tipe, spesifikasi, pengawas, riwayat) diterjemahkan lewat DeepL (batch)
+  const dynamicMap = useDynamicTextMap([
+    asset?.name,
+    asset?.type,
+    asset?.specification,
+    asset?.checklist_pengawas,
+    asset?.deactivation_note,
+    asset?.deactivated_by,
+    ...damageHistory.map((r) => r.issue_title),
+    ...damageHistory.map((r) => r.reporter_name),
+    ...maintenanceHistory.map((m) => m.operator_name),
+    ...availableTypes.map((t2) => t2.name),
+    ...availableLocations.map((l) => l.name),
+  ]);
+  const dt = (text: string | null | undefined) => (text ? dynamicMap.get(text.trim()) ?? text : text);
+
+  if (isLoading && !asset) return <div className="p-20 text-center font-bold dark:text-white">{t("registrasiAset.common.memuat")}</div>;
+  if (!asset) return <div className="p-20 text-center text-red-500 font-bold">{t("registrasiAset.common.asetTidakDitemukan")}</div>;
 
   return (
     <div className="flex flex-col gap-6 pb-10 font-poppins text-left">
@@ -413,7 +440,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                           onClick={() => setActivePhotoIndex(idx)}
                           className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${idx === activePhotoIndex ? "border-[#0D9488]" : "border-transparent opacity-70"}`}
                         >
-                          <img src={src} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                          <img src={src} alt={t("registrasiAset.form.fotoAlt", { n: idx + 1 })} className="w-full h-full object-cover" />
                         </button>
                       ))}
                     </div>
@@ -422,7 +449,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
               );
             })()}
             <div className="mt-4 flex justify-between items-center px-2">
-              <span className="text-sm font-bold text-[#475569] dark:text-[#94A3B8]">Status Sekarang:</span>
+              <span className="text-sm font-bold text-[#475569] dark:text-[#94A3B8]">{t("registrasiAset.detail.statusSekarang")}</span>
               <Badge status={asset.is_active === false ? "Nonaktif" : asset.status} />
             </div>
           </div>
@@ -432,16 +459,16 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
               <div className="flex items-start gap-3 p-4 bg-[#F1F5F9] dark:bg-[#0F172A] rounded-2xl border border-gray-200 dark:border-[#334155]">
                 <AlertTriangle size={16} className="text-[#94A3B8] mt-0.5 flex-shrink-0" />
                 <p className="text-[12px] text-[#475569] dark:text-[#94A3B8] font-medium leading-relaxed">
-                  Aset ini sudah dinonaktifkan. Aset tidak akan muncul di daftar/dropdown pemilihan aset untuk Work Order, jadwal pemeliharaan, atau lapor kerusakan baru, tapi seluruh riwayatnya tetap tersimpan.
+                  {t("registrasiAset.detail.nonaktifNotice")}
                 </p>
               </div>
               {asset.deactivation_note && (
                 <div className="flex flex-col gap-1.5 p-4 bg-red-50 dark:bg-red-950/20 rounded-2xl border border-red-100 dark:border-red-900/40">
-                  <span className="text-[11px] font-black text-red-600 dark:text-red-400 uppercase tracking-wider">Keterangan Nonaktif</span>
-                  <p className="text-[13px] text-[#475569] dark:text-[#F8FAFC] font-medium leading-relaxed whitespace-pre-wrap">{asset.deactivation_note}</p>
+                  <span className="text-[11px] font-black text-red-600 dark:text-red-400 uppercase tracking-wider">{t("registrasiAset.detail.keteranganNonaktif")}</span>
+                  <p className="text-[13px] text-[#475569] dark:text-[#F8FAFC] font-medium leading-relaxed whitespace-pre-wrap">{dt(asset.deactivation_note)}</p>
                   <span className="text-[11px] text-[#94A3B8] mt-1">
-                    {asset.deactivated_at && new Date(asset.deactivated_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
-                    {asset.deactivated_by ? ` · oleh ${asset.deactivated_by}` : ""}
+                    {asset.deactivated_at && new Date(asset.deactivated_at).toLocaleDateString(dateLocale, { day: "numeric", month: "long", year: "numeric" })}
+                    {asset.deactivated_by ? ` · ${t("registrasiAset.detail.olehName", { name: dt(asset.deactivated_by) || "-" })}` : ""}
                   </span>
                 </div>
               )}
@@ -450,15 +477,15 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
 
           <div className="flex gap-3">
             <button onClick={() => setIsEditModalOpen(true)} className="flex-1 flex items-center justify-center gap-2 bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all">
-               <Edit3 size={18} /> Edit
+               <Edit3 size={18} /> {t("registrasiAset.common.edit")}
             </button>
             {asset.is_active === false ? (
               <button onClick={handleReactivate} disabled={isReactivating} className="flex-1 flex items-center justify-center gap-2 bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700 transition-all disabled:opacity-50">
-                 <Power size={18} /> {isReactivating ? "Memproses..." : "Aktifkan Kembali"}
+                 <Power size={18} /> {isReactivating ? t("registrasiAset.common.memproses") : t("registrasiAset.detail.aktifkanKembali")}
               </button>
             ) : (
               <button onClick={() => setIsDeactivateModalOpen(true)} className="flex-1 flex items-center justify-center gap-2 bg-[#EF4444] text-white py-3.5 rounded-xl font-bold text-sm shadow-md">
-                 <PowerOff size={18} /> Nonaktifkan
+                 <PowerOff size={18} /> {t("registrasiAset.detail.nonaktifkan")}
               </button>
             )}
           </div>
@@ -467,51 +494,51 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
         {/* KOLOM KANAN: INFO */}
         <div className="lg:col-span-2 flex flex-col gap-6">
           <div className="bg-white dark:bg-[#1E293B] p-8 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm">
-            <h2 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-8 uppercase tracking-tight">Informasi Utama Aset</h2>
+            <h2 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-8 uppercase tracking-tight">{t("registrasiAset.form.title")}</h2>
             <div className="grid grid-cols-2 gap-y-8 gap-x-12">
-               <DetailItem label="Kode Aset" val={asset.id} />
-               <DetailItem label="Nama Aset" val={asset.name} />
-               <DetailItem label="Tipe Aset" val={asset.type} />
-               <DetailItem label="Spesifikasi" val={asset.specification} />
-               <DetailItem label="Tanggal Pembelian" val={asset.purchase_date} />
-               <DetailItem label="Usia Aset" val={calculateAge(asset.purchase_date)} />
+               <DetailItem label={t("registrasiAset.common.kodeAset")} val={asset.id} />
+               <DetailItem label={t("registrasiAset.common.namaAset")} val={dt(asset.name)} />
+               <DetailItem label={t("registrasiAset.common.tipeAset")} val={dt(asset.type)} />
+               <DetailItem label={t("registrasiAset.form.spesifikasi")} val={dt(asset.specification)} />
+               <DetailItem label={t("registrasiAset.form.tanggalPembelian")} val={asset.purchase_date} />
+               <DetailItem label={t("registrasiAset.detail.usiaAset")} val={calculateAge(asset.purchase_date)} />
             </div>
           </div>
 
           <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm overflow-hidden">
             <div className="flex border-b bg-[#F8FAFC] dark:bg-[#0F172A]">
-              <button onClick={() => setActiveTab("pemeliharaan")} className={`px-8 py-5 text-sm font-bold transition-all ${activeTab === "pemeliharaan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Riwayat Pemeliharaan</button>
-              <button onClick={() => setActiveTab("kerusakan")} className={`px-8 py-5 text-sm font-bold transition-all ${activeTab === "kerusakan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>Riwayat Kerusakan</button>
+              <button onClick={() => setActiveTab("pemeliharaan")} className={`px-8 py-5 text-sm font-bold transition-all ${activeTab === "pemeliharaan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>{t("registrasiAset.detail.riwayatPemeliharaan")}</button>
+              <button onClick={() => setActiveTab("kerusakan")} className={`px-8 py-5 text-sm font-bold transition-all ${activeTab === "kerusakan" ? "text-[#0D9488] border-b-2 border-[#0D9488] bg-white dark:bg-[#1E293B]" : "text-[#94A3B8]"}`}>{t("registrasiAset.detail.riwayatKerusakan")}</button>
             </div>
             <div className="flex flex-col">
                {activeTab === 'kerusakan' ? (
                  damageHistory.length > 0 ? damageHistory.map((report, i) => (
                     <div key={i} className="flex justify-between items-center p-6 border-b border-gray-50 dark:border-[#334155] last:border-0 hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-all group">
                        <div className="flex flex-col gap-1">
-                          <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px] group-hover:text-[#0D9488] transition-colors">{report.issue_title}</span>
-                          <span className="text-xs text-[#94A3B8] font-medium">{new Date(report.created_at).toLocaleDateString()} • Pelapor: {report.reporter_name}</span>
+                          <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px] group-hover:text-[#0D9488] transition-colors">{dt(report.issue_title)}</span>
+                          <span className="text-xs text-[#94A3B8] font-medium">{new Date(report.created_at).toLocaleDateString(dateLocale)} • {t("registrasiAset.detail.pelapor", { name: dt(report.reporter_name) || "-" })}</span>
                        </div>
-                       <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${encodeURIComponent(locationNameFromUrl)}&assetName=${encodeURIComponent(asset?.name || "")}&issueTitle=${encodeURIComponent(report.issue_title)}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">Detail</Link>
+                       <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${encodeURIComponent(locationNameFromUrl)}&assetName=${encodeURIComponent(asset?.name || "")}&issueTitle=${encodeURIComponent(report.issue_title)}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">{t("registrasiAset.common.detail")}</Link>
                     </div>
-                 )) : <p className="p-10 text-center text-secondary italic">Tidak ada riwayat.</p>
+                 )) : <p className="p-10 text-center text-secondary italic">{t("registrasiAset.detail.tidakAdaRiwayat")}</p>
                ) : (
                  maintenanceHistory.length > 0 ? maintenanceHistory.map((sch, i) => (
                     <div key={i} className="flex justify-between items-center p-6 border-b border-gray-50 dark:border-[#334155] last:border-0 hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-all group">
                        <div className="flex flex-col gap-1">
                           <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px] group-hover:text-[#0D9488] transition-colors">
-                            {sch.scheduled_date ? new Date(sch.scheduled_date + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-"}
+                            {sch.scheduled_date ? new Date(sch.scheduled_date + "T00:00:00").toLocaleDateString(dateLocale, { day: "numeric", month: "long", year: "numeric" }) : "-"}
                           </span>
                           <span className="text-xs text-[#94A3B8] font-medium">
-                            Operator: {sch.operator_name || "-"}
-                            {sch.completed_at ? ` • Selesai: ${new Date(sch.completed_at).toLocaleDateString("id-ID")}` : ""}
+                            {t("registrasiAset.detail.operatorLabel", { name: dt(sch.operator_name) || "-" })}
+                            {sch.completed_at ? ` • ${t("registrasiAset.detail.selesaiLabel", { date: new Date(sch.completed_at).toLocaleDateString(dateLocale) })}` : ""}
                           </span>
                        </div>
                        <div className="flex items-center gap-3">
                           <Badge status={sch.status} />
-                          <Link href={`/pemeliharaan/checklist/${sch.id}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">Detail</Link>
+                          <Link href={`/pemeliharaan/checklist/${sch.id}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">{t("registrasiAset.common.detail")}</Link>
                        </div>
                     </div>
-                 )) : <p className="p-10 text-center text-secondary italic">Belum ada riwayat pemeliharaan pencegahan.</p>
+                 )) : <p className="p-10 text-center text-secondary italic">{t("registrasiAset.detail.belumAdaRiwayatPemeliharaan")}</p>
                )}
             </div>
           </div>
@@ -523,40 +550,39 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
             <div className="flex items-center justify-between px-8 py-5 border-b border-gray-100 dark:border-[#334155] bg-[#F8FAFC] dark:bg-[#0F172A]">
               <div className="flex items-center gap-2">
                 <ClipboardList size={18} className="text-[#0D9488]" />
-                <h2 className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] uppercase tracking-tight">Checklist Harian</h2>
+                <h2 className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] uppercase tracking-tight">{t("registrasiAset.detail.checklistHarian")}</h2>
               </div>
               {!canManageChecklistParts && (
-                <span className="text-[10px] font-bold text-[#94A3B8] italic">Hanya administrator yang bisa mengubah</span>
+                <span className="text-[10px] font-bold text-[#94A3B8] italic">{t("registrasiAset.detail.hanyaAdminBisaMengubah")}</span>
               )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 px-8 py-6">
               <DetailItem
-                label="Kategori Checklist"
+                label={t("registrasiAset.form.kategoriChecklist")}
                 val={
                   CHECKLIST_CATEGORY_OPTIONS.find((o: ChecklistCategoryOption) => o.value === asset.checklist_category)?.label ||
-                  "Belum diatur"
+                  t("registrasiAset.detail.belumDiatur")
                 }
               />
-              <DetailItem label="Pengawas Default" val={asset.checklist_pengawas} />
+              <DetailItem label={t("registrasiAset.form.pengawasDefault")} val={dt(asset.checklist_pengawas)} />
             </div>
             <p className="px-8 pb-6 -mt-2 text-[11px] text-[#94A3B8]">
-              Field checklist mengikuti template baku sesuai kategori di atas. Ubah lewat tombol
-              "Edit Informasi Utama Aset".
+              {t("registrasiAset.detail.checklistFooterNote", { editButtonTitle: t("registrasiAset.detail.editModalTitle") })}
             </p>
           </div>
         </div>
       </div>
 
       {/* MODAL EDIT ASET (LOGIKA SAMA SEPERTI TAMBAH ASET) */}
-      <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); resetEditPhotoState(); setIsNewTypeEdit(false); }} title="Edit Informasi Utama Aset">
+      <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); resetEditPhotoState(); setIsNewTypeEdit(false); }} title={t("registrasiAset.detail.editModalTitle")}>
         <form onSubmit={handleUpdate} className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-left">
           <div className="lg:col-span-2 flex flex-col gap-5">
-             <EditField label="Nama Aset" val={editData.name} onChange={(e:any) => setEditField({...editData, name: e.target.value})} />
+             <EditField label={t("registrasiAset.common.namaAset")} val={editData.name} onChange={(e:any) => setEditField({...editData, name: e.target.value})} />
              
              {/* Dropdown Tipe (Sama Seperti Tambah Aset) */}
              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Tipe Aset</label>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("registrasiAset.common.tipeAset")}</label>
                 <div className="relative">
                   <select 
                     value={isNewTypeEdit ? "custom" : editData.type}
@@ -566,24 +592,24 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                     }}
                     className="w-full appearance-none px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white cursor-pointer"
                   >
-                    {availableTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-                    <option value="custom" className="text-primary font-bold">+ Ganti ke Tipe Baru...</option>
+                    {availableTypes.map(t2 => <option key={t2.name} value={t2.name}>{dt(t2.name)}</option>)}
+                    <option value="custom" className="text-primary font-bold">{t("registrasiAset.detail.gantiTipeBaru")}</option>
                   </select>
                   <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
                 </div>
                 {isNewTypeEdit && (
-                  <input type="text" placeholder="Ketik tipe baru..." value={editData.type} onChange={(e) => setEditField({...editData, type: e.target.value})} className="mt-2 w-full px-4 py-3 border-2 border-primary rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none dark:text-white" autoFocus />
+                  <input type="text" placeholder={t("registrasiAset.detail.ketikTipeBaruPlaceholder")} value={editData.type} onChange={(e) => setEditField({...editData, type: e.target.value})} className="mt-2 w-full px-4 py-3 border-2 border-primary rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none dark:text-white" autoFocus />
                 )}
              </div>
 
-             <EditField label="Spesifikasi" val={editData.specification} onChange={(e:any) => setEditField({...editData, specification: e.target.value})} multiline />
-             <EditField label="Tanggal Pembelian" type="date" val={editData.purchase_date} onChange={(e:any) => setEditField({...editData, purchase_date: e.target.value})} />
-             <EditField key={editData.purchase_date} label="Usia Aset" val={calculateAge(editData.purchase_date)} disabled />
+             <EditField label={t("registrasiAset.form.spesifikasi")} val={editData.specification} onChange={(e:any) => setEditField({...editData, specification: e.target.value})} multiline />
+             <EditField label={t("registrasiAset.form.tanggalPembelian")} type="date" val={editData.purchase_date} onChange={(e:any) => setEditField({...editData, purchase_date: e.target.value})} />
+             <EditField key={editData.purchase_date} label={t("registrasiAset.detail.usiaAset")} val={calculateAge(editData.purchase_date)} disabled />
 
              {/* Lokasi Aset — bisa dipindah ke lokasi lain. Kalau diubah, setelah simpan
                  halaman akan redirect ke URL detail dengan slug lokasi baru. */}
              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Lokasi Aset</label>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("registrasiAset.form.lokasiAset")}</label>
                 <div className="relative">
                   <select
                     value={editData.location_id ?? slug}
@@ -591,7 +617,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                     className="w-full appearance-none px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white cursor-pointer"
                   >
                     {availableLocations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                      <option key={loc.id} value={loc.id}>{dt(loc.name)}</option>
                     ))}
                   </select>
                   <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
@@ -599,22 +625,26 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
              </div>
 
              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Status</label>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("registrasiAset.common.status")}</label>
                 <select value={editData.status} onChange={(e) => setEditField({...editData, status: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white font-poppins">
-                   <option>Beroperasi</option><option>Idle</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
+                   <option value="Beroperasi">{translateEnum("Beroperasi", lang)}</option>
+                   <option value="Idle">{translateEnum("Idle", lang)}</option>
+                   <option value="Pemeliharaan">{translateEnum("Pemeliharaan", lang)}</option>
+                   <option value="Rusak">{translateEnum("Rusak", lang)}</option>
+                   <option value="Perbaikan">{translateEnum("Perbaikan", lang)}</option>
                 </select>
              </div>
 
              {/* KATEGORI CHECKLIST HARIAN — menentukan template field checklist statis yang
                  dipakai aset ini. Kosongkan jika aset tidak butuh checklist harian. */}
              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Kategori Checklist</label>
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("registrasiAset.form.kategoriChecklist")}</label>
                 <select
                   value={editData.checklist_category || ""}
                   onChange={(e) => setEditField({ ...editData, checklist_category: e.target.value || null })}
                   className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white font-poppins"
                 >
-                  <option value="">-- Tidak Ada / Aset Tidak Butuh Checklist --</option>
+                  <option value="">{t("registrasiAset.form.tidakAdaChecklist")}</option>
                   {CHECKLIST_CATEGORY_OPTIONS.map((opt: ChecklistCategoryOption) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
@@ -622,18 +652,18 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
              </div>
 
              <EditField
-              label="Pengawas Default"
+              label={t("registrasiAset.form.pengawasDefault")}
               val={editData.checklist_pengawas}
               onChange={(e: any) => setEditField({ ...editData, checklist_pengawas: e.target.value })}
              />
           </div>
 
           <div className="lg:col-span-1 flex flex-col gap-5">
-             <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Foto Aset ({editExistingUrls.length + editNewFiles.length}/{MAX_PHOTOS})</label>
+             <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("registrasiAset.form.fotoAset", { n: editExistingUrls.length + editNewFiles.length, max: MAX_PHOTOS })}</label>
              <div className="grid grid-cols-3 gap-2">
                 {editExistingUrls.map((src, idx) => (
                   <div key={`existing-${idx}`} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-[#334155] group">
-                    <img src={src} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover cursor-zoom-in" onClick={() => openLightbox(src)} />
+                    <img src={src} alt={t("registrasiAset.form.fotoAlt", { n: idx + 1 })} className="w-full h-full object-cover cursor-zoom-in" onClick={() => openLightbox(src)} />
                     <button type="button" onClick={() => handleRemoveExistingEditPhoto(idx)} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <X size={12} />
                     </button>
@@ -641,7 +671,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                 ))}
                 {editNewPreviews.map((src, idx) => (
                   <div key={`new-${idx}`} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-[#334155] group">
-                    <img src={src} alt={`Foto baru ${idx + 1}`} className="w-full h-full object-cover cursor-zoom-in" onClick={() => openLightbox(src)} />
+                    <img src={src} alt={t("registrasiAset.detail.fotoBaruAlt", { n: idx + 1 })} className="w-full h-full object-cover cursor-zoom-in" onClick={() => openLightbox(src)} />
                     <button type="button" onClick={() => handleRemoveNewEditPhoto(idx)} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <X size={12} />
                     </button>
@@ -650,20 +680,20 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                 {(editExistingUrls.length + editNewFiles.length) < MAX_PHOTOS && (
                   <div className="aspect-square bg-[#D6DEE6] dark:bg-[#0F172A] rounded-xl flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 dark:border-[#334155]">
                     <LucideImage size={24} className="text-[#94A3B8]" />
-                    <span className="text-[9px] font-bold text-[#94A3B8] text-center px-1">Tambah Foto</span>
+                    <span className="text-[9px] font-bold text-[#94A3B8] text-center px-1">{t("registrasiAset.form.tambahFoto")}</span>
                   </div>
                 )}
              </div>
              <input type="file" ref={editFileInputRef} onChange={handleEditImageChange} className="hidden" accept="image/*" multiple />
              <input type="file" ref={editCameraInputRef} onChange={handleEditImageChange} className="hidden" accept="image/*" capture="environment" />
              <div className="flex gap-2">
-               <button type="button" disabled={(editExistingUrls.length + editNewFiles.length) >= MAX_PHOTOS} onClick={() => editFileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins disabled:opacity-40 disabled:cursor-not-allowed">Tambah Foto</button>
-               <button type="button" disabled={(editExistingUrls.length + editNewFiles.length) >= MAX_PHOTOS} onClick={() => editCameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins disabled:opacity-40 disabled:cursor-not-allowed"><CameraIcon size={14} /> Kamera</button>
+               <button type="button" disabled={(editExistingUrls.length + editNewFiles.length) >= MAX_PHOTOS} onClick={() => editFileInputRef.current?.click()} className="flex-1 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins disabled:opacity-40 disabled:cursor-not-allowed">{t("registrasiAset.form.tambahFoto")}</button>
+               <button type="button" disabled={(editExistingUrls.length + editNewFiles.length) >= MAX_PHOTOS} onClick={() => editCameraInputRef.current?.click()} className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F5F9] dark:bg-[#334155] border border-[#AFBDD2] rounded-lg text-[11px] font-bold text-[#475569] dark:text-[#F8FAFC] hover:bg-gray-200 transition-all font-poppins disabled:opacity-40 disabled:cursor-not-allowed"><CameraIcon size={14} /> {t("registrasiAset.form.kamera")}</button>
              </div>
-             <p className="text-[10px] text-[#94A3B8] -mt-3">Maksimal {MAX_PHOTOS} foto per aset.</p>
+             <p className="text-[10px] text-[#94A3B8] -mt-3">{t("registrasiAset.form.maksimalFoto", { max: MAX_PHOTOS })}</p>
              <div className="flex flex-col gap-3 mt-auto pt-4">
-                <button type="submit" className="w-full bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700">Simpan Perubahan</button>
-                <button type="button" onClick={() => { setIsEditModalOpen(false); resetEditPhotoState(); setIsNewTypeEdit(false); }} className="w-full py-3.5 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
+                <button type="submit" className="w-full bg-[#0D9488] text-white py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-teal-700">{t("registrasiAset.common.simpanPerubahan")}</button>
+                <button type="button" onClick={() => { setIsEditModalOpen(false); resetEditPhotoState(); setIsNewTypeEdit(false); }} className="w-full py-3.5 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-sm text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">{t("registrasiAset.common.batal")}</button>
              </div>
           </div>
 
@@ -673,11 +703,9 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
           {canDeleteAsset && (
             <div className="lg:col-span-3 mt-2 p-5 rounded-2xl border-2 border-dashed border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
-                <span className="text-xs font-black uppercase tracking-wider text-red-600">Zona Berbahaya</span>
+                <span className="text-xs font-black uppercase tracking-wider text-red-600">{t("registrasiAset.detail.zonaBerbahaya")}</span>
                 <p className="text-xs text-[#94A3B8] max-w-md">
-                  Khusus untuk data yang salah input atau data percobaan (dummy) yang belum pernah dipakai sama sekali.
-                  Kalau aset ini sudah pernah punya Work Order, laporan kerusakan, atau jadwal pemeliharaan, gunakan tombol
-                  "Nonaktifkan" saja — aksi ini tidak akan berhasil kalau riwayatnya sudah ada.
+                  {t("registrasiAset.detail.zonaBerbahayaDesc", { nonaktifkanLabel: t("registrasiAset.detail.nonaktifkan") })}
                 </p>
               </div>
               <button
@@ -686,7 +714,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                 disabled={isCheckingDeletable}
                 className="flex-shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 border-2 border-red-500 text-red-600 dark:text-red-400 rounded-xl font-bold text-sm hover:bg-red-500 hover:text-white transition-all disabled:opacity-50"
               >
-                <Trash2 size={16} /> {isCheckingDeletable ? "Memeriksa riwayat..." : "Hapus Permanen"}
+                <Trash2 size={16} /> {isCheckingDeletable ? t("registrasiAset.detail.memeriksaRiwayat") : t("registrasiAset.detail.hapusPermanen")}
               </button>
             </div>
           )}
@@ -694,60 +722,67 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       </Modal>
 
       {/* MODAL KONFIRMASI HAPUS PERMANEN — hanya bisa dilanjutkan kalau kode aset diketik ulang persis */}
-      <Modal isOpen={isPermaDeleteModalOpen} onClose={() => setIsPermaDeleteModalOpen(false)} title="Konfirmasi Hapus Permanen">
+      <Modal isOpen={isPermaDeleteModalOpen} onClose={() => setIsPermaDeleteModalOpen(false)} title={t("registrasiAset.detail.konfirmasiHapusPermanenTitle")}>
         <div className="flex flex-col items-center text-center gap-6 py-4">
            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center"><Trash2 size={32} /></div>
            <p className="dark:text-white font-poppins text-lg">
-             Aset <span className="font-bold text-red-600">{asset.name}</span> ({asset.id}) akan dihapus permanen.
+             {t("registrasiAset.detail.hapusPermanenConfirmPrefix")}{" "}
+             <span className="font-bold text-red-600">{dt(asset.name)}</span>{" "}
+             {t("registrasiAset.detail.hapusPermanenConfirmSuffix", { id: asset.id })}
            </p>
            <p className="text-sm text-[#94A3B8] -mt-4">
-             Aksi ini <span className="font-bold text-red-500">tidak bisa dibatalkan</span> dan tidak menyisakan jejak apa pun. Aset ini sudah dipastikan belum punya riwayat WO/kerusakan/pemeliharaan. Ketik ulang kode aset <span className="font-mono font-bold">{asset.id}</span> di bawah untuk melanjutkan.
+             {t("registrasiAset.detail.hapusPermanenWarningPrefix", { tidakBisaDibatalkan: t("registrasiAset.detail.hapusPermanenWarningTidakBisaDibatalkan") })}
+             {" "}<span className="font-mono font-bold">{asset.id}</span>{" "}
+             {t("registrasiAset.detail.hapusPermanenWarningSuffix")}
            </p>
            <input
              type="text"
              value={permaDeleteConfirmInput}
              onChange={(e) => setPermaDeleteConfirmInput(e.target.value)}
-             placeholder={`Ketik "${asset.id}" untuk konfirmasi`}
+             placeholder={t("registrasiAset.detail.ketikUntukKonfirmasi", { id: asset.id })}
              className="w-full px-4 py-3 border-2 border-gray-200 dark:border-[#334155] rounded-xl text-sm text-center font-mono font-bold outline-none focus:border-red-500 bg-white dark:bg-[#1E293B] dark:text-white"
            />
            <div className="flex gap-4 w-full">
-              <button onClick={() => setIsPermaDeleteModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">Batal</button>
+              <button onClick={() => setIsPermaDeleteModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all">{t("registrasiAset.common.batal")}</button>
               <button
                 onClick={handlePermanentDelete}
                 disabled={isDeletingPermanently || permaDeleteConfirmInput.trim() !== asset.id}
                 className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {isDeletingPermanently ? "Menghapus..." : "Ya, Hapus Permanen"}
+                {isDeletingPermanently ? t("registrasiAset.common.menghapus") : t("registrasiAset.common.yaHapusPermanen")}
               </button>
            </div>
         </div>
       </Modal>
 
       {/* MODAL KONFIRMASI NONAKTIFKAN */}
-      <Modal isOpen={isDeactivateModalOpen} onClose={() => { setIsDeactivateModalOpen(false); setDeactivationNote(""); }} title="Konfirmasi Nonaktifkan Aset">
+      <Modal isOpen={isDeactivateModalOpen} onClose={() => { setIsDeactivateModalOpen(false); setDeactivationNote(""); }} title={t("registrasiAset.detail.konfirmasiNonaktifkanTitle")}>
         <div className="flex flex-col items-center text-center gap-6 py-4">
            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center"><PowerOff size={32} /></div>
-           <p className="dark:text-white font-poppins text-lg">Yakin nonaktifkan <span className="font-bold text-red-600">{asset.name}</span>?</p>
+           <p className="dark:text-white font-poppins text-lg">
+             {t("registrasiAset.detail.yakinNonaktifkanPrefix")}{" "}
+             <span className="font-bold text-red-600">{dt(asset.name)}</span>?
+           </p>
            <p className="text-sm text-[#94A3B8] -mt-4">
-             Aset tidak akan dihapus. Seluruh riwayat pemeliharaan, kerusakan, dan biaya tetap tersimpan. Aset hanya akan disembunyikan dari daftar aktif dan dropdown pemilihan aset baru. Kamu bisa mengaktifkannya kembali kapan saja.
+             {t("registrasiAset.detail.nonaktifkanDesc")}
            </p>
            <div className="w-full flex flex-col gap-2 text-left">
               <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-                Keterangan Nonaktif <span className="text-red-500">*</span>
+                {t("registrasiAset.detail.keteranganNonaktifLabel")} <span className="text-red-500">*</span>
               </label>
               <textarea
                 required
                 rows={3}
                 value={deactivationNote}
                 onChange={(e) => setDeactivationNote(e.target.value)}
-                placeholder="Contoh: Sudah dilelang pada Januari 2026, sudah tidak berada di lokasi perusahaan. / Rusak berat, masih tersimpan di gudang menunggu proses lelang."
+                placeholder={t("registrasiAset.detail.deaktivasiPlaceholder")}
                 className="w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white resize-none"
               />
-              <p className="text-[11px] text-[#94A3B8]">Jelaskan alasan nonaktif dan apakah aset masih berada di lokasi perusahaan atau sudah dilelang/dipindahkan.</p>
+              <p className="text-[11px] text-[#94A3B8]">{t("registrasiAset.detail.deaktivasiHelper")}</p>
            </div>
            <div className="flex gap-4 w-full">
-              <button onClick={() => { setIsDeactivateModalOpen(false); setDeactivationNote(""); }} disabled={isDeactivating} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">Batal</button>
-              <button onClick={handleDeactivate} disabled={isDeactivating} className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold shadow-md disabled:opacity-50">{isDeactivating ? "Memproses..." : "Ya, Nonaktifkan"}</button>
+              <button onClick={() => { setIsDeactivateModalOpen(false); setDeactivationNote(""); }} disabled={isDeactivating} className="flex-1 py-3 border border-gray-200 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded-xl font-bold text-secondary dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 transition-all disabled:opacity-50">{t("registrasiAset.common.batal")}</button>
+              <button onClick={handleDeactivate} disabled={isDeactivating} className="flex-1 py-3 bg-[#EF4444] text-white rounded-xl font-bold shadow-md disabled:opacity-50">{isDeactivating ? t("registrasiAset.common.memproses") : t("registrasiAset.detail.yaNonaktifkan")}</button>
            </div>
         </div>
       </Modal>

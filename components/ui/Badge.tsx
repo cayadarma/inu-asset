@@ -1,8 +1,11 @@
 import React from "react";
+import { useLanguage } from "@/context/LanguageContext";
+import { translateEnum } from "@/lib/i18n/enumTranslate";
 
 type StatusType = "Beroperasi" | "Idle" | "Pemeliharaan" | "Rusak" | "Perbaikan" | "Aktif" | "Tidak Aktif" | "Nonaktif" | "Tersedia" | "Menipis" | "Habis" | "Terjadwal" | "Berlangsung" | "Selesai" | "Terlambat";
 
 export default function Badge({ status }: { status: StatusType | string }) {
+  const { lang } = useLanguage();
   const getStyle = (status: string) => {
     switch (status) {
       case "Beroperasi":
@@ -41,7 +44,7 @@ export default function Badge({ status }: { status: StatusType | string }) {
 
   return (
     <span className={`px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors duration-300 ${getStyle(status)}`}>
-      {status}
+      {translateEnum(status, lang)}
     </span>
   );
 }

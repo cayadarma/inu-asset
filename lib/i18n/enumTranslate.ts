@@ -16,6 +16,8 @@ const enumDictionary: Record<string, { id: string; en: string }> = {
   "Pemeliharaan": { id: "Pemeliharaan", en: "Maintenance" },
   "Nonaktif": { id: "Nonaktif", en: "Inactive" },
   "Semua Status": { id: "Semua Status", en: "All Status" },
+  "Semua Tipe": { id: "Semua Tipe", en: "All Types" },
+  "Semua Lokasi": { id: "Semua Lokasi", en: "All Locations" },
 
   // Status Work Order (Pemeliharaan Korektif)
   "Selesai": { id: "Selesai", en: "Completed" },

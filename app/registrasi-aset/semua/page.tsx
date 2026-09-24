@@ -5,8 +5,12 @@ import { Search, Eye, ChevronLeft, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/context/LanguageContext";
+import { translateEnum } from "@/lib/i18n/enumTranslate";
+import { useDynamicTextMap } from "@/lib/i18n/useDynamicText";
 
 export default function SemuaAsetPage() {
+  const { t, lang } = useLanguage();
   const [assets, setAssets] = useState<any[]>([]);
   const [availableTypes, setAvailableTypes] = useState<any[]>([]);
   const [availableLocations, setAvailableLocations] = useState<any[]>([]);
@@ -57,6 +61,16 @@ export default function SemuaAsetPage() {
     return matchesSearch && matchesType && matchesStatus && matchesLocation && matchesActive;
   });
 
+  // Teks dinamis dari DB (nama aset, tipe aset, nama lokasi) diterjemahkan lewat DeepL (batch)
+  const dynamicMap = useDynamicTextMap([
+    ...filteredAssets.map((a) => a.name),
+    ...filteredAssets.map((a) => a.type),
+    ...filteredAssets.map((a) => a.locations?.name),
+    ...availableTypes.map((t2) => t2.name),
+    ...availableLocations.map((l) => l.name),
+  ]);
+  const dt = (text: string | null | undefined) => (text ? dynamicMap.get(text.trim()) ?? text : text);
+
   return (
     <div className="flex flex-col gap-6 font-poppins text-left pb-10">
       {/* Header */}
@@ -65,8 +79,8 @@ export default function SemuaAsetPage() {
           <ChevronLeft size={24} className="text-[#0F172A] dark:text-[#F8FAFC]" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Seluruh Aset</h1>
-          <p className="text-[#475569] dark:text-[#94A3B8] text-sm">Menampilkan {filteredAssets.length} aset di seluruh lokasi</p>
+          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("registrasiAset.semua.title")}</h1>
+          <p className="text-[#475569] dark:text-[#94A3B8] text-sm">{t("registrasiAset.semua.subtitle", { count: filteredAssets.length })}</p>
         </div>
       </div>
 
@@ -76,7 +90,7 @@ export default function SemuaAsetPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" size={18} />
           <input
             type="text"
-            placeholder="Cari kode/nama aset..."
+            placeholder={t("registrasiAset.common.cariPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary transition-all dark:text-white"
@@ -89,26 +103,31 @@ export default function SemuaAsetPage() {
             onChange={(e) => setFilterLocation(e.target.value)}
             className="appearance-none pl-4 pr-10 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer"
           >
-            <option value="Semua Lokasi">Semua Lokasi</option>
+            <option value="Semua Lokasi">{translateEnum("Semua Lokasi", lang)}</option>
             {availableLocations.map((loc) => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
+              <option key={loc.id} value={loc.id}>{dt(loc.name)}</option>
             ))}
           </select>
           <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
         </div>
 
         <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
-          <option>Semua Tipe</option>
-          {availableTypes.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
+          <option value="Semua Tipe">{translateEnum("Semua Tipe", lang)}</option>
+          {availableTypes.map((t2) => <option key={t2.name} value={t2.name}>{dt(t2.name)}</option>)}
         </select>
 
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
-          <option>Semua Status</option><option>Beroperasi</option><option>Idle</option><option>Pemeliharaan</option><option>Rusak</option><option>Perbaikan</option>
+          <option value="Semua Status">{translateEnum("Semua Status", lang)}</option>
+          <option value="Beroperasi">{translateEnum("Beroperasi", lang)}</option>
+          <option value="Idle">{translateEnum("Idle", lang)}</option>
+          <option value="Pemeliharaan">{translateEnum("Pemeliharaan", lang)}</option>
+          <option value="Rusak">{translateEnum("Rusak", lang)}</option>
+          <option value="Perbaikan">{translateEnum("Perbaikan", lang)}</option>
         </select>
 
         <label className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] cursor-pointer select-none">
           <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="accent-[#0D9488] w-4 h-4" />
-          Tampilkan aset nonaktif
+          {t("registrasiAset.common.tampilkanNonaktif")}
         </label>
       </div>
 
@@ -116,28 +135,28 @@ export default function SemuaAsetPage() {
       <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-gray-200 dark:border-[#334155] shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           {isLoading ? (
-            <div className="p-20 text-center text-[#94A3B8]">Memproses data...</div>
+            <div className="p-20 text-center text-[#94A3B8]">{t("registrasiAset.common.memprosesData")}</div>
           ) : filteredAssets.length === 0 ? (
-            <div className="p-20 text-center text-[#94A3B8]">Aset tidak ditemukan.</div>
+            <div className="p-20 text-center text-[#94A3B8]">{t("registrasiAset.common.asetTidakDitemukan")}</div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#F8FAFC] dark:bg-[#0F172A]/50 border-b border-gray-100 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] text-sm font-bold">
-                  <th className="px-6 py-4">Kode Aset</th>
-                  <th className="px-6 py-4">Nama Aset</th>
-                  <th className="px-6 py-4">Tipe Aset</th>
-                  <th className="px-6 py-4">Lokasi</th>
-                  <th className="px-6 py-4 text-center">Status</th>
-                  <th className="px-6 py-4 text-center">Aksi</th>
+                  <th className="px-6 py-4">{t("registrasiAset.common.kodeAset")}</th>
+                  <th className="px-6 py-4">{t("registrasiAset.common.namaAset")}</th>
+                  <th className="px-6 py-4">{t("registrasiAset.common.tipeAset")}</th>
+                  <th className="px-6 py-4">{t("registrasiAset.common.lokasi")}</th>
+                  <th className="px-6 py-4 text-center">{t("registrasiAset.common.status")}</th>
+                  <th className="px-6 py-4 text-center">{t("registrasiAset.common.aksi")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
                 {filteredAssets.map((asset) => (
                   <tr key={asset.id} className={`hover:bg-gray-50 dark:hover:bg-[#334155]/30 transition-colors ${asset.is_active === false ? "opacity-60" : ""}`}>
                     <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.id}</td>
-                    <td className="px-6 py-5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{asset.name}</td>
-                    <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{asset.type}</td>
-                    <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8] uppercase">{asset.locations?.name || "-"}</td>
+                    <td className="px-6 py-5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{dt(asset.name)}</td>
+                    <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{dt(asset.type)}</td>
+                    <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8] uppercase">{dt(asset.locations?.name) || "-"}</td>
                     <td className="px-6 py-5 text-center"><Badge status={asset.is_active === false ? "Nonaktif" : asset.status} /></td>
                     <td className="px-6 py-5 text-center">
                       <Link
