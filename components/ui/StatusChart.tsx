@@ -2,14 +2,17 @@
 
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/context/LanguageContext";
+import { translateEnum } from "@/lib/i18n/enumTranslate";
 
 interface StatusCount {
-  label: string;
+  label: string; // nilai enum asli (Bahasa Indonesia), di-translate saat render
   count: number;
   color: string;
 }
 
 export default function StatusChart() {
+  const { t, lang } = useLanguage();
   const [statuses, setStatuses] = useState<StatusCount[]>([
     { label: "Beroperasi", count: 0, color: "bg-[#10B981]" },
     { label: "Idle", count: 0, color: "bg-[#8B5CF6]" },
@@ -69,8 +72,8 @@ export default function StatusChart() {
 
   return (
     <div className="bg-white dark:bg-[#1E293B] p-6 rounded-xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col min-h-[350px] transition-all duration-300">
-      <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-1 text-base">Status Operasional Aset</h3>
-      <p className="text-[#94A3B8] text-xs mb-7">Proporsi kondisi seluruh aset saat ini</p>
+      <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-1 text-base">{t("statusChart.title")}</h3>
+      <p className="text-[#94A3B8] text-xs mb-7">{t("statusChart.subtitle")}</p>
       <div className="flex flex-1 flex-col sm:flex-row items-center justify-center gap-8">
         <div
           className="relative w-32 h-32 flex-shrink-0 rounded-full flex items-center justify-center shadow-inner"
@@ -80,7 +83,7 @@ export default function StatusChart() {
             <span className="text-xl font-black text-[#0F172A] dark:text-[#F8FAFC]">
               {isLoading ? "..." : total.toLocaleString("id-ID")}
             </span>
-            <span className="text-[10px] text-[#94A3B8] font-bold uppercase">Total</span>
+            <span className="text-[10px] text-[#94A3B8] font-bold uppercase">{t("statusChart.total")}</span>
           </div>
         </div>
         <div className="flex flex-col gap-3 w-full max-w-[200px]">
@@ -88,7 +91,7 @@ export default function StatusChart() {
             <div key={item.label} className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
-                <span className="text-sm text-[#64748B] dark:text-[#94A3B8] font-medium">{item.label}</span>
+                <span className="text-sm text-[#64748B] dark:text-[#94A3B8] font-medium">{translateEnum(item.label, lang)}</span>
               </div>
               <span className="text-sm font-black text-[#0F172A] dark:text-[#F8FAFC]">
                 {isLoading ? "..." : item.count.toLocaleString("id-ID")}

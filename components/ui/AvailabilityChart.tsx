@@ -7,6 +7,10 @@ import {
 } from "recharts";
 import { ChevronDown, MapPin, Calendar } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/context/LanguageContext";
+import { translateEnum } from "@/lib/i18n/enumTranslate";
+import { useDynamicTextMap } from "@/lib/i18n/useDynamicText";
+import { DictionaryKey } from "@/lib/i18n/dictionary";
 
 // --- BENTUK 1 TITIK DATA DI GRAFIK ---
 interface ChartPoint {
@@ -72,6 +76,7 @@ async function fetchAllPages<T>(
 }
 
 export default function AvailabilityChart() {
+  const { t, lang } = useLanguage();
   const [location, setLocation] = useState<string>(ALL_LOCATIONS); // ALL_LOCATIONS atau id lokasi
   const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
   const [period, setPeriod] = useState("Bulanan");
@@ -88,6 +93,13 @@ export default function AvailabilityChart() {
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [yearOptions, setYearOptions] = useState<number[]>([new Date().getFullYear()]);
+
+  // Nama lokasi = teks bebas dari DB -> translate lewat DeepL+cache
+  const locationNameMap = useDynamicTextMap(locationOptions.map((l) => l.name));
+
+  // Helper: key dictionary untuk label bulan (nama bulan dipakai sebagai bagian key, mis. "availChart.bulan.Januari")
+  const monthLabel = (m: string) => t(`availChart.bulan.${m}` as DictionaryKey);
+  const periodLabel = (p: string) => t(`availChart.periode.${p}` as DictionaryKey);
 
   // --- AMBIL RENTANG TAHUN YANG BENERAN ADA DATANYA DI asset_status_snapshots ---
   useEffect(() => {
@@ -134,7 +146,7 @@ export default function AvailabilityChart() {
     return end;
   };
   const formatTanggal = (d: Date) =>
-    d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+    d.toLocaleDateString(lang === "en" ? "en-US" : "id-ID", { day: "numeric", month: "long", year: "numeric" });
 
   // --- AMBIL SNAPSHOT DARI SUPABASE UNTUK RENTANG TANGGAL TERTENTU ---
   // Kalau `location` = lokasi spesifik -> tinggal filter location_id, 1 baris per tanggal.
@@ -210,7 +222,7 @@ export default function AvailabilityChart() {
       points = monthShort.map((label, idx) => {
         const datesInMonth = datesSorted.filter((ds) => new Date(ds + "T00:00:00").getMonth() === idx);
         const lastDate = datesInMonth[datesInMonth.length - 1];
-        return { name: label, ...(lastDate ? byDate.get(lastDate)! : EMPTY_POINT) };
+        return { name: t(`availChart.bulanSingkat.${label}` as DictionaryKey), ...(lastDate ? byDate.get(lastDate)! : EMPTY_POINT) };
       });
     } else if (period === "Bulanan") {
       // Titik per hari dalam bulan terpilih (tahun berjalan).
@@ -239,7 +251,7 @@ export default function AvailabilityChart() {
         const d = new Date(weekStart);
         d.setDate(d.getDate() + i);
         const dateStr = toDateStr(d);
-        return { name: dayShort[i], ...(byDate.get(dateStr) || EMPTY_POINT) };
+        return { name: t(`availChart.hariSingkat.${dayShort[i]}` as DictionaryKey), ...(byDate.get(dateStr) || EMPTY_POINT) };
       });
     } else if (period === "Harian") {
       // 1 titik: snapshot pada tanggal yang dipilih.
@@ -259,13 +271,13 @@ export default function AvailabilityChart() {
         const d = new Date(startDate);
         d.setDate(d.getDate() + i);
         const dateStr = toDateStr(d);
-        return { name: d.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit" }), ...(byDate.get(dateStr) || EMPTY_POINT) };
+        return { name: d.toLocaleDateString(lang === "en" ? "en-US" : "id-ID", { day: "2-digit", month: "2-digit" }), ...(byDate.get(dateStr) || EMPTY_POINT) };
       });
     }
 
     setChartData(points);
     setIsLoading(false);
-  }, [period, selectedYear, selectedMonth, selectedWeekDate, selectedDay, customStart, customEnd, location]);
+  }, [period, selectedYear, selectedMonth, selectedWeekDate, selectedDay, customStart, customEnd, location, lang]);
 
   useEffect(() => {
     loadChartData();
@@ -277,9 +289,9 @@ export default function AvailabilityChart() {
       {/* 1. HEADER & FILTERS */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-col gap-1">
-          <h3 className="text-[11px] font-black text-[#94A3B8] uppercase tracking-[0.2em]">Tren Ketersediaan Aset</h3>
-          <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Monitoring Status {period}</p>
-          <p className="text-[#94A3B8] text-xs">Jumlah aset per kondisi dari waktu ke waktu</p>
+          <h3 className="text-[11px] font-black text-[#94A3B8] uppercase tracking-[0.2em]">{t("availChart.trenKetersediaan")}</h3>
+          <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("availChart.monitoringStatus", { period: periodLabel(period) })}</p>
+          <p className="text-[#94A3B8] text-xs">{t("availChart.jumlahAsetKondisi")}</p>
         </div>
 
         <div className="flex flex-wrap gap-3 w-full md:w-auto items-center">
@@ -290,9 +302,9 @@ export default function AvailabilityChart() {
               onChange={(e) => setLocation(e.target.value)}
               className="w-full appearance-none pl-10 pr-10 py-2.5 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
             >
-              <option value={ALL_LOCATIONS}>Semua Lokasi</option>
+              <option value={ALL_LOCATIONS}>{t("availChart.semuaLokasi")}</option>
               {locationOptions.map((loc) => (
-                <option key={loc.id} value={loc.id}>{loc.name}</option>
+                <option key={loc.id} value={loc.id}>{locationNameMap.get(loc.name.trim()) || loc.name}</option>
               ))}
             </select>
             <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
@@ -306,11 +318,11 @@ export default function AvailabilityChart() {
               onChange={(e) => setPeriod(e.target.value)}
               className="w-full appearance-none pl-10 pr-10 py-2.5 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
             >
-              <option>Harian</option>
-              <option>Mingguan</option>
-              <option>Bulanan</option>
-              <option>Tahunan</option>
-              <option>Custom</option>
+              <option value="Harian">{periodLabel("Harian")}</option>
+              <option value="Mingguan">{periodLabel("Mingguan")}</option>
+              <option value="Bulanan">{periodLabel("Bulanan")}</option>
+              <option value="Tahunan">{periodLabel("Tahunan")}</option>
+              <option value="Custom">{periodLabel("Custom")}</option>
             </select>
             <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
@@ -340,7 +352,7 @@ export default function AvailabilityChart() {
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 className="w-full appearance-none pl-4 pr-9 py-2.5 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
               >
-                {monthOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+                {monthOptions.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
             </div>
@@ -377,7 +389,7 @@ export default function AvailabilityChart() {
                 onChange={(e) => setCustomStart(e.target.value)}
                 className="py-2.5 px-4 bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-xs font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary"
               />
-              <span className="text-[#94A3B8] text-xs font-bold">s/d</span>
+              <span className="text-[#94A3B8] text-xs font-bold">{t("availChart.sd")}</span>
               <input
                 type="date"
                 value={customEnd}
@@ -393,18 +405,18 @@ export default function AvailabilityChart() {
 
       {/* KETERANGAN RENTANG YANG SEDANG DIPILIH */}
       <div className="text-xs font-bold text-[#0D9488] -mt-4">
-        {period === "Tahunan" && `Menampilkan tahun ${selectedYear}`}
-        {period === "Bulanan" && `Menampilkan bulan ${selectedMonth} ${new Date().getFullYear()}`}
-        {period === "Mingguan" && `Menampilkan minggu ${formatTanggal(getWeekStart(selectedWeekDate))} — ${formatTanggal(getWeekEnd(selectedWeekDate))}`}
-        {period === "Harian" && `Menampilkan tanggal ${formatTanggal(new Date(selectedDay + "T00:00:00"))}`}
-        {period === "Custom" && `Menampilkan ${formatTanggal(new Date(customStart + "T00:00:00"))} s/d ${formatTanggal(new Date(customEnd + "T00:00:00"))}`}
+        {period === "Tahunan" && t("availChart.menampilkanTahun", { year: selectedYear })}
+        {period === "Bulanan" && t("availChart.menampilkanBulan", { month: monthLabel(selectedMonth), year: new Date().getFullYear() })}
+        {period === "Mingguan" && t("availChart.menampilkanMinggu", { start: formatTanggal(getWeekStart(selectedWeekDate)), end: formatTanggal(getWeekEnd(selectedWeekDate)) })}
+        {period === "Harian" && t("availChart.menampilkanTanggal", { date: formatTanggal(new Date(selectedDay + "T00:00:00")) })}
+        {period === "Custom" && t("availChart.menampilkanRentang", { start: formatTanggal(new Date(customStart + "T00:00:00")), end: formatTanggal(new Date(customEnd + "T00:00:00")) })}
       </div>
 
       {/* 2. AREA GRAFIK -- DATA ASLI DARI asset_status_snapshots */}
       <div className="h-[320px] w-full -ml-4 relative">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-[#94A3B8]">
-            Memuat data...
+            {t("availChart.memuatData")}
           </div>
         )}
         <ResponsiveContainer width="100%" height="100%">
@@ -457,11 +469,11 @@ export default function AvailabilityChart() {
 
       {/* 3. LEGENDA KUSTOM DI BAWAH */}
       <div className="flex flex-wrap justify-center gap-x-8 gap-y-2 pt-4 border-t dark:border-[#334155]">
-        <CustomLegend color="#10B981" label="Beroperasi" />
-        <CustomLegend color="#8B5CF6" label="Idle" />
-        <CustomLegend color="#F59E0B" label="Pemeliharaan" />
-        <CustomLegend color="#F97316" label="Perbaikan" />
-        <CustomLegend color="#EF4444" label="Rusak" />
+        <CustomLegend color="#10B981" label={translateEnum("Beroperasi", lang)} />
+        <CustomLegend color="#8B5CF6" label={translateEnum("Idle", lang)} />
+        <CustomLegend color="#F59E0B" label={translateEnum("Pemeliharaan", lang)} />
+        <CustomLegend color="#F97316" label={translateEnum("Perbaikan", lang)} />
+        <CustomLegend color="#EF4444" label={translateEnum("Rusak", lang)} />
       </div>
 
     </div>

@@ -10,16 +10,22 @@ import RecentActivity from "../components/ui/RecentActivity";
 // 1. Perbaikan Import Ikon
 import { Box, Banknote, ShieldCheck, PlayCircle, Wrench, AlertCircle, ClipboardCheck, Package, Boxes, Wallet } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+import { Lang } from "@/lib/i18n/dictionary";
 
-const formatRupiahShort = (n: number) =>
-  n >= 1_000_000_000
-    ? `Rp ${(n / 1_000_000_000).toFixed(1)} M`
+// Format Rupiah singkat. Simbol "Rp" tetap sama di kedua bahasa (mata uangnya tetap IDR),
+// tapi singkatan "Jt"/"M" (Bahasa Indonesia) diganti "M"/"B" (English) saat lang = en.
+const formatRupiahShort = (n: number, lang: Lang) => {
+  const bLabel = lang === "en" ? "B" : "M"; // Miliar
+  const mLabel = lang === "en" ? "M" : "Jt"; // Juta
+  return n >= 1_000_000_000
+    ? `Rp ${(n / 1_000_000_000).toFixed(1)} ${bLabel}`
     : n >= 1_000_000
-    ? `Rp ${(n / 1_000_000).toFixed(1)} Jt`
-    : `Rp ${n.toLocaleString("id-ID")}`;
+    ? `Rp ${(n / 1_000_000).toFixed(1)} ${mLabel}`
+    : `Rp ${n.toLocaleString(lang === "en" ? "en-US" : "id-ID")}`;
+};
 
 export default function Home() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   // 2. Perbaikan State (Menambahkan active, maintenance, dan broken)
   const [counts, setCounts] = useState({
     total: 0,
@@ -29,7 +35,7 @@ export default function Home() {
     idle: 0,
     maintenance: 0,
     broken: 0,
-    cost: "Rp 0",
+    totalBiaya: 0,
     availability: "0%",
     addedThisYear: 0,
     addedThisMonth: 0,
@@ -150,12 +156,6 @@ export default function Home() {
         .reduce((sum, a) => sum + (a.purchase_cost || 0), 0);
 
       const totalBiaya = totalPerbaikanBulanIni + totalStokBulanIni + totalPemeliharaanBulanIni + totalAsetBulanIni;
-      const formattedCost =
-        totalBiaya >= 1_000_000_000
-          ? `Rp ${(totalBiaya / 1_000_000_000).toFixed(1)} M`
-          : totalBiaya >= 1_000_000
-          ? `Rp ${(totalBiaya / 1_000_000).toFixed(1)} Jt`
-          : `Rp ${totalBiaya.toLocaleString("id-ID")}`;
 
       // --- ANGGARAN PERUSAHAAN BULAN INI ---
       const { data: budgetRow } = await supabase
@@ -169,7 +169,7 @@ export default function Home() {
 
       setCounts((prev) => ({
         ...prev,
-        cost: formattedCost,
+        totalBiaya,
         budgetAmount,
         budgetUsedPct,
         biayaPemeliharaan: totalPemeliharaanBulanIni,
@@ -252,60 +252,60 @@ export default function Home() {
       {/* RINGKASAN ASET */}
       <div className="flex flex-col gap-4">
         <div>
-          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">Ringkasan Aset</h3>
-          <p className="text-[#94A3B8] text-xs mt-1">Kondisi & ketersediaan aset saat ini</p>
+          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">{t("dashboard.ringkasanAset")}</h3>
+          <p className="text-[#94A3B8] text-xs mt-1">{t("dashboard.ringkasanAsetDesc")}</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <StatCard
-            title="Total Seluruh Aset"
+            title={t("dashboard.totalSeluruhAset")}
             value={counts.totalAset.toLocaleString()}
-            description={`Unit aset yang terdaftar di sistem (per ${new Date().getFullYear()})`}
+            description={t("dashboard.totalSeluruhAsetDesc", { year: new Date().getFullYear() })}
             icon={<Box size={20} />}
             href="/registrasi-aset/semua"
             extra={
               <div className="flex flex-col gap-0.5 text-[11px] font-bold">
-                <span className="text-[#0D9488]">+{counts.addedThisYear} aset baru tahun ini</span>
-                <span className="text-[#94A3B8]">+{counts.addedThisMonth} aset baru bulan ini</span>
+                <span className="text-[#0D9488]">{t("dashboard.newAssetsYear", { count: counts.addedThisYear })}</span>
+                <span className="text-[#94A3B8]">{t("dashboard.newAssetsMonth", { count: counts.addedThisMonth })}</span>
                 {counts.nonaktif > 0 && (
-                  <span className="text-[#94A3B8]">(termasuk {counts.nonaktif} nonaktif)</span>
+                  <span className="text-[#94A3B8]">{t("dashboard.includingInactive", { count: counts.nonaktif })}</span>
                 )}
               </div>
             }
           />
           <StatCard
-            title="Asset Availability"
+            title={t("dashboard.assetAvailability")}
             value={counts.availability}
-            description="Persentase aset yang siap dipakai saat ini"
+            description={t("dashboard.assetAvailabilityDesc")}
             icon={<ShieldCheck size={20} />}
           />
           <StatCard
-            title="Realisasi Program Kerja"
+            title={t("dashboard.realisasiProgramKerja")}
             value={`${counts.realisasiPct}%`}
-            description="Agenda pemeliharaan pencegahan bulan ini"
+            description={t("dashboard.realisasiProgramKerjaDesc")}
             icon={<ClipboardCheck size={20} />}
             href="/pemeliharaan"
             extra={
               <span className="text-[11px] font-bold text-[#94A3B8]">
-                {counts.realisasiSelesai} dari {counts.realisasiTotal} agenda selesai
+                {t("dashboard.agendaSelesai", { selesai: counts.realisasiSelesai, total: counts.realisasiTotal })}
               </span>
             }
           />
           <StatCard
-            title="Unit Beroperasi"
+            title={t("dashboard.unitBeroperasi")}
             value={counts.active}
-            description="Sedang dipakai & bekerja normal"
+            description={t("dashboard.unitBeroperasiDesc")}
             icon={<PlayCircle size={20} className="text-emerald-500" />}
           />
           <StatCard
-            title="Unit Pemeliharaan"
+            title={t("dashboard.unitPemeliharaan")}
             value={counts.maintenance}
-            description="Sedang dicek/dirawat rutin terjadwal"
+            description={t("dashboard.unitPemeliharaanDesc")}
             icon={<Wrench size={20} className="text-amber-500" />}
           />
           <StatCard
-            title="Unit Rusak / Perbaikan"
+            title={t("dashboard.unitRusakPerbaikan")}
             value={counts.broken}
-            description="Rusak menunggu diperbaiki atau sedang ditangani"
+            description={t("dashboard.unitRusakPerbaikanDesc")}
             icon={<AlertCircle size={20} className="text-red-500" />}
           />
         </div>
@@ -319,58 +319,58 @@ export default function Home() {
       {/* RINGKASAN KEUANGAN/MANAJEMEN */}
       <div className="flex flex-col gap-4">
         <div>
-          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">Ringkasan Keuangan/Manajemen</h3>
-          <p className="text-[#94A3B8] text-xs mt-1">Anggaran & realisasi biaya bulan berjalan</p>
+          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">{t("dashboard.ringkasanKeuangan")}</h3>
+          <p className="text-[#94A3B8] text-xs mt-1">{t("dashboard.ringkasanKeuanganDesc")}</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <StatCard
-            title="Anggaran Bulan Ini"
-            value={counts.budgetAmount > 0 ? formatRupiahShort(counts.budgetAmount) : "Belum diatur"}
-            description="Anggaran biaya yang ditetapkan untuk bulan ini"
+            title={t("dashboard.anggaranBulanIni")}
+            value={counts.budgetAmount > 0 ? formatRupiahShort(counts.budgetAmount, lang) : t("dashboard.belumDiatur")}
+            description={t("dashboard.anggaranBulanIniDesc")}
             icon={<Wallet size={20} />}
             href="/anggaran"
           />
           <StatCard
-            title="Serapan Biaya Bulan Ini"
-            value={counts.cost}
-            description="Total pengeluaran bulan ini (semua kategori biaya)"
+            title={t("dashboard.serapanBiayaBulanIni")}
+            value={formatRupiahShort(counts.totalBiaya, lang)}
+            description={t("dashboard.serapanBiayaBulanIniDesc")}
             icon={<Banknote size={20} />}
             href="/analisis-biaya"
             extra={
               counts.budgetAmount > 0 ? (
                 <span className={`text-[11px] font-bold ${counts.budgetUsedPct >= 100 ? "text-[#EF4444]" : counts.budgetUsedPct >= 80 ? "text-[#F59E0B]" : "text-[#0D9488]"}`}>
-                  {counts.budgetUsedPct}% anggaran terpakai
+                  {t("dashboard.anggaranTerpakai", { pct: counts.budgetUsedPct })}
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-[#94A3B8] italic">Anggaran bulan ini belum diatur</span>
+                <span className="text-[11px] font-bold text-[#94A3B8] italic">{t("dashboard.anggaranBelumDiatur")}</span>
               )
             }
           />
           <StatCard
-            title="Biaya Pemeliharaan"
-            value={formatRupiahShort(counts.biayaPemeliharaan)}
-            description="Biaya pemeliharaan checklist bulan ini"
+            title={t("dashboard.biayaPemeliharaan")}
+            value={formatRupiahShort(counts.biayaPemeliharaan, lang)}
+            description={t("dashboard.biayaPemeliharaanDesc")}
             icon={<ClipboardCheck size={20} />}
             href="/analisis-biaya"
           />
           <StatCard
-            title="Biaya Perbaikan"
-            value={formatRupiahShort(counts.biayaPerbaikan)}
-            description="Biaya Work Order korektif bulan ini"
+            title={t("dashboard.biayaPerbaikan")}
+            value={formatRupiahShort(counts.biayaPerbaikan, lang)}
+            description={t("dashboard.biayaPerbaikanDesc")}
             icon={<Wrench size={20} />}
             href="/analisis-biaya"
           />
           <StatCard
-            title="Biaya Pembelian Stok"
-            value={formatRupiahShort(counts.biayaStok)}
-            description="Biaya pembelian stok/sparepart bulan ini"
+            title={t("dashboard.biayaPembelianStok")}
+            value={formatRupiahShort(counts.biayaStok, lang)}
+            description={t("dashboard.biayaPembelianStokDesc")}
             icon={<Package size={20} />}
             href="/analisis-biaya"
           />
           <StatCard
-            title="Biaya Pembelian Aset"
-            value={formatRupiahShort(counts.biayaAset)}
-            description="Biaya pembelian aset baru bulan ini"
+            title={t("dashboard.biayaPembelianAset")}
+            value={formatRupiahShort(counts.biayaAset, lang)}
+            description={t("dashboard.biayaPembelianAsetDesc")}
             icon={<Boxes size={20} />}
             href="/analisis-biaya"
           />

@@ -1,12 +1,14 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/context/LanguageContext";
 
 // Pemetaan status work_orders -> kategori ringkasan:
 // - Terjadwal  = status "Dalam Proses" DAN belum ada riwayat update (baru terbit, belum disentuh)
 // - Berlangsung = status "Dalam Proses" yang sudah ada update, ATAU "Menunggu Part"
 // - Selesai    = status "Selesai"
 export default function MaintenanceSummary() {
+  const { t } = useLanguage();
   const [counts, setCounts] = useState({ terjadwal: 0, berlangsung: 0, selesai: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -55,16 +57,16 @@ export default function MaintenanceSummary() {
   }, []);
 
   const data = [
-    { label: "TERJADWAL", count: counts.terjadwal, color: "text-[#0D9488]", bg: "bg-[#D1FAE5]/30" },
-    { label: "BERLANGSUNG", count: counts.berlangsung, color: "text-[#F59E0B]", bg: "bg-[#FEF3C7]/30" },
-    { label: "SELESAI", count: counts.selesai, color: "text-[#10B981]", bg: "bg-green-50/30" },
+    { label: t("maintSummary.terjadwal"), count: counts.terjadwal, color: "text-[#0D9488]", bg: "bg-[#D1FAE5]/30" },
+    { label: t("maintSummary.berlangsung"), count: counts.berlangsung, color: "text-[#F59E0B]", bg: "bg-[#FEF3C7]/30" },
+    { label: t("maintSummary.selesai"), count: counts.selesai, color: "text-[#10B981]", bg: "bg-green-50/30" },
   ];
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-white dark:bg-[#1E293B] rounded-[32px] border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-3 md:gap-4 lg:gap-6">
       <div>
-        <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base md:text-lg lg:text-lg">Daftar Work Order</h3>
-        <p className="text-[#94A3B8] text-xs mt-1">Pekerjaan perbaikan aset yang sedang berjalan & sudah selesai</p>
+        <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base md:text-lg lg:text-lg">{t("maintSummary.title")}</h3>
+        <p className="text-[#94A3B8] text-xs mt-1">{t("maintSummary.subtitle")}</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 lg:gap-4">
         {data.map((item) => (
