@@ -13,13 +13,15 @@ import { useDynamicTextMap } from "@/lib/i18n/useDynamicText";
 import { DictionaryKey } from "@/lib/i18n/dictionary";
 
 // --- BENTUK 1 TITIK DATA DI GRAFIK ---
+// Nilai `null` = "belum ada data sama sekali" (mis. tanggal di masa depan, atau sebelum
+// snapshot pertama ada) -> garis putus, BUKAN jatuh ke 0.
 interface ChartPoint {
   name: string;
-  beroperasi: number;
-  idle: number;
-  pemeliharaan: number;
-  perbaikan: number;
-  rusak: number;
+  beroperasi: number | null;
+  idle: number | null;
+  pemeliharaan: number | null;
+  perbaikan: number | null;
+  rusak: number | null;
 }
 
 // --- BENTUK 1 BARIS ASLI DARI TABEL asset_status_snapshots ---
@@ -40,6 +42,10 @@ interface LocationOption {
 
 const ALL_LOCATIONS = "Semua Lokasi";
 const EMPTY_POINT = { beroperasi: 0, idle: 0, pemeliharaan: 0, perbaikan: 0, rusak: 0 };
+type StatusCounts = typeof EMPTY_POINT;
+const NULL_POINT: { [K in keyof StatusCounts]: number | null } = {
+  beroperasi: null, idle: null, pemeliharaan: null, perbaikan: null, rusak: null,
+};
 
 const monthOptions = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -204,6 +210,26 @@ export default function AvailabilityChart() {
     return result;
   };
 
+  // --- AMBIL SNAPSHOT TERAKHIR SEBELUM SEBUAH TANGGAL (BAHAN "CARRY-FORWARD") ---
+  // Snapshot hanya tercatat kalau Dashboard dibuka. Untuk hari yang tidak ada snapshot-nya,
+  // grafik memakai kondisi terakhir yang diketahui (bukan 0). Fungsi ini mencari nilai awal
+  // tersebut dari sebelum rentang yang ditampilkan, supaya hari pertama pun tidak jatuh ke 0.
+  const fetchSeed = async (beforeDate: string): Promise<StatusCounts | null> => {
+    let query = supabase
+      .from("asset_status_snapshots")
+      .select("snapshot_date")
+      .lt("snapshot_date", beforeDate)
+      .order("snapshot_date", { ascending: false })
+      .limit(1);
+    if (location !== ALL_LOCATIONS) query = query.eq("location_id", location);
+
+    const { data } = await query.maybeSingle();
+    if (!data?.snapshot_date) return null;
+
+    const byDate = await fetchSnapshots(data.snapshot_date, data.snapshot_date);
+    return byDate.get(data.snapshot_date) ?? null;
+  };
+
   // --- SUSUN DATA GRAFIK SESUAI JENIS PERIODE YANG DIPILIH ---
   const loadChartData = useCallback(async () => {
     setIsLoading(true);
@@ -212,20 +238,28 @@ export default function AvailabilityChart() {
     let points: ChartPoint[] = [];
 
     if (period === "Tahunan") {
-      // 12 titik (per bulan). Nilai tiap bulan diambil dari snapshot TERAKHIR
-      // yang ada di bulan itu (mencerminkan kondisi di akhir bulan tsb).
+      // 12 titik (per bulan). Nilai tiap bulan diambil dari snapshot TERAKHIR yang ada di
+      // bulan itu. Bulan tanpa snapshot memakai nilai bulan sebelumnya; bulan yang belum
+      // terjadi dibiarkan kosong (null).
       const yearStart = `${selectedYear}-01-01`;
       const yearEnd = selectedYear === todayDate.getFullYear() ? todayCapped : `${selectedYear}-12-31`;
-      const byDate = await fetchSnapshots(yearStart, yearEnd);
+      const [byDate, seed] = await Promise.all([fetchSnapshots(yearStart, yearEnd), fetchSeed(yearStart)]);
       const datesSorted = Array.from(byDate.keys()).sort();
+      const isCurrentYear = selectedYear === todayDate.getFullYear();
 
+      let carry: StatusCounts | null = seed;
       points = monthShort.map((label, idx) => {
+        const name = t(`availChart.bulanSingkat.${label}` as DictionaryKey);
+        if (isCurrentYear && idx > todayDate.getMonth()) return { name, ...NULL_POINT };
+
         const datesInMonth = datesSorted.filter((ds) => new Date(ds + "T00:00:00").getMonth() === idx);
         const lastDate = datesInMonth[datesInMonth.length - 1];
-        return { name: t(`availChart.bulanSingkat.${label}` as DictionaryKey), ...(lastDate ? byDate.get(lastDate)! : EMPTY_POINT) };
+        if (lastDate) carry = byDate.get(lastDate)!;
+        return { name, ...(carry ?? NULL_POINT) };
       });
     } else if (period === "Bulanan") {
       // Titik per hari dalam bulan terpilih (tahun berjalan).
+      // Hari tanpa snapshot -> pakai kondisi terakhir yang diketahui (carry-forward).
       const monthIndex = monthOptions.indexOf(selectedMonth);
       const year = todayDate.getFullYear();
       const lastDayOfMonth = new Date(year, monthIndex + 1, 0).getDate();
@@ -234,44 +268,69 @@ export default function AvailabilityChart() {
 
       const monthStart = `${year}-${String(monthIndex + 1).padStart(2, "0")}-01`;
       const monthEnd = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
-      const byDate = await fetchSnapshots(monthStart, isCurrentMonth ? todayCapped : monthEnd);
+      const [byDate, seed] = await Promise.all([
+        fetchSnapshots(monthStart, isCurrentMonth ? todayCapped : monthEnd),
+        fetchSeed(monthStart),
+      ]);
 
+      let carry: StatusCounts | null = seed;
       points = Array.from({ length: daysToShow }, (_, i) => {
         const day = i + 1;
         const dateStr = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        return { name: String(day), ...(byDate.get(dateStr) || EMPTY_POINT) };
+        const snap = byDate.get(dateStr);
+        if (snap) carry = snap;
+        return { name: String(day), ...(carry ?? NULL_POINT) };
       });
     } else if (period === "Mingguan") {
       // 7 titik, per hari dalam minggu terpilih (Minggu - Sabtu).
+      // Hari yang belum terjadi -> kosong (null); hari tanpa snapshot -> carry-forward.
       const weekStart = getWeekStart(selectedWeekDate);
       const weekEnd = getWeekEnd(selectedWeekDate);
-      const byDate = await fetchSnapshots(toDateStr(weekStart), toDateStr(weekEnd) > todayCapped ? todayCapped : toDateStr(weekEnd));
+      const [byDate, seed] = await Promise.all([
+        fetchSnapshots(toDateStr(weekStart), toDateStr(weekEnd) > todayCapped ? todayCapped : toDateStr(weekEnd)),
+        fetchSeed(toDateStr(weekStart)),
+      ]);
 
+      let carry: StatusCounts | null = seed;
       points = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(weekStart);
         d.setDate(d.getDate() + i);
         const dateStr = toDateStr(d);
-        return { name: t(`availChart.hariSingkat.${dayShort[i]}` as DictionaryKey), ...(byDate.get(dateStr) || EMPTY_POINT) };
+        const name = t(`availChart.hariSingkat.${dayShort[i]}` as DictionaryKey);
+        if (dateStr > todayCapped) return { name, ...NULL_POINT };
+
+        const snap = byDate.get(dateStr);
+        if (snap) carry = snap;
+        return { name, ...(carry ?? NULL_POINT) };
       });
     } else if (period === "Harian") {
-      // 1 titik: snapshot pada tanggal yang dipilih.
-      const byDate = await fetchSnapshots(selectedDay, selectedDay);
-      points = [{ name: formatTanggal(new Date(selectedDay + "T00:00:00")), ...(byDate.get(selectedDay) || EMPTY_POINT) }];
+      // 1 titik: snapshot pada tanggal yang dipilih; kalau tidak ada, pakai yang terakhir sebelumnya.
+      const [byDate, seed] = await Promise.all([fetchSnapshots(selectedDay, selectedDay), fetchSeed(selectedDay)]);
+      points = [{
+        name: formatTanggal(new Date(selectedDay + "T00:00:00")),
+        ...(byDate.get(selectedDay) ?? seed ?? NULL_POINT),
+      }];
     } else if (period === "Custom") {
-      // Titik per hari dalam rentang tanggal custom.
+      // Titik per hari dalam rentang tanggal custom (carry-forward untuk hari tanpa snapshot).
       const start = customStart;
       const end = customEnd > todayCapped ? todayCapped : customEnd;
-      const byDate = await fetchSnapshots(start, end);
+      const [byDate, seed] = await Promise.all([fetchSnapshots(start, end), fetchSeed(start)]);
 
       const startDate = new Date(start + "T00:00:00");
       const endDate = new Date(end + "T00:00:00");
       const dayCount = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1);
 
+      let carry: StatusCounts | null = seed;
       points = Array.from({ length: dayCount }, (_, i) => {
         const d = new Date(startDate);
         d.setDate(d.getDate() + i);
         const dateStr = toDateStr(d);
-        return { name: d.toLocaleDateString(lang === "en" ? "en-US" : "id-ID", { day: "2-digit", month: "2-digit" }), ...(byDate.get(dateStr) || EMPTY_POINT) };
+        const snap = byDate.get(dateStr);
+        if (snap) carry = snap;
+        return {
+          name: d.toLocaleDateString(lang === "en" ? "en-US" : "id-ID", { day: "2-digit", month: "2-digit" }),
+          ...(carry ?? NULL_POINT),
+        };
       });
     }
 
