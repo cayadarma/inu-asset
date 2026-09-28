@@ -3,30 +3,16 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import StatCard from "../components/ui/StatCard";
-import AvailabilityChart from "../components/ui/AvailabilityChart";
+import AvailabilitySummaryCard from "../components/ui/AvailabilitySummaryCard";
+import BudgetSummaryCards from "../components/ui/BudgetSummaryCards";
 import StatusChart from "../components/ui/StatusChart";
 import MaintenanceSummary from "../components/ui/MaintenanceSummary"; 
 import RecentActivity from "../components/ui/RecentActivity"; 
-// 1. Perbaikan Import Ikon
-import { Box, Banknote, ShieldCheck, PlayCircle, Wrench, AlertCircle, ClipboardCheck, Package, Boxes, Wallet } from "lucide-react";
+import { Box, ClipboardCheck } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
-import { Lang } from "@/lib/i18n/dictionary";
-
-// Format Rupiah singkat. Simbol "Rp" tetap sama di kedua bahasa (mata uangnya tetap IDR),
-// tapi singkatan "Jt"/"M" (Bahasa Indonesia) diganti "M"/"B" (English) saat lang = en.
-const formatRupiahShort = (n: number, lang: Lang) => {
-  const bLabel = lang === "en" ? "B" : "M"; // Miliar
-  const mLabel = lang === "en" ? "M" : "Jt"; // Juta
-  return n >= 1_000_000_000
-    ? `Rp ${(n / 1_000_000_000).toFixed(1)} ${bLabel}`
-    : n >= 1_000_000
-    ? `Rp ${(n / 1_000_000).toFixed(1)} ${mLabel}`
-    : `Rp ${n.toLocaleString(lang === "en" ? "en-US" : "id-ID")}`;
-};
 
 export default function Home() {
-  const { t, lang } = useLanguage();
-  // 2. Perbaikan State (Menambahkan active, maintenance, dan broken)
+  const { t } = useLanguage();
   const [counts, setCounts] = useState({
     total: 0,
     totalAset: 0,
@@ -35,19 +21,12 @@ export default function Home() {
     idle: 0,
     maintenance: 0,
     broken: 0,
-    totalBiaya: 0,
-    availability: "0%",
+    availabilityPct: 0,
     addedThisYear: 0,
     addedThisMonth: 0,
-    budgetAmount: 0,
-    budgetUsedPct: 0,
     realisasiPct: 0,
     realisasiSelesai: 0,
     realisasiTotal: 0,
-    biayaPemeliharaan: 0,
-    biayaPerbaikan: 0,
-    biayaStok: 0,
-    biayaAset: 0,
   });
 
   useEffect(() => {
@@ -103,104 +82,18 @@ export default function Home() {
         idle,
         maintenance,
         broken: rusak + perbaikan,
-        availability: `${availabilityPct.toFixed(1)}%`,
+        availabilityPct,
         addedThisYear,
         addedThisMonth,
       }));
 
-      // --- SERAPAN BIAYA BULAN INI: GABUNGAN 4 KATEGORI (PEMELIHARAAN, PERBAIKAN, PEMBELIAN STOK, PEMBELIAN ASET) ---
-      const nowForCost = new Date();
-      const costYear = nowForCost.getFullYear();
-      const costMonth = nowForCost.getMonth(); // 0-11
-      const isThisMonth = (dateStr: string | null) => {
-        if (!dateStr) return false;
-        const d = new Date(dateStr);
-        return d.getFullYear() === costYear && d.getMonth() === costMonth;
-      };
-
-      // 1. Biaya Perbaikan (Work Order, dated by completed_at/created_at)
-      const { data: workOrders } = await supabase
-        .from("work_orders")
-        .select("actual_cost, completed_at, created_at")
-        .gt("actual_cost", 0);
-      const totalPerbaikanBulanIni = (workOrders || [])
-        .filter((wo) => isThisMonth(wo.completed_at || wo.created_at))
-        .reduce((sum, wo) => sum + (wo.actual_cost || 0), 0);
-
-      // 2. Biaya Pembelian Stok (dated by reference/created_at)
-      const { data: movements } = await supabase
-        .from("stock_movements")
-        .select("qty, unit_price, reference, created_at")
-        .eq("type", "Masuk")
-        .not("unit_price", "is", null);
-      const totalStokBulanIni = (movements || [])
-        .filter((m) => isThisMonth(m.reference || m.created_at))
-        .reduce((sum, m) => sum + (m.unit_price || 0) * (m.qty || 0), 0);
-
-      // 3. Biaya Pemeliharaan (item checklist yang ada harganya, dated dari jadwal pemeliharaannya)
-      const { data: checklistCosts } = await supabase
-        .from("maintenance_checklist_items")
-        .select("harga, maintenance_schedules(scheduled_date, completed_at)")
-        .gt("harga", 0);
-      const totalPemeliharaanBulanIni = (checklistCosts || [])
-        .filter((c: any) => isThisMonth(c.maintenance_schedules?.completed_at || c.maintenance_schedules?.scheduled_date))
-        .reduce((sum: number, c: any) => sum + (c.harga || 0), 0);
-
-      // 4. Biaya Pembelian Aset (dated by purchase_date)
-      const { data: assetsWithCost } = await supabase
-        .from("assets")
-        .select("purchase_cost, purchase_date")
-        .gt("purchase_cost", 0);
-      const totalAsetBulanIni = (assetsWithCost || [])
-        .filter((a) => isThisMonth(a.purchase_date))
-        .reduce((sum, a) => sum + (a.purchase_cost || 0), 0);
-
-      const totalBiaya = totalPerbaikanBulanIni + totalStokBulanIni + totalPemeliharaanBulanIni + totalAsetBulanIni;
-
-      // --- ANGGARAN PERUSAHAAN BULAN INI ---
-      const { data: budgetRow } = await supabase
-        .from("company_budgets")
-        .select("amount")
-        .eq("year", costYear)
-        .eq("month", costMonth + 1)
-        .maybeSingle();
-      const budgetAmount = budgetRow?.amount || 0;
-      const budgetUsedPct = budgetAmount > 0 ? Math.round((totalBiaya / budgetAmount) * 100) : 0;
-
-      setCounts((prev) => ({
-        ...prev,
-        totalBiaya,
-        budgetAmount,
-        budgetUsedPct,
-        biayaPemeliharaan: totalPemeliharaanBulanIni,
-        biayaPerbaikan: totalPerbaikanBulanIni,
-        biayaStok: totalStokBulanIni,
-        biayaAset: totalAsetBulanIni,
-      }));
-
-      // --- REALISASI PROGRAM KERJA (PREVENTIVE MAINTENANCE) BULAN INI ---
-      // Hanya dari agenda pemeliharaan pencegahan (BUKAN Work Order korektif/perbaikan).
-      const monthStart = `${costYear}-${String(costMonth + 1).padStart(2, "0")}-01`;
-      const monthEndDate = new Date(costYear, costMonth + 1, 0); // hari terakhir bulan ini
-      const monthEnd = monthEndDate.toISOString().slice(0, 10);
-
-      const { data: agendaBulanIni } = await supabase
-        .from("maintenance_schedules")
-        .select("status")
-        .gte("scheduled_date", monthStart)
-        .lte("scheduled_date", monthEnd);
-
-      const realisasiTotal = (agendaBulanIni || []).length;
-      const realisasiSelesai = (agendaBulanIni || []).filter((a) => a.status === "Selesai").length;
-      const realisasiPct = realisasiTotal > 0 ? Math.round((realisasiSelesai / realisasiTotal) * 100) : 0;
-
-      setCounts((prev) => ({ ...prev, realisasiPct, realisasiSelesai, realisasiTotal }));
-
-      // --- CATAT "POTRET" STATUS ASET HARI INI UNTUK GRAFIK TREN, PER LOKASI ---
+      // --- CATAT "POTRET" STATUS ASET HARI INI UNTUK GRAFIK TREN (HALAMAN LAPORAN), PER LOKASI ---
       // Di-upsert (insert atau update jika sudah ada) berdasarkan (snapshot_date, location_id),
       // supaya selalu mencerminkan kondisi terbaru pada hari berjalan, per lokasi.
       // "Semua Lokasi" tidak disimpan sebagai baris sendiri -- dijumlahkan on-the-fly
       // dari baris-baris per lokasi ini saat ditampilkan di grafik.
+      // NB: blok ini sekarang dijalankan LEBIH DULU (sebelum query realisasi program kerja),
+      // supaya snapshot tetap tercatat walau query lain di bawah gagal.
       const today = new Date().toISOString().slice(0, 10); // format YYYY-MM-DD
       const byLocation = new Map<
         string | null,
@@ -237,6 +130,24 @@ export default function Home() {
           { onConflict: "snapshot_date,location_id" }
         );
       }
+
+      // --- REALISASI PROGRAM KERJA (PREVENTIVE MAINTENANCE) BULAN INI ---
+      // Hanya dari agenda pemeliharaan pencegahan (BUKAN Work Order korektif/perbaikan).
+      const monthStart = `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}-01`;
+      const monthEndDate = new Date(thisYear, thisMonth + 1, 0); // hari terakhir bulan ini
+      const monthEnd = monthEndDate.toISOString().slice(0, 10);
+
+      const { data: agendaBulanIni } = await supabase
+        .from("maintenance_schedules")
+        .select("status")
+        .gte("scheduled_date", monthStart)
+        .lte("scheduled_date", monthEnd);
+
+      const realisasiTotal = (agendaBulanIni || []).length;
+      const realisasiSelesai = (agendaBulanIni || []).filter((a) => a.status === "Selesai").length;
+      const realisasiPct = realisasiTotal > 0 ? Math.round((realisasiSelesai / realisasiTotal) * 100) : 0;
+
+      setCounts((prev) => ({ ...prev, realisasiPct, realisasiSelesai, realisasiTotal }));
     }
     getStats();
   }, []);
@@ -255,59 +166,50 @@ export default function Home() {
           <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">{t("dashboard.ringkasanAset")}</h3>
           <p className="text-[#94A3B8] text-xs mt-1">{t("dashboard.ringkasanAsetDesc")}</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          <StatCard
-            title={t("dashboard.totalSeluruhAset")}
-            value={counts.totalAset.toLocaleString()}
-            description={t("dashboard.totalSeluruhAsetDesc", { year: new Date().getFullYear() })}
-            icon={<Box size={20} />}
-            href="/registrasi-aset/semua"
-            extra={
-              <div className="flex flex-col gap-0.5 text-[11px] font-bold">
-                <span className="text-[#0D9488]">{t("dashboard.newAssetsYear", { count: counts.addedThisYear })}</span>
-                <span className="text-[#94A3B8]">{t("dashboard.newAssetsMonth", { count: counts.addedThisMonth })}</span>
-                {counts.nonaktif > 0 && (
-                  <span className="text-[#94A3B8]">{t("dashboard.includingInactive", { count: counts.nonaktif })}</span>
-                )}
-              </div>
-            }
-          />
-          <StatCard
-            title={t("dashboard.assetAvailability")}
-            value={counts.availability}
-            description={t("dashboard.assetAvailabilityDesc")}
-            icon={<ShieldCheck size={20} />}
-          />
-          <StatCard
-            title={t("dashboard.realisasiProgramKerja")}
-            value={`${counts.realisasiPct}%`}
-            description={t("dashboard.realisasiProgramKerjaDesc")}
-            icon={<ClipboardCheck size={20} />}
-            href="/pemeliharaan"
-            extra={
-              <span className="text-[11px] font-bold text-[#94A3B8]">
-                {t("dashboard.agendaSelesai", { selesai: counts.realisasiSelesai, total: counts.realisasiTotal })}
-              </span>
-            }
-          />
-          <StatCard
-            title={t("dashboard.unitBeroperasi")}
-            value={counts.active}
-            description={t("dashboard.unitBeroperasiDesc")}
-            icon={<PlayCircle size={20} className="text-emerald-500" />}
-          />
-          <StatCard
-            title={t("dashboard.unitPemeliharaan")}
-            value={counts.maintenance}
-            description={t("dashboard.unitPemeliharaanDesc")}
-            icon={<Wrench size={20} className="text-amber-500" />}
-          />
-          <StatCard
-            title={t("dashboard.unitRusakPerbaikan")}
-            value={counts.broken}
-            description={t("dashboard.unitRusakPerbaikanDesc")}
-            icon={<AlertCircle size={20} className="text-red-500" />}
-          />
+
+        {/* Kiri (1/3): Total Aset + Realisasi Program Kerja. Kanan (2/3): Asset Availability gabungan.
+            Urutan DOM = urutan di HP: Total Aset, Realisasi, lalu Availability. */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-1 flex flex-col gap-6">
+            <StatCard
+              title={t("dashboard.totalSeluruhAset")}
+              value={counts.totalAset.toLocaleString()}
+              description={t("dashboard.totalSeluruhAsetDesc", { year: new Date().getFullYear() })}
+              icon={<Box size={20} />}
+              href="/registrasi-aset/semua"
+              extra={
+                <div className="flex flex-col gap-0.5 text-[11px] font-bold">
+                  <span className="text-[#0D9488]">{t("dashboard.newAssetsYear", { count: counts.addedThisYear })}</span>
+                  <span className="text-[#94A3B8]">{t("dashboard.newAssetsMonth", { count: counts.addedThisMonth })}</span>
+                  {counts.nonaktif > 0 && (
+                    <span className="text-[#94A3B8]">{t("dashboard.includingInactive", { count: counts.nonaktif })}</span>
+                  )}
+                </div>
+              }
+            />
+            <StatCard
+              title={t("dashboard.realisasiProgramKerja")}
+              value={`${counts.realisasiPct}%`}
+              description={t("dashboard.realisasiProgramKerjaDesc")}
+              icon={<ClipboardCheck size={20} />}
+              href="/pemeliharaan"
+              extra={
+                <span className="text-[11px] font-bold text-[#94A3B8]">
+                  {t("dashboard.agendaSelesai", { selesai: counts.realisasiSelesai, total: counts.realisasiTotal })}
+                </span>
+              }
+            />
+          </div>
+
+          <div className="xl:col-span-2">
+            <AvailabilitySummaryCard
+              availabilityPct={counts.availabilityPct}
+              totalActive={counts.total}
+              active={counts.active}
+              maintenance={counts.maintenance}
+              broken={counts.broken}
+            />
+          </div>
         </div>
       </div>
 
@@ -316,71 +218,8 @@ export default function Home() {
         <MaintenanceSummary />
       </div>
 
-      {/* RINGKASAN KEUANGAN/MANAJEMEN */}
-      <div className="flex flex-col gap-4">
-        <div>
-          <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base uppercase tracking-wider">{t("dashboard.ringkasanKeuangan")}</h3>
-          <p className="text-[#94A3B8] text-xs mt-1">{t("dashboard.ringkasanKeuanganDesc")}</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          <StatCard
-            title={t("dashboard.anggaranBulanIni")}
-            value={counts.budgetAmount > 0 ? formatRupiahShort(counts.budgetAmount, lang) : t("dashboard.belumDiatur")}
-            description={t("dashboard.anggaranBulanIniDesc")}
-            icon={<Wallet size={20} />}
-            href="/anggaran"
-          />
-          <StatCard
-            title={t("dashboard.serapanBiayaBulanIni")}
-            value={formatRupiahShort(counts.totalBiaya, lang)}
-            description={t("dashboard.serapanBiayaBulanIniDesc")}
-            icon={<Banknote size={20} />}
-            href="/analisis-biaya"
-            extra={
-              counts.budgetAmount > 0 ? (
-                <span className={`text-[11px] font-bold ${counts.budgetUsedPct >= 100 ? "text-[#EF4444]" : counts.budgetUsedPct >= 80 ? "text-[#F59E0B]" : "text-[#0D9488]"}`}>
-                  {t("dashboard.anggaranTerpakai", { pct: counts.budgetUsedPct })}
-                </span>
-              ) : (
-                <span className="text-[11px] font-bold text-[#94A3B8] italic">{t("dashboard.anggaranBelumDiatur")}</span>
-              )
-            }
-          />
-          <StatCard
-            title={t("dashboard.biayaPemeliharaan")}
-            value={formatRupiahShort(counts.biayaPemeliharaan, lang)}
-            description={t("dashboard.biayaPemeliharaanDesc")}
-            icon={<ClipboardCheck size={20} />}
-            href="/analisis-biaya"
-          />
-          <StatCard
-            title={t("dashboard.biayaPerbaikan")}
-            value={formatRupiahShort(counts.biayaPerbaikan, lang)}
-            description={t("dashboard.biayaPerbaikanDesc")}
-            icon={<Wrench size={20} />}
-            href="/analisis-biaya"
-          />
-          <StatCard
-            title={t("dashboard.biayaPembelianStok")}
-            value={formatRupiahShort(counts.biayaStok, lang)}
-            description={t("dashboard.biayaPembelianStokDesc")}
-            icon={<Package size={20} />}
-            href="/analisis-biaya"
-          />
-          <StatCard
-            title={t("dashboard.biayaPembelianAset")}
-            value={formatRupiahShort(counts.biayaAset, lang)}
-            description={t("dashboard.biayaPembelianAsetDesc")}
-            icon={<Boxes size={20} />}
-            href="/analisis-biaya"
-          />
-        </div>
-      </div>
-
-      {/* TREN STATUS ASET / MONITORING STATUS BULANAN */}
-      <div className="w-full">
-        <AvailabilityChart />
-      </div>
+      {/* RINGKASAN KEUANGAN/MANAJEMEN (2 card: per bulan & kumulatif s.d bulan terpilih) */}
+      <BudgetSummaryCards />
 
       {/* STATUS OPERASIONAL & AKTIVITAS TERBARU */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
