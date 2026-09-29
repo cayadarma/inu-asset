@@ -37,12 +37,13 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("Semua Tipe");
   const [filterStatus, setFilterStatus] = useState("Semua Status");
+  const [filterOwnership, setFilterOwnership] = useState("Semua Kepemilikan");
   const [showInactive, setShowInactive] = useState(false);
   
   // --- STATE FORM ---
   const [newAsset, setNewAsset] = useState({
     id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "",
-    checklist_category: "", checklist_pengawas: "", location_id: ""
+    checklist_category: "", checklist_pengawas: "", location_id: "", ownership: ""
   });
   const [isNewType, setIsNewType] = useState(false);
 
@@ -143,9 +144,12 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
     
     const matchesType = filterType === "Semua Tipe" || asset.type === filterType;
     const matchesStatus = filterStatus === "Semua Status" || asset.status === filterStatus;
+    const matchesOwnership =
+      filterOwnership === "Semua Kepemilikan" ||
+      (filterOwnership === "-" ? !asset.ownership : asset.ownership === filterOwnership);
     const matchesActive = showInactive || asset.is_active !== false;
     
-    return matchesSearch && matchesType && matchesStatus && matchesActive;
+    return matchesSearch && matchesType && matchesStatus && matchesOwnership && matchesActive;
   });
 
   // Teks dinamis dari DB (nama aset, tipe aset, nama lokasi) diterjemahkan lewat DeepL (batch)
@@ -267,6 +271,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       purchase_cost: newAsset.purchase_cost ? Number(newAsset.purchase_cost) : null,
       checklist_category: newAsset.checklist_category || null,
       checklist_pengawas: newAsset.checklist_pengawas || null,
+      ownership: newAsset.ownership || null,
       location_id: targetLocationId,
       image_url: uploadedImageUrls[0] || "",
       image_urls: uploadedImageUrls,
@@ -287,7 +292,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
       setImageFiles([]);
       setPaymentProofFile(null);
       setPaymentProofPreview(null);
-      setNewAsset({ id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "", checklist_category: "", checklist_pengawas: "", location_id: locationId });
+      setNewAsset({ id: "", name: "", type: "", specification: "", purchase_date: "", status: "Beroperasi", purchase_cost: "", checklist_category: "", checklist_pengawas: "", location_id: locationId, ownership: "" });
       setIsNewType(false);
       fetchAssets();
       fetchTypes();
@@ -340,6 +345,13 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
           <option value="Perbaikan">{translateEnum("Perbaikan", lang)}</option>
         </select>
 
+        <select value={filterOwnership} onChange={(e) => setFilterOwnership(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
+          <option value="Semua Kepemilikan">{t("registrasiAset.common.semuaKepemilikan")}</option>
+          <option value="INU">INU</option>
+          <option value="ITDC">ITDC</option>
+          <option value="-">-</option>
+        </select>
+
         <label className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] cursor-pointer select-none">
           <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="accent-[#0D9488] w-4 h-4" />
           {t("registrasiAset.common.tampilkanNonaktif")}
@@ -360,6 +372,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                   <th className="px-6 py-4">{t("registrasiAset.common.kodeAset")}</th>
                   <th className="px-6 py-4">{t("registrasiAset.common.namaAset")}</th>
                   <th className="px-6 py-4">{t("registrasiAset.common.tipeAset")}</th>
+                  <th className="px-6 py-4 text-center">{t("registrasiAset.common.kepemilikan")}</th>
                   <th className="px-6 py-4 text-center">{t("registrasiAset.common.status")}</th>
                   <th className="px-6 py-4 text-center">{t("registrasiAset.common.aksi")}</th>
                 </tr>
@@ -371,6 +384,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                     <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.id}</td>
                     <td className="px-6 py-5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{dt(asset.name)}</td>
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{dt(asset.type)}</td>
+                    <td className="px-6 py-5 text-center"><Badge status={asset.ownership || "-"} /></td>
                     <td className="px-6 py-5 text-center"><Badge status={asset.is_active === false ? "Nonaktif" : asset.status} /></td>
                     <td className="px-6 py-5 text-center">
                       <Link href={`/registrasi-aset/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] hover:text-primary transition-all">
@@ -456,6 +470,24 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                     {ASSET_STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>{translateEnum(s, lang)}</option>
                     ))}
+                  </select>
+                  <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+                </div>
+             </div>
+
+             {/* KEPEMILIKAN ASET (INU / ITDC) -- dibiarkan kosong secara default,
+                 dipilih manual kalau sudah diketahui. */}
+             <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("registrasiAset.common.kepemilikan")}</label>
+                <div className="relative">
+                  <select
+                    value={newAsset.ownership}
+                    onChange={(e) => setNewAsset({ ...newAsset, ownership: e.target.value })}
+                    className="w-full appearance-none px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#1E293B] text-sm outline-none focus:border-primary dark:text-white cursor-pointer font-bold"
+                  >
+                    <option value="">{t("registrasiAset.common.pilihKepemilikan")}</option>
+                    <option value="INU">INU</option>
+                    <option value="ITDC">ITDC</option>
                   </select>
                   <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
                 </div>

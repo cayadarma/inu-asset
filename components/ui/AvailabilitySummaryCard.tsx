@@ -1,18 +1,22 @@
 "use client";
 
 import React from "react";
-import { ShieldCheck, PlayCircle, Wrench, AlertCircle } from "lucide-react";
+import { ShieldCheck, PlayCircle, Wrench, AlertTriangle, Hammer } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 
-// Card gabungan: Asset Availability + Unit Beroperasi + Unit Pemeliharaan + Unit Rusak/Perbaikan.
+// Card gabungan: Asset Availability + Unit Beroperasi + Unit Pemeliharaan + Unit Rusak + Unit Perbaikan.
 // Rumus availability TIDAK diubah (dihitung di app/page.tsx): Beroperasi + Idle + Pemeliharaan
-// dianggap tersedia, Rusak/Perbaikan tidak; aset nonaktif dikeluarkan dari perhitungan.
+// dianggap tersedia, Rusak & Perbaikan tidak; aset nonaktif dikeluarkan dari perhitungan.
+// Tata letak 2x2 di bawah persentase:
+//   [Unit Beroperasi]   [Unit Pemeliharaan]
+//   [Unit Rusak]        [Unit Perbaikan]
 interface AvailabilitySummaryCardProps {
   availabilityPct: number; // 0-100
   totalActive: number; // denominator availability (aset aktif)
   active: number; // Beroperasi
   maintenance: number; // Pemeliharaan
-  broken: number; // Rusak + Perbaikan
+  rusak: number; // Rusak (menunggu diperbaiki)
+  perbaikan: number; // Perbaikan (sedang ditangani)
 }
 
 export default function AvailabilitySummaryCard({
@@ -20,11 +24,12 @@ export default function AvailabilitySummaryCard({
   totalActive,
   active,
   maintenance,
-  broken,
+  rusak,
+  perbaikan,
 }: AvailabilitySummaryCardProps) {
   const { t } = useLanguage();
 
-  // Urutan sesuai permintaan: 2. Beroperasi, 3. Pemeliharaan, 4. Rusak/Perbaikan
+  // Urutan sesuai tata letak 2x2: [Beroperasi][Pemeliharaan] / [Rusak][Perbaikan]
   const units = [
     {
       key: "beroperasi",
@@ -44,11 +49,19 @@ export default function AvailabilitySummaryCard({
     },
     {
       key: "rusak",
-      title: t("dashboard.unitRusakPerbaikan"),
-      desc: t("dashboard.unitRusakPerbaikanDesc"),
-      value: broken,
-      icon: <AlertCircle size={20} />,
+      title: t("dashboard.unitRusak"),
+      desc: t("dashboard.unitRusakDesc"),
+      value: rusak,
+      icon: <AlertTriangle size={20} />,
       iconClass: "bg-red-50 dark:bg-red-500/10 text-red-500",
+    },
+    {
+      key: "perbaikan",
+      title: t("dashboard.unitPerbaikan"),
+      desc: t("dashboard.unitPerbaikanDesc"),
+      value: perbaikan,
+      icon: <Hammer size={20} />,
+      iconClass: "bg-orange-50 dark:bg-orange-500/10 text-orange-500",
     },
   ];
 
@@ -67,8 +80,8 @@ export default function AvailabilitySummaryCard({
         <div className="text-[11px] font-bold text-[#94A3B8]">{t("dashboard.dariAsetAktif", { total: totalActive })}</div>
       </div>
 
-      {/* 2-4. UNIT BEROPERASI, PEMELIHARAAN, RUSAK/PERBAIKAN */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-auto pt-4 border-t border-gray-50 dark:border-[#334155]">
+      {/* 2x2: BEROPERASI, PEMELIHARAAN, RUSAK, PERBAIKAN */}
+      <div className="grid grid-cols-2 gap-3 mt-auto pt-4 border-t border-gray-50 dark:border-[#334155]">
         {units.map((u) => (
           <div
             key={u.key}

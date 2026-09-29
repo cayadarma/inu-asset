@@ -10,7 +10,6 @@ import MaintenanceSummary from "../components/ui/MaintenanceSummary";
 import RecentActivity from "../components/ui/RecentActivity"; 
 import { Box, ClipboardCheck } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
-import { SNAPSHOT_CONFLICT_KEY, buildSnapshotRows, getWitaDateStr } from "@/lib/assetSnapshot";
 
 export default function Home() {
   const { t } = useLanguage();
@@ -21,7 +20,8 @@ export default function Home() {
     active: 0,
     idle: 0,
     maintenance: 0,
-    broken: 0,
+    rusak: 0,
+    perbaikan: 0,
     availabilityPct: 0,
     addedThisYear: 0,
     addedThisMonth: 0,
@@ -82,23 +82,54 @@ export default function Home() {
         active,
         idle,
         maintenance,
-        broken: rusak + perbaikan,
+        rusak,
+        perbaikan,
         availabilityPct,
         addedThisYear,
         addedThisMonth,
       }));
 
       // --- CATAT "POTRET" STATUS ASET HARI INI UNTUK GRAFIK TREN (HALAMAN LAPORAN), PER LOKASI ---
-      // Aturan pembuatan baris ada di lib/assetSnapshot.ts (dipakai bersama cron server):
-      // tanggal WITA, aset nonaktif & aset tanpa lokasi dilewati, source = "live".
-      // Cron Vercel (23.00 WITA) menimpa baris hari ini dengan kondisi akhir hari, jadi
-      // pembukaan Dashboard hanya mengisi sementara sampai cron berjalan.
-      const snapshotRows = buildSnapshotRows(data as any[], getWitaDateStr());
+      // Di-upsert (insert atau update jika sudah ada) berdasarkan (snapshot_date, location_id),
+      // supaya selalu mencerminkan kondisi terbaru pada hari berjalan, per lokasi.
+      // "Semua Lokasi" tidak disimpan sebagai baris sendiri -- dijumlahkan on-the-fly
+      // dari baris-baris per lokasi ini saat ditampilkan di grafik.
+      // NB: blok ini sekarang dijalankan LEBIH DULU (sebelum query realisasi program kerja),
+      // supaya snapshot tetap tercatat walau query lain di bawah gagal.
+      const today = new Date().toISOString().slice(0, 10); // format YYYY-MM-DD
+      const byLocation = new Map<
+        string | null,
+        { beroperasi: number; idle: number; pemeliharaan: number; perbaikan: number; rusak: number; total: number }
+      >();
+      operationalAssets.forEach((a: any) => {
+        const locId = a.location_id ?? null;
+        const entry = byLocation.get(locId) || { beroperasi: 0, idle: 0, pemeliharaan: 0, perbaikan: 0, rusak: 0, total: 0 };
+        entry.total += 1;
+        if (a.status === "Beroperasi") entry.beroperasi += 1;
+        else if (a.status === "Idle") entry.idle += 1;
+        else if (a.status === "Pemeliharaan") entry.pemeliharaan += 1;
+        else if (a.status === "Perbaikan") entry.perbaikan += 1;
+        else if (a.status === "Rusak") entry.rusak += 1;
+        byLocation.set(locId, entry);
+      });
+
+      const snapshotRows = Array.from(byLocation.entries()).map(([location_id, c]) => ({
+        snapshot_date: today,
+        location_id,
+        beroperasi: c.beroperasi,
+        idle: c.idle,
+        pemeliharaan: c.pemeliharaan,
+        perbaikan: c.perbaikan,
+        rusak: c.rusak,
+        total: c.total,
+        source: "live", // penanda: baris ini dari pantauan real-time, JANGAN ditimpa oleh trigger recompute historis
+        updated_at: new Date().toISOString(),
+      }));
 
       if (snapshotRows.length > 0) {
         await supabase.from("asset_status_snapshots").upsert(
           snapshotRows,
-          { onConflict: SNAPSHOT_CONFLICT_KEY }
+          { onConflict: "snapshot_date,location_id" }
         );
       }
 
@@ -178,7 +209,8 @@ export default function Home() {
               totalActive={counts.total}
               active={counts.active}
               maintenance={counts.maintenance}
-              broken={counts.broken}
+              rusak={counts.rusak}
+              perbaikan={counts.perbaikan}
             />
           </div>
         </div>

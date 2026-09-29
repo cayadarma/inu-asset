@@ -6,25 +6,23 @@ import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/context/LanguageContext";
 import { DictionaryKey } from "@/lib/i18n/dictionary";
 import { useDynamicTextMap } from "@/lib/i18n/useDynamicText";
+import { getWitaDateStr } from "@/lib/assetSnapshot";
 
+// Sumber SATU-SATUNYA: agenda Pemeliharaan Pencegahan (maintenance_schedules) yang
+// scheduled_date-nya jatuh di BULAN INI (WITA) -- lampau maupun akan datang dalam bulan
+// yang sama -- diurutkan berdasarkan JARAK ke hari ini (yang paling dekat duluan).
+// TIDAK fallback ke bulan lain kalau bulan ini kosong: tampilkan kosong saja.
+// Laporan kerusakan (damage_reports) SENGAJA tidak lagi ikut di sini.
 interface Activity {
   id: string;
-  time: Date;
+  scheduledDate: string; // YYYY-MM-DD
   href: string;
   assetName: string;
-  issueTitle?: string;
-  kind: "pemeliharaanSelesai" | "agendaDijadwalkan" | "laporanKerusakanBaru";
+  kind: "pemeliharaanSelesai" | "agendaDijadwalkan";
 }
 
-function timeAgo(date: Date, t: (key: DictionaryKey, vars?: Record<string, string | number>) => string) {
-  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-  if (seconds < 60) return t("recentActivity.baruSaja");
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return t("recentActivity.menitLalu", { n: minutes });
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return t("recentActivity.jamLalu", { n: hours });
-  const days = Math.floor(hours / 24);
-  return t("recentActivity.hariLalu", { n: days });
+function formatTanggal(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
 
 export default function RecentActivity() {
@@ -36,57 +34,48 @@ export default function RecentActivity() {
     async function fetchActivities() {
       setIsLoading(true);
 
+      const todayStr = getWitaDateStr();
+      const [year, month] = todayStr.split("-"); // bulan berjalan, WITA
+      const monthStart = `${year}-${month}-01`;
+      const lastDay = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+      const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
+
       const { data: schedules } = await supabase
         .from("maintenance_schedules")
-        .select(`id, status, created_at, completed_at, assets ( name )`)
-        .order("created_at", { ascending: false })
-        .limit(5);
+        .select(`id, status, scheduled_date, assets ( name )`)
+        .gte("scheduled_date", monthStart)
+        .lte("scheduled_date", monthEnd);
 
-      const { data: reports } = await supabase
-        .from("damage_reports")
-        .select(`id, issue_title, created_at, asset_id, assets ( name )`)
-        .order("created_at", { ascending: false })
-        .limit(5);
+      const todayMs = new Date(todayStr + "T00:00:00Z").getTime();
 
-      const scheduleActivities: Activity[] = (schedules || []).map((s: any) => ({
-        id: `sch-${s.id}`,
-        assetName: s.assets?.name || "",
-        kind: s.status === "Selesai" ? "pemeliharaanSelesai" : "agendaDijadwalkan",
-        time: new Date(s.status === "Selesai" && s.completed_at ? s.completed_at : s.created_at),
-        href: `/pemeliharaan/checklist/${s.id}`,
-      }));
-
-      const reportActivities: Activity[] = (reports || []).map((r: any) => ({
-        id: `rep-${r.id}`,
-        assetName: r.assets?.name || "",
-        issueTitle: r.issue_title,
-        kind: "laporanKerusakanBaru",
-        time: new Date(r.created_at),
-        href: `/pemeliharaan`,
-      }));
-
-      const merged = [...scheduleActivities, ...reportActivities]
-        .sort((a, b) => b.time.getTime() - a.time.getTime())
+      const sorted: Activity[] = (schedules || [])
+        .map((s: any) => ({
+          id: `sch-${s.id}`,
+          assetName: s.assets?.name || "",
+          kind: (s.status === "Selesai" ? "pemeliharaanSelesai" : "agendaDijadwalkan") as Activity["kind"],
+          scheduledDate: s.scheduled_date as string,
+          href: `/pemeliharaan/checklist/${s.id}`,
+        }))
+        .sort((a, b) => {
+          const distA = Math.abs(new Date(a.scheduledDate + "T00:00:00Z").getTime() - todayMs);
+          const distB = Math.abs(new Date(b.scheduledDate + "T00:00:00Z").getTime() - todayMs);
+          return distA - distB;
+        })
         .slice(0, 5);
 
-      setActivities(merged);
+      setActivities(sorted);
       setIsLoading(false);
     }
     fetchActivities();
   }, []);
 
-  // Nama aset & judul kerusakan adalah teks bebas dari DB -> translate lewat DeepL+cache
-  const dynamicTexts = useDynamicTextMap([
-    ...activities.map((a) => a.assetName),
-    ...activities.map((a) => a.issueTitle).filter(Boolean) as string[],
-  ]);
+  // Nama aset adalah teks bebas dari DB -> translate lewat DeepL+cache
+  const dynamicTexts = useDynamicTextMap(activities.map((a) => a.assetName));
 
   const buildTitle = (act: Activity): string => {
     const assetDisplay = dynamicTexts.get((act.assetName || "").trim()) || act.assetName || t("recentActivity.defaultAssetName");
     if (act.kind === "pemeliharaanSelesai") return t("recentActivity.pemeliharaanSelesai", { asset: assetDisplay });
-    if (act.kind === "agendaDijadwalkan") return t("recentActivity.agendaDijadwalkan", { asset: assetDisplay });
-    const issueDisplay = act.issueTitle ? dynamicTexts.get(act.issueTitle.trim()) || act.issueTitle : "";
-    return t("recentActivity.laporanKerusakanBaru", { asset: assetDisplay, issue: issueDisplay });
+    return t("recentActivity.agendaDijadwalkan", { asset: assetDisplay });
   };
 
   return (
@@ -113,7 +102,7 @@ export default function RecentActivity() {
               className="pb-4 border-b border-gray-50 dark:border-[#334155] last:border-0 last:pb-0 flex flex-col gap-1 hover:opacity-70 transition-opacity"
             >
               <span className="text-[14px] font-bold text-[#334155] dark:text-[#F8FAFC]">{buildTitle(act)}</span>
-              <span className="text-[12px] text-[#94A3B8] font-medium italic">{timeAgo(act.time, t)}</span>
+              <span className="text-[12px] text-[#94A3B8] font-medium italic">{formatTanggal(act.scheduledDate)}</span>
             </Link>
           ))
         )}

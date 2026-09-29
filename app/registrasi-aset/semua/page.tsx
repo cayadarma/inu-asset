@@ -20,6 +20,7 @@ export default function SemuaAsetPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("Semua Tipe");
   const [filterStatus, setFilterStatus] = useState("Semua Status");
+  const [filterOwnership, setFilterOwnership] = useState("Semua Kepemilikan");
   const [filterLocation, setFilterLocation] = useState("Semua Lokasi");
   const [showInactive, setShowInactive] = useState(false);
 
@@ -55,10 +56,13 @@ export default function SemuaAsetPage() {
 
     const matchesType = filterType === "Semua Tipe" || asset.type === filterType;
     const matchesStatus = filterStatus === "Semua Status" || asset.status === filterStatus;
+    const matchesOwnership =
+      filterOwnership === "Semua Kepemilikan" ||
+      (filterOwnership === "-" ? !asset.ownership : asset.ownership === filterOwnership);
     const matchesLocation = filterLocation === "Semua Lokasi" || asset.locations?.id === filterLocation;
     const matchesActive = showInactive || asset.is_active !== false;
 
-    return matchesSearch && matchesType && matchesStatus && matchesLocation && matchesActive;
+    return matchesSearch && matchesType && matchesStatus && matchesLocation && matchesActive && matchesOwnership;
   });
 
   // Teks dinamis dari DB (nama aset, tipe aset, nama lokasi) diterjemahkan lewat DeepL (batch)
@@ -116,6 +120,13 @@ export default function SemuaAsetPage() {
           {availableTypes.map((t2) => <option key={t2.name} value={t2.name}>{dt(t2.name)}</option>)}
         </select>
 
+        <select value={filterOwnership} onChange={(e) => setFilterOwnership(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
+          <option value="Semua Kepemilikan">{t("registrasiAset.common.semuaKepemilikan")}</option>
+          <option value="INU">INU</option>
+          <option value="ITDC">ITDC</option>
+          <option value="-">-</option>
+        </select>
+
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
           <option value="Semua Status">{translateEnum("Semua Status", lang)}</option>
           <option value="Beroperasi">{translateEnum("Beroperasi", lang)}</option>
@@ -146,6 +157,7 @@ export default function SemuaAsetPage() {
                   <th className="px-6 py-4">{t("registrasiAset.common.namaAset")}</th>
                   <th className="px-6 py-4">{t("registrasiAset.common.tipeAset")}</th>
                   <th className="px-6 py-4">{t("registrasiAset.common.lokasi")}</th>
+                  <th className="px-6 py-4 text-center">{t("registrasiAset.common.kepemilikan")}</th>
                   <th className="px-6 py-4 text-center">{t("registrasiAset.common.status")}</th>
                   <th className="px-6 py-4 text-center">{t("registrasiAset.common.aksi")}</th>
                 </tr>
@@ -157,6 +169,7 @@ export default function SemuaAsetPage() {
                     <td className="px-6 py-5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{dt(asset.name)}</td>
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{dt(asset.type)}</td>
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8] uppercase">{dt(asset.locations?.name) || "-"}</td>
+                    <td className="px-6 py-5 text-center"><Badge status={asset.ownership || "-"} /></td>
                     <td className="px-6 py-5 text-center"><Badge status={asset.is_active === false ? "Nonaktif" : asset.status} /></td>
                     <td className="px-6 py-5 text-center">
                       <Link

@@ -9,7 +9,7 @@ import { useLanguage } from "@/context/LanguageContext";
 // - Selesai    = status "Selesai"
 export default function MaintenanceSummary() {
   const { t } = useLanguage();
-  const [counts, setCounts] = useState({ terjadwal: 0, berlangsung: 0, selesai: 0 });
+  const [counts, setCounts] = useState({ terjadwal: 0, berlangsung: 0, selesai: 0, total: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -49,6 +49,7 @@ export default function MaintenanceSummary() {
         terjadwal,
         berlangsung: sudahDiproses + menungguPart,
         selesai,
+        total: workOrders.length,
       });
       setIsLoading(false);
     };
@@ -60,6 +61,7 @@ export default function MaintenanceSummary() {
     { label: t("maintSummary.terjadwal"), count: counts.terjadwal, color: "text-[#0D9488]", bg: "bg-[#D1FAE5]/30" },
     { label: t("maintSummary.berlangsung"), count: counts.berlangsung, color: "text-[#F59E0B]", bg: "bg-[#FEF3C7]/30" },
     { label: t("maintSummary.selesai"), count: counts.selesai, color: "text-[#10B981]", bg: "bg-green-50/30" },
+    { label: t("maintSummary.total"), count: counts.total, color: "text-[#0F172A] dark:text-[#F8FAFC]", bg: "bg-slate-100/60 dark:bg-slate-500/10" },
   ];
 
   return (
@@ -68,7 +70,7 @@ export default function MaintenanceSummary() {
         <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-base md:text-lg lg:text-lg">{t("maintSummary.title")}</h3>
         <p className="text-[#94A3B8] text-xs mt-1">{t("maintSummary.subtitle")}</p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 lg:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 lg:gap-4">
         {data.map((item) => (
           <div key={item.label} className={`p-3 md:p-4 lg:p-6 ${item.bg} rounded-2xl border border-gray-100 dark:border-[#334155] flex flex-col gap-1 transition-all hover:scale-[1.02]`}>
             <span className="text-[9px] md:text-[10px] text-[#475569] dark:text-[#94A3B8] font-black uppercase tracking-widest">{item.label}</span>

@@ -80,16 +80,13 @@ function ChecklistHarianListContent() {
 
   return (
     <div className="flex flex-col gap-6 pb-10 font-poppins text-left">
-      {/* HEADER */}
+      {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <div className="flex flex-col gap-1">
+        <div>
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Checklist Harian Aset</h1>
-          <p className="text-sm text-[#94A3B8]">
-            Pemeriksaan kondisi harian per part untuk setiap aset. Wajib diisi setiap hari.
-            Hanya menampilkan aset yang sudah punya Kategori Checklist.
-          </p>
+          <p className="text-[#475569] dark:text-[#94A3B8] text-sm font-medium">Pemeriksaan kondisi harian per aset, termasuk tanggal lampau yang terlewat</p>
         </div>
-        <MaintenanceTabs active="checklist-harian" />
+        <MaintenanceTabs active="checklist-harian" date={date} />
       </div>
 
       {/* PILIH TANGGAL */}
@@ -117,11 +114,6 @@ function ChecklistHarianListContent() {
             </div>
             <span className="text-[11px] text-[#94A3B8]">{formatTanggalPanjang(date)}</span>
           </div>
-
-          <p className="text-xs text-[#94A3B8] max-w-md">
-            Pilih tanggal mana pun (termasuk tanggal lampau) untuk mengisi checklist yang terlewat, misalnya dari catatan manual.
-            Tanggal ini juga otomatis mengikuti tanggal yang dipilih di kalender Pemeliharaan Pencegahan.
-          </p>
         </div>
 
         {clamped && (

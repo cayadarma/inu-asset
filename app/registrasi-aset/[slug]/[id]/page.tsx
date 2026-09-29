@@ -212,6 +212,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
       location_id: editData.location_id,
       checklist_category: editData.checklist_category || null,
       checklist_pengawas: editData.checklist_pengawas || null,
+      ownership: editData.ownership || null,
       image_url: finalImageUrls[0] || "",
       image_urls: finalImageUrls
     }).eq("id", id);
@@ -499,6 +500,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                <DetailItem label={t("registrasiAset.common.kodeAset")} val={asset.id} />
                <DetailItem label={t("registrasiAset.common.namaAset")} val={dt(asset.name)} />
                <DetailItem label={t("registrasiAset.common.tipeAset")} val={dt(asset.type)} />
+               <DetailItem label={t("registrasiAset.common.kepemilikan")} val={asset.ownership || "-"} />
                <DetailItem label={t("registrasiAset.form.spesifikasi")} val={dt(asset.specification)} />
                <DetailItem label={t("registrasiAset.form.tanggalPembelian")} val={asset.purchase_date} />
                <DetailItem label={t("registrasiAset.detail.usiaAset")} val={calculateAge(asset.purchase_date)} />
@@ -632,6 +634,20 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                    <option value="Pemeliharaan">{translateEnum("Pemeliharaan", lang)}</option>
                    <option value="Rusak">{translateEnum("Rusak", lang)}</option>
                    <option value="Perbaikan">{translateEnum("Perbaikan", lang)}</option>
+                </select>
+             </div>
+
+             {/* KEPEMILIKAN ASET (INU / ITDC) */}
+             <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("registrasiAset.common.kepemilikan")}</label>
+                <select
+                  value={editData.ownership || ""}
+                  onChange={(e) => setEditField({ ...editData, ownership: e.target.value || null })}
+                  className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-primary dark:text-white font-poppins"
+                >
+                  <option value="">{t("registrasiAset.common.pilihKepemilikan")}</option>
+                  <option value="INU">INU</option>
+                  <option value="ITDC">ITDC</option>
                 </select>
              </div>
 

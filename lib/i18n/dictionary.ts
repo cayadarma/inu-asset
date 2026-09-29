@@ -100,6 +100,10 @@ export const dictionary = {
     "dashboard.unitPemeliharaanDesc": "Sedang dicek/dirawat rutin terjadwal",
     "dashboard.unitRusakPerbaikan": "Unit Rusak / Perbaikan",
     "dashboard.unitRusakPerbaikanDesc": "Rusak menunggu diperbaiki atau sedang ditangani",
+    "dashboard.unitRusak": "Unit Rusak",
+    "dashboard.unitRusakDesc": "Rusak, menunggu diperbaiki",
+    "dashboard.unitPerbaikan": "Unit Perbaikan",
+    "dashboard.unitPerbaikanDesc": "Sedang dalam proses perbaikan",
     "dashboard.dariAsetAktif": "dari {total} aset aktif",
 
     // Dashboard - Ringkasan Keuangan
@@ -125,10 +129,11 @@ export const dictionary = {
     "maintSummary.terjadwal": "TERJADWAL",
     "maintSummary.berlangsung": "BERLANGSUNG",
     "maintSummary.selesai": "SELESAI",
+    "maintSummary.total": "TOTAL SELURUH WORK ORDER",
 
     // RecentActivity
     "recentActivity.title": "Aktivitas Terbaru",
-    "recentActivity.subtitle": "Kejadian terbaru dari kerusakan & jadwal pemeliharaan aset",
+    "recentActivity.subtitle": "Jadwal pemeliharaan pencegahan terdekat bulan ini",
     "recentActivity.viewAll": "Lihat Semua",
     "recentActivity.loading": "Memuat aktivitas...",
     "recentActivity.empty": "Belum ada aktivitas terbaru.",
@@ -219,6 +224,9 @@ export const dictionary = {
     "registrasiAset.common.selanjutnya": "Selanjutnya",
     "registrasiAset.common.yaHapusPermanen": "Ya, Hapus Permanen",
     "registrasiAset.common.gagal": "Gagal",
+    "registrasiAset.common.kepemilikan": "Kepemilikan",
+    "registrasiAset.common.semuaKepemilikan": "Semua Kepemilikan",
+    "registrasiAset.common.pilihKepemilikan": "-- Belum diisi --",
 
     // Registrasi Aset - Daftar Lokasi (page.tsx)
     "registrasiAset.list.subtitle": "Kelola daftar lokasi dan wilayah kerja perusahaan",
@@ -540,6 +548,10 @@ export const dictionary = {
     "dashboard.unitPemeliharaanDesc": "Undergoing scheduled routine maintenance",
     "dashboard.unitRusakPerbaikan": "Damaged / Under Repair Units",
     "dashboard.unitRusakPerbaikanDesc": "Damaged awaiting repair or currently being handled",
+    "dashboard.unitRusak": "Damaged Units",
+    "dashboard.unitRusakDesc": "Damaged, awaiting repair",
+    "dashboard.unitPerbaikan": "Units Under Repair",
+    "dashboard.unitPerbaikanDesc": "Currently being repaired",
     "dashboard.dariAsetAktif": "of {total} active assets",
 
     // Dashboard - Financial Summary
@@ -565,10 +577,11 @@ export const dictionary = {
     "maintSummary.terjadwal": "SCHEDULED",
     "maintSummary.berlangsung": "ONGOING",
     "maintSummary.selesai": "COMPLETED",
+    "maintSummary.total": "TOTAL WORK ORDERS",
 
     // RecentActivity
     "recentActivity.title": "Recent Activity",
-    "recentActivity.subtitle": "Latest events from asset damage reports & maintenance schedules",
+    "recentActivity.subtitle": "Nearest preventive maintenance schedules this month",
     "recentActivity.viewAll": "View All",
     "recentActivity.loading": "Loading activity...",
     "recentActivity.empty": "No recent activity yet.",
@@ -659,6 +672,9 @@ export const dictionary = {
     "registrasiAset.common.selanjutnya": "Next",
     "registrasiAset.common.yaHapusPermanen": "Yes, Delete Permanently",
     "registrasiAset.common.gagal": "Failed",
+    "registrasiAset.common.kepemilikan": "Ownership",
+    "registrasiAset.common.semuaKepemilikan": "All Ownership",
+    "registrasiAset.common.pilihKepemilikan": "-- Not set --",
 
     // Registrasi Aset - Daftar Lokasi (page.tsx)
     "registrasiAset.list.subtitle": "Manage the company's list of locations and work areas",
