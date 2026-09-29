@@ -4,7 +4,7 @@ import React, { useState, use, useEffect, useRef } from "react";
 import { 
   ChevronLeft, ChevronRight, Edit3, PowerOff, Power, Trash2, Calendar, MapPin, Tag, 
   Image as LucideImage, ChevronDown, Wrench, AlertTriangle, X, Camera as CameraIcon,
-  ClipboardList
+  ClipboardList, Printer
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -71,6 +71,72 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
   // --- HAK AKSES KHUSUS ADMINISTRATOR & SUPER ADMIN (mis. untuk field checklist di bawah, dan hapus aset) ---
   const canManageChecklistParts = user?.role === "administrator" || user?.role === "super_admin";
   const canDeleteAsset = user?.role === "administrator" || user?.role === "super_admin";
+
+  // --- CETAK RIWAYAT (kerusakan / pemeliharaan) ---
+  // Rentang tanggal kosong = seluruh riwayat sejak aset didaftarkan (tanpa filter tanggal).
+  const [printStart, setPrintStart] = useState("");
+  const [printEnd, setPrintEnd] = useState("");
+  const [isPrinting, setIsPrinting] = useState<"damage" | "maintenance" | null>(null);
+
+  const handlePrintHistory = async (kind: "damage" | "maintenance") => {
+    if (isPrinting || !asset) return;
+    if (printStart && printEnd && printStart > printEnd) {
+      alert("Tanggal awal tidak boleh lebih besar dari tanggal akhir.");
+      return;
+    }
+    setIsPrinting(kind);
+    try {
+      const range = { start: printStart, end: printEnd };
+      const locName =
+        availableLocations.find((l) => String(l.id) === String(asset.location_id))?.name || locationNameFromUrl || "-";
+      const info = {
+        id: asset.id,
+        name: asset.name,
+        type: asset.type || null,
+        locationName: locName,
+        ownership: asset.ownership || null,
+      };
+
+      // Library print (jsPDF + html2canvas) baru dimuat saat tombol diklik, supaya halaman detail tetap ringan
+      const lib = await import("@/lib/assetHistoryPrint");
+      let hasData = false;
+
+      if (kind === "damage") {
+        const [reportsRes, wosRes] = await Promise.all([
+          supabase
+            .from("damage_reports")
+            .select("id, issue_title, description, reporter_name, urgency, created_at")
+            .eq("asset_id", id),
+          supabase
+            .from("work_orders")
+            .select("id, tgl, trouble, tech_name, supervisor, tindak_lanjut, status, cost_part, cost_service, actual_cost, damage_report_id, is_emergency, completed_at, created_at")
+            .eq("asset_id", id),
+        ]);
+        if (reportsRes.error) throw reportsRes.error;
+        if (wosRes.error) throw wosRes.error;
+        hasData = await lib.printDamageHistory(info, range, (reportsRes.data as any[]) || [], (wosRes.data as any[]) || []);
+      } else {
+        const { data, error } = await supabase
+          .from("maintenance_schedules")
+          .select("id, scheduled_date, status, operator_name, completed_at")
+          .eq("asset_id", id);
+        if (error) throw error;
+        hasData = await lib.printMaintenanceHistory(info, range, (data as any[]) || []);
+      }
+
+      if (!hasData) {
+        alert(
+          printStart || printEnd
+            ? "Tidak ada data riwayat pada rentang tanggal tersebut."
+            : "Aset ini belum punya riwayat untuk dicetak."
+        );
+      }
+    } catch (err: any) {
+      alert("Gagal menyiapkan cetak: " + (err?.message || "Terjadi kesalahan"));
+    } finally {
+      setIsPrinting(null);
+    }
+  };
 
   // --- AMBIL DATA DARI DB ---
   const fetchDetail = async () => {
@@ -504,6 +570,65 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                <DetailItem label={t("registrasiAset.form.spesifikasi")} val={dt(asset.specification)} />
                <DetailItem label={t("registrasiAset.form.tanggalPembelian")} val={asset.purchase_date} />
                <DetailItem label={t("registrasiAset.detail.usiaAset")} val={calculateAge(asset.purchase_date)} />
+            </div>
+          </div>
+
+          {/* CETAK RIWAYAT: 2 tombol terpisah + rentang tanggal opsional (kosong = seluruh riwayat) */}
+          <div className="bg-white dark:bg-[#1E293B] p-6 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[#0F172A] dark:text-[#F8FAFC]">Cetak Riwayat</h3>
+              <p className="text-xs text-[#94A3B8]">Kosongkan tanggal untuk mencetak seluruh riwayat sejak aset didaftarkan, atau persempit dengan rentang tanggal.</p>
+            </div>
+            <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold text-[#94A3B8] uppercase tracking-wider">Dari Tanggal</label>
+                  <input
+                    type="date"
+                    value={printStart}
+                    max={printEnd || undefined}
+                    onChange={(e) => setPrintStart(e.target.value)}
+                    className="px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold outline-none focus:border-primary bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-white"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold text-[#94A3B8] uppercase tracking-wider">Sampai Tanggal</label>
+                  <input
+                    type="date"
+                    value={printEnd}
+                    min={printStart || undefined}
+                    onChange={(e) => setPrintEnd(e.target.value)}
+                    className="px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold outline-none focus:border-primary bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-white"
+                  />
+                </div>
+                {(printStart || printEnd) && (
+                  <button
+                    type="button"
+                    onClick={() => { setPrintStart(""); setPrintEnd(""); }}
+                    className="self-end px-3 py-2.5 text-xs font-bold text-[#475569] dark:text-[#94A3B8] hover:text-[#0D9488] transition-colors"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 lg:ml-auto">
+                <button
+                  type="button"
+                  onClick={() => handlePrintHistory("damage")}
+                  disabled={isPrinting !== null}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-50 dark:hover:bg-[#334155]/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <Printer size={16} /> {isPrinting === "damage" ? "Menyiapkan..." : "Cetak Riwayat Kerusakan"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrintHistory("maintenance")}
+                  disabled={isPrinting !== null}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0D9488] text-white rounded-xl text-sm font-bold hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <Printer size={16} /> {isPrinting === "maintenance" ? "Menyiapkan..." : "Cetak Riwayat Pemeliharaan"}
+                </button>
+              </div>
             </div>
           </div>
 

@@ -31,6 +31,7 @@ interface WorkOrder {
   actual_cost: number | null;
   proof_photo_url: string | null;
   payment_proof_url: string | null;
+  damage_photo_url: string | null; // foto kerusakan yang diunggah admin saat menerbitkan WO (opsional)
   updated_at: string | null;
   completed_at: string | null;
   created_at: string;
@@ -443,6 +444,31 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
               {workOrder.tindak_lanjut?.trim() ? workOrder.tindak_lanjut : "Belum ada tindakan perbaikan tercatat."}
             </p>
           </div>
+
+          {/* FOTO KERUSAKAN (diunggah admin saat menerbitkan WO; hanya tampil kalau ada) */}
+          {workOrder.damage_photo_url && (
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-bold text-[#94A3B8] uppercase flex items-center gap-1">
+                <ImageIcon size={14} /> Foto Kerusakan
+              </span>
+              <div className="relative group w-full max-w-md">
+                <img
+                  src={workOrder.damage_photo_url}
+                  onClick={() => openLightbox(workOrder.damage_photo_url)}
+                  className="w-full aspect-video object-cover rounded-xl border border-gray-200 dark:border-[#334155] cursor-zoom-in"
+                  alt="Foto Kerusakan"
+                />
+                <button
+                  type="button"
+                  onClick={() => openLightbox(workOrder.damage_photo_url)}
+                  className="absolute bottom-2 right-2 p-2 bg-black/60 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                  title="Perbesar foto"
+                >
+                  <ZoomIn size={16} />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* TOTAL ESTIMASI BIAYA */}
           <div className="mt-2 p-4 bg-[#F8FAFC] dark:bg-[#0F172A] rounded-2xl border border-dashed border-[#0D9488]/30 flex justify-between items-center shadow-sm">

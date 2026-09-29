@@ -25,7 +25,7 @@ import html2canvas from "html2canvas";
 
 // Menunggu semua <img> di dalam kertas laporan (mis. logo) selesai loading,
 // supaya tidak ke-capture blank saat html2canvas jalan lebih cepat dari loading gambar.
-async function waitForImagesLoaded(container: HTMLElement) {
+export async function waitForImagesLoaded(container: HTMLElement) {
   const imgs = Array.from(container.querySelectorAll("img"));
   await Promise.all(
     imgs.map((img) =>
@@ -111,7 +111,7 @@ export async function exportReportPDF(data: ReportTemplateData, mode: "download"
 // PENTING: promise di-resolve SEGERA setelah print() dipanggil (bukan
 // menunggu iframe dibuang) — supaya tombol "Cetak" di UI tidak stuck
 // nunggu. Pembersihan iframe & blob URL tetap jalan di belakang layar.
-function printPdfViaHiddenIframe(blobUrl: string): Promise<void> {
+export function printPdfViaHiddenIframe(blobUrl: string): Promise<void> {
   return new Promise((resolve) => {
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";

@@ -93,6 +93,47 @@ function CorrectiveContent() {
     }
   };
 
+  // --- FOTO KERUSAKAN UNTUK MODAL BUAT WORK ORDER (1 foto, galeri/kamera, sama seperti Foto Kejadian) ---
+  const [damageImageFile, setDamageImageFile] = useState<File | null>(null);
+  const [damageImagePreview, setDamageImagePreview] = useState<string | null>(null);
+  const [isProcessingDamageImage, setIsProcessingDamageImage] = useState(false);
+  const damageFileInputRef = useRef<HTMLInputElement>(null);
+  const damageCameraInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDamageImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+    setIsProcessingDamageImage(true);
+    try {
+      if (file.name.toLowerCase().endsWith(".heic")) {
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.7 });
+        file = new File([convertedBlob as Blob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+      }
+      const compressedFile = await imageCompression(file, { maxSizeMB: 0.6, maxWidthOrHeight: 1200, useWebWorker: true });
+      setDamageImageFile(compressedFile);
+      setDamageImagePreview(URL.createObjectURL(compressedFile));
+    } catch (error) {
+      console.error("Gagal olah gambar:", error);
+    } finally {
+      setIsProcessingDamageImage(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveDamageImage = () => {
+    setDamageImageFile(null);
+    setDamageImagePreview(null);
+  };
+
+  // Setiap modal Buat Work Order ditutup (Batalkan, klik luar, atau sukses simpan), foto direset
+  useEffect(() => {
+    if (!isAddModalOpen) {
+      setDamageImageFile(null);
+      setDamageImagePreview(null);
+    }
+  }, [isAddModalOpen]);
+
   // --- SUBMIT PERBAIKAN MENDADAK: OTOMATIS BIKIN 2 RECORD (BUKU SAKIT + WORK ORDER) ---
   const handleEmergencySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,9 +251,23 @@ function CorrectiveContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSavingWO) return; // cegah submit dobel
+    if (isSavingWO || isProcessingDamageImage) return; // cegah submit dobel / foto masih diproses
     setIsSavingWO(true);
-    
+
+    // Upload foto kerusakan (opsional). Kalau gagal, hentikan supaya admin tidak kehilangan foto tanpa sadar.
+    let damagePhotoUrl: string | null = null;
+    if (damageImageFile) {
+      const fileName = `${Date.now()}-wo-${formData.asset_id}`;
+      const { error: uploadError } = await supabase.storage.from("asset-images").upload(fileName, damageImageFile);
+      if (uploadError) {
+        alert("Gagal mengunggah foto kerusakan: " + uploadError.message);
+        setIsSavingWO(false);
+        return;
+      }
+      const { data: { publicUrl } } = supabase.storage.from("asset-images").getPublicUrl(fileName);
+      damagePhotoUrl = publicUrl;
+    }
+
     const { error } = await supabase.from("work_orders").insert([{
       id: formData.id || `WO-${Date.now().toString().slice(-4)}`,
       tgl: formData.tgl,
@@ -227,6 +282,7 @@ function CorrectiveContent() {
       tindak_lanjut: formData.tindak_lanjut,
       damage_report_id: formData.damage_report_id || null,
       issued_by: formData.issued_by || null,
+      damage_photo_url: damagePhotoUrl,
       status: "Dalam Proses"
     }]);
 
@@ -429,6 +485,37 @@ function CorrectiveContent() {
             <div className="flex flex-col gap-2">
               <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Tindakan Perbaikan (TINDAK LANJUT)</label>
               <textarea rows={3} value={formData.tindak_lanjut} onChange={e => setFormData({...formData, tindak_lanjut: e.target.value})} placeholder="Apa tindakan yang harus dilakukan?" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none bg-white dark:bg-[#0F172A] dark:text-white font-medium"></textarea>
+            </div>
+
+            {/* FOTO KERUSAKAN (opsional): foto lokasi/aset yang rusak, sama polanya dengan Foto Kejadian di Perbaikan Mendadak */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Foto Kerusakan</label>
+              <input type="file" className="hidden" ref={damageFileInputRef} onChange={handleDamageImageChange} accept="image/*,.heic" />
+              <input type="file" className="hidden" ref={damageCameraInputRef} onChange={handleDamageImageChange} accept="image/*" capture="environment" />
+              <div className="flex items-center gap-3 flex-wrap">
+                {damageImagePreview && (
+                  <div className="relative">
+                    <img src={damageImagePreview} className="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-[#334155]" alt="Preview foto kerusakan" />
+                    <button
+                      type="button"
+                      onClick={handleRemoveDamageImage}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-[#EF4444] text-white rounded-full flex items-center justify-center text-xs font-bold shadow"
+                      title="Hapus foto"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button type="button" disabled={isProcessingDamageImage} onClick={() => damageFileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2.5 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all disabled:opacity-50">
+                    <ImageIcon size={16} /> {isProcessingDamageImage ? "Memproses..." : "Pilih dari Galeri"}
+                  </button>
+                  <button type="button" disabled={isProcessingDamageImage} onClick={() => damageCameraInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2.5 bg-[#F1F5F9] dark:bg-[#0F172A] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#94A3B8] hover:bg-gray-200 dark:hover:bg-[#334155] transition-all disabled:opacity-50">
+                    <CameraIcon size={16} /> Kamera
+                  </button>
+                </div>
+              </div>
+              <span className="text-[11px] text-[#94A3B8] italic">Foto lokasi dan aset yang rusak. Akan tampil di halaman detail Work Order.</span>
             </div>
 
             {/* BAGIAN PENGAWAS & PELAKSANA (SEKARANG KETIK MANUAL SESUAI PERMINTAAN) */}

@@ -49,7 +49,8 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
   // Tanggal checklist = ?date= dari URL (dibawa dari daftar / kalender Pencegahan).
   // Kosong/tidak valid -> hari ini (WITA). Tanggal masa depan dipotong ke hari ini.
   const { date: today, clamped } = resolveChecklistDate(searchParams.get("date"), getWitaDateStr());
-  const backHref = `/pemeliharaan/checklist-harian?date=${today}`;
+  // Kembali ke daftar aset di lokasi yang sama (?lokasi=), supaya pengisian beruntun tidak mulai dari daftar lokasi lagi
+  const backHref = `/pemeliharaan/checklist-harian?date=${today}${asset?.location_id ? `&lokasi=${asset.location_id}` : ""}`;
   const sudahDiisi = !!existingChecklist;
   const template = getChecklistTemplate(asset?.checklist_category);
 
@@ -59,7 +60,7 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
     const [{ data: assetData }, { data: checklistData }] = await Promise.all([
       supabase
         .from("assets")
-        .select("id, name, type, checklist_category, checklist_pengawas")
+        .select("id, name, type, location_id, checklist_category, checklist_pengawas")
         .eq("id", assetId)
         .maybeSingle(),
       supabase
