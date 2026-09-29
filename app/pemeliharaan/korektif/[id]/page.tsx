@@ -11,12 +11,14 @@ import imageCompression from "browser-image-compression";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
+import { getWitaDateStr } from "@/lib/assetSnapshot";
 
 interface WorkOrder {
   id: string;
   tgl: string;
   kategori: string;
   asset_id: string;
+  damage_report_id: string | null; // laporan kerusakan (Buku Sakit) asal WO ini, null untuk WO lama/manual
   trouble: string;
   tindak_lanjut: string | null;
   tech_name: string | null;
@@ -50,7 +52,17 @@ interface WorkOrderUpdate {
   proof_photo_url: string | null;
   payment_proof_url: string | null;
   created_at: string;
+  update_date: string | null; // YYYY-MM-DD, tanggal update/selesai yang diinput user (kolom date)
 }
+
+// --- TANGGAL UPDATE UNTUK TAMPILAN RIWAYAT: PAKAI update_date (INPUT USER), BUKAN created_at ---
+// Fallback ke created_at hanya untuk baris lama yang (seharusnya) sudah di-backfill lewat SQL.
+const formatTanggalUpdate = (u: { update_date: string | null; created_at: string }) => {
+  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
+  return u.update_date
+    ? new Date(u.update_date + "T00:00:00").toLocaleDateString("id-ID", opts)
+    : new Date(u.created_at).toLocaleDateString("id-ID", opts);
+};
 
 // --- FORMAT ANGKA JADI FORMAT RIBUAN ID (TITIK SEBAGAI PEMISAH) ---
 const formatRibuan = (value: number) => (value ? value.toLocaleString("id-ID") : "");
@@ -74,7 +86,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     biaya: 0,
   });
   // --- TANGGAL SELESAI PERBAIKAN (DIISI MANUAL OLEH USER, TIDAK OTOMATIS PAKAI WAKTU SISTEM) ---
-  const [completionDate, setCompletionDate] = useState(new Date().toISOString().split("T")[0]);
+  const [completionDate, setCompletionDate] = useState(getWitaDateStr());
   const [photoUrl, setPhotoUrl] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -119,6 +131,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
       .from("work_order_updates")
       .select("*")
       .eq("work_order_id", id)
+      .order("update_date", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) console.error("Gagal mengambil riwayat update perbaikan:", error);
@@ -142,7 +155,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     setUpdateForm({ tindak_lanjut: "", keterangan: "Dalam Proses", biaya: 0 });
     setPhotoUrl("");
     setPaymentProofUrl("");
-    setCompletionDate(new Date().toISOString().split("T")[0]);
+    setCompletionDate(getWitaDateStr());
   };
 
   const openUpdateModal = () => {
@@ -230,9 +243,9 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
       alert("Ada biaya yang dimasukkan, jadi foto bukti pembayaran/nota pembayaran wajib diunggah.");
       return;
     }
-    // --- VALIDASI: TANGGAL SELESAI WAJIB DIISI KALAU MENYELESAIKAN PERBAIKAN ---
-    if (isFinishing && !completionDate) {
-      alert("Tanggal selesai perbaikan wajib diisi.");
+    // --- VALIDASI: TANGGAL UPDATE WAJIB DIISI (SAAT MENYELESAIKAN PERBAIKAN, TANGGAL INI = TANGGAL SELESAI) ---
+    if (!completionDate) {
+      alert(isFinishing ? "Tanggal selesai perbaikan wajib diisi." : "Tanggal update wajib diisi.");
       return;
     }
 
@@ -255,6 +268,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
       proof_photo_url: photoUrl,
       payment_proof_url: paymentProofUrl || null,
       created_at: nowIso,
+      update_date: completionDate, // tanggal yang dipilih user, dipakai untuk tampilan riwayat
     }]);
 
     if (historyError) {
@@ -294,6 +308,15 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
     // --- KEMBALIKAN STATUS ASET KE BEROPERASI SAAT PERBAIKAN SELESAI ---
     if (isFinishing) {
       await supabase.from("assets").update({ status: "Beroperasi" }).eq("id", workOrder.asset_id);
+
+      // --- NOTIFIKASI HILANG OTOMATIS SAAT WORK ORDER SELESAI ---
+      // Notifikasi = laporan kerusakan (damage_reports) dengan is_read = false. Hanya WO yang
+      // diterbitkan dari laporan (punya damage_report_id) yang punya notifikasi untuk dibersihkan.
+      // Update biasa (Dalam Proses / Menunggu Part) TIDAK menyentuh notifikasi, jadi tetap
+      // muncul sampai user menandainya sendiri (centang) atau WO diselesaikan.
+      if (workOrder.damage_report_id) {
+        await supabase.from("damage_reports").update({ is_read: true }).eq("id", workOrder.damage_report_id);
+      }
     }
 
     setIsSaving(false);
@@ -444,7 +467,7 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
             >
               <div className="flex items-center justify-between border-b border-gray-100 dark:border-[#334155] pb-4">
                 <h4 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-sm">
-                  Update #{updates.length - index} — {new Date(u.created_at).toLocaleString("id-ID")}
+                  Update #{updates.length - index} — {formatTanggalUpdate(u)}
                 </h4>
                 <Badge status={u.status} />
               </div>
@@ -557,15 +580,16 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
 
           <div className="flex flex-col gap-2">
             <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">
-              Tanggal Selesai <span className="text-red-500">*</span>
+              Tanggal Update <span className="text-red-500">*</span>
             </label>
             <input
               type="date"
               value={completionDate}
+              max={getWitaDateStr()}
               onChange={(e) => setCompletionDate(e.target.value)}
               className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white font-bold"
             />
-            <span className="text-[11px] text-[#94A3B8] italic">Dipakai sebagai tanggal work order selesai kalau perbaikan ini diselesaikan sekarang.</span>
+            <span className="text-[11px] text-[#94A3B8] italic">Tanggal ini tampil di riwayat update. Kalau kamu menekan "Selesaikan Perbaikan", tanggal ini juga menjadi tanggal work order selesai.</span>
           </div>
 
           <div className="flex flex-col gap-2">

@@ -13,6 +13,9 @@ const TABS: { key: MaintenanceTabKey; label: string; href: string }[] = [
 
 interface MaintenanceTabsProps {
   active: MaintenanceTabKey;
+  // Tanggal (YYYY-MM-DD) yang sedang dipilih di kalender Pemeliharaan Pencegahan.
+  // Kalau diisi, tab "Checklist Harian" membawa tanggal ini (?date=...).
+  date?: string;
 }
 
 // Tab pill bar bersama, dipasang di:
@@ -20,7 +23,7 @@ interface MaintenanceTabsProps {
 // - /pemeliharaan/korektif (Pemeliharaan Korektif)
 // - /pemeliharaan/checklist-harian (Checklist Harian)
 // supaya user bisa berpindah antar 3 sub-modul Pemeliharaan dengan mudah.
-export default function MaintenanceTabs({ active }: MaintenanceTabsProps) {
+export default function MaintenanceTabs({ active, date }: MaintenanceTabsProps) {
   return (
     <div className="flex bg-[#E2E8F0] dark:bg-[#334155] p-1 rounded-xl w-fit max-w-full overflow-x-auto">
       {TABS.map((tab) =>
@@ -34,7 +37,7 @@ export default function MaintenanceTabs({ active }: MaintenanceTabsProps) {
         ) : (
           <Link
             key={tab.key}
-            href={tab.href}
+            href={tab.key === "checklist-harian" && date ? `${tab.href}?date=${date}` : tab.href}
             className="px-6 py-2 rounded-lg text-sm font-medium text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] whitespace-nowrap transition-colors"
           >
             {tab.label}

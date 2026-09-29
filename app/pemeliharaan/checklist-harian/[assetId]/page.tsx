@@ -1,11 +1,13 @@
 "use client";
 
-import React, { use, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, use, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, CheckCircle2, Circle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { getWitaDateStr } from "@/lib/assetSnapshot";
+import { resolveChecklistDate } from "@/lib/checklistDate";
 import {
   BCK_OPTIONS,
   NORMAL_TINDAKAN_OPTIONS,
@@ -16,14 +18,6 @@ import {
 interface AnswerState {
   value: string | null;
   tindakan: string;
-}
-
-function getTodayDateString() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 // Kelas warna tombol pilihan, dipetakan dari nilai (mis. "Baik", "Normal", dst) —
@@ -37,10 +31,11 @@ const VALUE_ACTIVE_CLASS: Record<string, string> = {
   "Tidak Normal": "bg-[#FEE2E2] dark:bg-[#EF4444]/25 border-[#EF4444] text-[#991B1B] dark:text-[#EF4444]",
 };
 
-export default function ChecklistHarianFormPage({ params }: { params: Promise<{ assetId: string }> }) {
+function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: string }> }) {
   const { assetId } = use(params);
   const router = useRouter();
   const { user } = useAuth();
+  const searchParams = useSearchParams();
 
   const [asset, setAsset] = useState<any>(null);
   const [existingChecklist, setExistingChecklist] = useState<any>(null);
@@ -51,7 +46,10 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const today = getTodayDateString();
+  // Tanggal checklist = ?date= dari URL (dibawa dari daftar / kalender Pencegahan).
+  // Kosong/tidak valid -> hari ini (WITA). Tanggal masa depan dipotong ke hari ini.
+  const { date: today, clamped } = resolveChecklistDate(searchParams.get("date"), getWitaDateStr());
+  const backHref = `/pemeliharaan/checklist-harian?date=${today}`;
   const sudahDiisi = !!existingChecklist;
   const template = getChecklistTemplate(asset?.checklist_category);
 
@@ -89,6 +87,8 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
       setPengawas(checklistData.pengawas || "");
       setKeterangan(checklistData.keterangan || "");
     } else {
+      setExistingChecklist(null);
+      setExistingItems({});
       // Siapkan state jawaban kosong sesuai template kategori aset
       const tmpl = getChecklistTemplate(assetData?.checklist_category);
       const initialAnswers: Record<string, AnswerState> = {};
@@ -106,7 +106,7 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assetId]);
+  }, [assetId, today]);
 
   const handleSetValue = (fieldKey: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [fieldKey]: { ...prev[fieldKey], value } }));
@@ -179,7 +179,7 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
     }
 
     setIsSaving(false);
-    router.push("/pemeliharaan/checklist-harian");
+    router.push(backHref);
   };
 
   if (isLoading) return <div className="p-20 text-center font-bold dark:text-white">Memuat...</div>;
@@ -187,7 +187,7 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
 
   return (
     <div className="flex flex-col gap-6 pb-10 font-poppins text-left max-w-3xl">
-      <Link href="/pemeliharaan/checklist-harian" className="flex items-center gap-1.5 text-sm font-bold text-[#94A3B8] hover:text-[#0D9488] transition-colors w-fit">
+      <Link href={backHref} className="flex items-center gap-1.5 text-sm font-bold text-[#94A3B8] hover:text-[#0D9488] transition-colors w-fit">
         <ChevronLeft size={16} /> Kembali ke Daftar Checklist Harian
       </Link>
 
@@ -198,6 +198,12 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
           {new Date(today + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
         </p>
       </div>
+
+      {clamped && (
+        <p className="text-xs font-bold text-[#F59E0B]">
+          Tanggal yang dipilih belum tiba, jadi ditampilkan hari ini. Checklist tidak bisa diisi untuk tanggal yang belum terjadi.
+        </p>
+      )}
 
       {!template ? (
         <div className="bg-white dark:bg-[#1E293B] p-10 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm text-center">
@@ -210,7 +216,7 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
           <div className="bg-[#D1FAE5] dark:bg-[#115E59]/20 border border-[#0D9488]/30 rounded-2xl px-6 py-4 flex items-center gap-3">
             <CheckCircle2 size={20} className="text-[#0D9488] flex-shrink-0" />
             <p className="text-sm font-bold text-[#065F46] dark:text-[#37BAAE]">
-              Checklist hari ini sudah diisi oleh {existingChecklist.diisi_oleh_nama}.
+              Checklist {today === getWitaDateStr() ? "hari ini" : "tanggal ini"} sudah diisi oleh {existingChecklist.diisi_oleh_nama}.
             </p>
           </div>
 
@@ -290,6 +296,15 @@ export default function ChecklistHarianFormPage({ params }: { params: Promise<{ 
         </>
       )}
     </div>
+  );
+}
+
+// Wrapper Suspense: useSearchParams wajib dibungkus agar build Next.js tidak error
+export default function ChecklistHarianFormPage(props: { params: Promise<{ assetId: string }> }) {
+  return (
+    <Suspense fallback={<div className="p-20 text-center font-bold dark:text-white">Memuat...</div>}>
+      <ChecklistHarianFormContent {...props} />
+    </Suspense>
   );
 }
 

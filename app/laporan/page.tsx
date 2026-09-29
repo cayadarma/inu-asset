@@ -5,8 +5,7 @@ import { Eye } from "lucide-react";
 import Link from "next/link";
 
 import PeriodFilter from "@/components/laporan/PeriodFilter";
-import SummaryCards from "@/components/laporan/SummaryCards";
-import AvailabilityTrend from "@/components/laporan/AvailabilityTrend";
+import AvailabilityChart from "@/components/ui/AvailabilityChart";
 import CorrectiveSection from "@/components/laporan/CorrectiveSection";
 import PreventiveSection from "@/components/laporan/PreventiveSection";
 import BukuSakitSection from "@/components/laporan/BukuSakitSection";
@@ -17,13 +16,9 @@ import FinancialTransactionTable from "@/components/laporan/FinancialTransaction
 
 import { getDefaultPeriodParams, resolvePeriod, serializePeriodParams, PeriodParams } from "@/lib/reportPeriod";
 import {
-  fetchOperationalSummary,
-  fetchAvailabilityTrend,
   fetchCorrectiveMaintenanceReport,
   fetchPreventiveMaintenanceReport,
   fetchBukuSakitReport,
-  OperationalSummary,
-  AvailabilityTrendPoint,
   CorrectiveMaintenanceReport,
   PreventiveMaintenanceReport,
   BukuSakitReport,
@@ -40,8 +35,6 @@ export default function ReportPage() {
   }, [periodParams]);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [summary, setSummary] = useState<OperationalSummary | null>(null);
-  const [trend, setTrend] = useState<AvailabilityTrendPoint[]>([]);
   const [corrective, setCorrective] = useState<CorrectiveMaintenanceReport | null>(null);
   const [preventive, setPreventive] = useState<PreventiveMaintenanceReport | null>(null);
   const [bukuSakit, setBukuSakit] = useState<BukuSakitReport | null>(null);
@@ -52,16 +45,12 @@ export default function ReportPage() {
     setIsLoading(true);
 
     Promise.all([
-      fetchOperationalSummary(period),
-      fetchAvailabilityTrend(period),
       fetchCorrectiveMaintenanceReport(period),
       fetchPreventiveMaintenanceReport(period),
       fetchBukuSakitReport(period),
       fetchFinancialReport(period),
-    ]).then(([summaryData, trendData, correctiveData, preventiveData, bukuSakitData, financialData]) => {
+    ]).then(([correctiveData, preventiveData, bukuSakitData, financialData]) => {
       if (isCancelled) return;
-      setSummary(summaryData);
-      setTrend(trendData);
       setCorrective(correctiveData);
       setPreventive(preventiveData);
       setBukuSakit(bukuSakitData);
@@ -104,8 +93,7 @@ export default function ReportPage() {
 
       {/* KONTEN LAPORAN (OPERASIONAL + KEUANGAN/MANAJEMEN DALAM SATU HALAMAN) */}
       <div className="flex flex-col gap-10">
-        <SummaryCards data={summary} isLoading={isLoading} />
-        <AvailabilityTrend data={trend} isLoading={isLoading} />
+        <AvailabilityChart range={{ startDate: period.startDate, endDate: period.endDate, label: period.label }} />
         <CorrectiveSection data={corrective} isLoading={isLoading} />
         <PreventiveSection data={preventive} isLoading={isLoading} />
         <BukuSakitSection data={bukuSakit} isLoading={isLoading} />

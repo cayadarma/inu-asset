@@ -11,6 +11,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { translateEnum } from "@/lib/i18n/enumTranslate";
 import { useDynamicTextMap } from "@/lib/i18n/useDynamicText";
 import { DictionaryKey } from "@/lib/i18n/dictionary";
+import { addDaysStr, getWitaDateStr } from "@/lib/assetSnapshot";
 
 // --- BENTUK 1 TITIK DATA DI GRAFIK ---
 // Nilai `null` = "belum ada data sama sekali" (mis. tanggal di masa depan, atau sebelum
@@ -54,8 +55,19 @@ const monthOptions = [
 const monthShort = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const dayShort = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
-const todayStr = new Date().toISOString().slice(0, 10);
-const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
+// Tanggal "hari ini" mengikuti WITA (sama dengan tanggal snapshot di cron & Dashboard).
+const todayStr = getWitaDateStr();
+// Format tanggal LOKAL (bukan toISOString, yang menggeser tanggal mundur 1 hari di zona UTC+8).
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// Kalau `range` diisi (dipakai di halaman Laporan), grafik MENGIKUTI periode Laporan:
+// filter periode internal disembunyikan, hanya filter lokasi yang tersisa.
+export interface AvailabilityChartRange {
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  label: string;     // teks keterangan periode
+}
 
 // --- Ambil SEMUA baris dari sebuah query, walau jumlahnya lebih dari batas default
 // Supabase/PostgREST (1000 baris per request). Tanpa ini, rentang tanggal panjang
@@ -81,7 +93,7 @@ async function fetchAllPages<T>(
   return allRows;
 }
 
-export default function AvailabilityChart() {
+export default function AvailabilityChart({ range }: { range?: AvailabilityChartRange }) {
   const { t, lang } = useLanguage();
   const [location, setLocation] = useState<string>(ALL_LOCATIONS); // ALL_LOCATIONS atau id lokasi
   const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
@@ -237,7 +249,25 @@ export default function AvailabilityChart() {
     const todayCapped = toDateStr(todayDate);
     let points: ChartPoint[] = [];
 
-    if (period === "Tahunan") {
+    if (range) {
+      // Mode Laporan: 1 titik per hari dari startDate s.d. endDate (dibatasi sampai hari ini WITA).
+      // Hari tanpa snapshot memakai kondisi terakhir yang diketahui (carry-forward);
+      // sebelum snapshot pertama ada -> kosong (null), bukan 0.
+      const end = range.endDate > todayCapped ? todayCapped : range.endDate;
+      if (range.startDate <= end) {
+        const [byDate, seed] = await Promise.all([fetchSnapshots(range.startDate, end), fetchSeed(range.startDate)]);
+        let carry: StatusCounts | null = seed;
+        for (let d = range.startDate; d <= end; d = addDaysStr(d, 1)) {
+          const snap = byDate.get(d);
+          if (snap) carry = snap;
+          const [, m, day] = d.split("-");
+          points.push({
+            name: lang === "en" ? `${m}/${day}` : `${day}/${m}`,
+            ...(carry ?? NULL_POINT),
+          });
+        }
+      }
+    } else if (period === "Tahunan") {
       // 12 titik (per bulan). Nilai tiap bulan diambil dari snapshot TERAKHIR yang ada di
       // bulan itu. Bulan tanpa snapshot memakai nilai bulan sebelumnya; bulan yang belum
       // terjadi dibiarkan kosong (null).
@@ -336,7 +366,7 @@ export default function AvailabilityChart() {
 
     setChartData(points);
     setIsLoading(false);
-  }, [period, selectedYear, selectedMonth, selectedWeekDate, selectedDay, customStart, customEnd, location, lang]);
+  }, [period, selectedYear, selectedMonth, selectedWeekDate, selectedDay, customStart, customEnd, location, lang, range?.startDate, range?.endDate]);
 
   useEffect(() => {
     loadChartData();
@@ -349,7 +379,7 @@ export default function AvailabilityChart() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-col gap-1">
           <h3 className="text-[11px] font-black text-[#94A3B8] uppercase tracking-[0.2em]">{t("availChart.trenKetersediaan")}</h3>
-          <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("availChart.monitoringStatus", { period: periodLabel(period) })}</p>
+          <p className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("availChart.monitoringStatus", { period: periodLabel(range ? "Harian" : period) })}</p>
           <p className="text-[#94A3B8] text-xs">{t("availChart.jumlahAsetKondisi")}</p>
         </div>
 
@@ -370,6 +400,8 @@ export default function AvailabilityChart() {
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
           </div>
 
+          {!range && (
+          <>
           {/* Filter Jenis Periode */}
           <div className="relative flex-1 md:flex-none">
             <select
@@ -459,16 +491,19 @@ export default function AvailabilityChart() {
               />
             </div>
           )}
+          </>
+          )}
         </div>
       </div>
 
       {/* KETERANGAN RENTANG YANG SEDANG DIPILIH */}
       <div className="text-xs font-bold text-[#0D9488] -mt-4">
-        {period === "Tahunan" && t("availChart.menampilkanTahun", { year: selectedYear })}
-        {period === "Bulanan" && t("availChart.menampilkanBulan", { month: monthLabel(selectedMonth), year: new Date().getFullYear() })}
-        {period === "Mingguan" && t("availChart.menampilkanMinggu", { start: formatTanggal(getWeekStart(selectedWeekDate)), end: formatTanggal(getWeekEnd(selectedWeekDate)) })}
-        {period === "Harian" && t("availChart.menampilkanTanggal", { date: formatTanggal(new Date(selectedDay + "T00:00:00")) })}
-        {period === "Custom" && t("availChart.menampilkanRentang", { start: formatTanggal(new Date(customStart + "T00:00:00")), end: formatTanggal(new Date(customEnd + "T00:00:00")) })}
+        {range && range.label}
+        {!range && period === "Tahunan" && t("availChart.menampilkanTahun", { year: selectedYear })}
+        {!range && period === "Bulanan" && t("availChart.menampilkanBulan", { month: monthLabel(selectedMonth), year: new Date().getFullYear() })}
+        {!range && period === "Mingguan" && t("availChart.menampilkanMinggu", { start: formatTanggal(getWeekStart(selectedWeekDate)), end: formatTanggal(getWeekEnd(selectedWeekDate)) })}
+        {!range && period === "Harian" && t("availChart.menampilkanTanggal", { date: formatTanggal(new Date(selectedDay + "T00:00:00")) })}
+        {!range && period === "Custom" && t("availChart.menampilkanRentang", { start: formatTanggal(new Date(customStart + "T00:00:00")), end: formatTanggal(new Date(customEnd + "T00:00:00")) })}
       </div>
 
       {/* 2. AREA GRAFIK -- DATA ASLI DARI asset_status_snapshots */}
