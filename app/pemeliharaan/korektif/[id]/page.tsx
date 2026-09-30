@@ -12,6 +12,7 @@ import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
 import { getWitaDateStr } from "@/lib/assetSnapshot";
+import { fireNotification } from "@/lib/notifyClient";
 
 interface WorkOrder {
   id: string;
@@ -305,6 +306,9 @@ export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: 
       setIsSaving(false);
       return;
     }
+
+    // Email update WO ke administrator/super_admin + pengawas yang dipilih di WO ini
+    fireNotification("work_order_update", id);
 
     // --- KEMBALIKAN STATUS ASET KE BEROPERASI SAAT PERBAIKAN SELESAI ---
     if (isFinishing) {

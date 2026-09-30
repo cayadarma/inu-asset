@@ -7,6 +7,7 @@ import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import { supabase } from "@/lib/supabase";
 import imageCompression from "browser-image-compression";
+import { fireNotification } from "@/lib/notifyClient";
 
 interface StockItem {
   id: string;
@@ -184,6 +185,7 @@ export default function StockPage() {
     if (error) {
       alert("Gagal menyimpan item: " + error.message);
     } else {
+      if ((addForm.qty || 0) <= (addForm.min_stock || 5)) fireNotification("low_stock", newId);
       setIsAddModalOpen(false);
       resetAddForm();
       fetchData();

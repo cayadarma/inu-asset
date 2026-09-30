@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/context/LanguageContext";
 import { translateEnum } from "@/lib/i18n/enumTranslate";
 import { useDynamicTextMap } from "@/lib/i18n/useDynamicText";
+import { fireNotification } from "@/lib/notifyClient";
 
 // Urgensi tersimpan di DB dalam Bahasa Indonesia (nilai tetap), label ditampilkan via translateEnum
 const URGENCY_OPTIONS = ["Berat (Mati Total)", "Sedang", "Ringan"];
@@ -114,17 +115,18 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
         }
       }
 
-      const { error: reportError } = await supabase.from("damage_reports").insert([{
+      const { data: newReport, error: reportError } = await supabase.from("damage_reports").insert([{
         asset_id: reportData.asset_id,
         reporter_name: reportData.reporter_name,
         issue_title: reportData.issue_title,
         description: reportData.description,
         urgency: reportData.urgency,
         image_url: finalImageUrl
-      }]);
+      }]).select("id").single();
 
       if (!reportError) {
         await supabase.from("assets").update({ status: "Rusak" }).eq("id", reportData.asset_id);
+        fireNotification("damage_report", newReport?.id); // email ke administrator/super_admin
         alert(t("bukuSakit.assetList.alertLaporanTerkirim"));
         setIsBrokenModalOpen(false);
         setImagePreview(null);

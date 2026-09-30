@@ -8,6 +8,7 @@ import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
 import imageCompression from "browser-image-compression";
+import { fireNotification } from "@/lib/notifyClient";
 
 interface StockItem {
   id: string;
@@ -234,6 +235,14 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
       setIsSaving(false);
       return;
     }
+
+    // Email stok menipis/habis: hanya saat stok BARU melewati batas (dari aman -> menipis/habis),
+    // bukan setiap kali stok berubah, supaya tidak spam.
+    const wasLow = item.qty <= item.min_stock;
+    const isLowNow = newQty <= item.min_stock;
+    if (isLowNow && !wasLow) fireNotification("low_stock", item.id);
+    // Sudah menipis lalu jadi habis (0) juga dikabarkan sekali
+    else if (isLowNow && item.qty > 0 && newQty <= 0) fireNotification("low_stock", item.id);
 
     setIsSaving(false);
     setIsAdjustModalOpen(false);
