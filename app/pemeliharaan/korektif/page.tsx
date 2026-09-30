@@ -10,6 +10,8 @@ import MaintenanceTabs from "@/components/maintenance/MaintenanceTabs";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import UserMultiSelect, { type SelectableUser } from "@/components/ui/UserMultiSelect";
+import { fireNotification } from "@/lib/notifyClient";
 
 function CorrectiveContent() {
   const searchParams = useSearchParams();
@@ -27,6 +29,7 @@ function CorrectiveContent() {
   const [workOrders, setWorkOrders] = useState<any[]>([]);
   const [assetsList, setAssetsList] = useState<any[]>([]);
   const [locationsList, setLocationsList] = useState<any[]>([]);
+  const [usersList, setUsersList] = useState<SelectableUser[]>([]); // kandidat pengawas (nama + email dari tabel users)
 
   // --- STATE SEARCH & FILTER ---
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,7 +45,7 @@ function CorrectiveContent() {
     asset_id: "",
     trouble: "",
     jenis_barang: "", 
-    pengawas: "", // Sekarang menampung teks bebas
+    pengawas_ids: [] as string[], // id user pengawas terpilih (dropdown pilihan ganda) — hanya mereka yang dapat email
     oleh: "",     // Sekarang menampung teks bebas
     priority: "TINGGI",
     costPart: 0,
@@ -187,6 +190,9 @@ function CorrectiveContent() {
       // 3. Aset langsung berstatus "Perbaikan" saat itu juga, dari status apa pun sebelumnya
       await supabase.from("assets").update({ status: "Perbaikan" }).eq("id", emergencyForm.asset_id);
 
+      // Satu email gabungan "Perbaikan mendadak" ke admin + operator (laporan kerusakan otomatis di atas TIDAK dikirim terpisah)
+      fireNotification("emergency", woId);
+
       alert("Perbaikan mendadak berhasil dicatat!");
       setIsEmergencyModalOpen(false);
       resetEmergencyForm();
@@ -205,6 +211,15 @@ function CorrectiveContent() {
     const { data: woData, error: woError } = await supabase.from("work_orders").select(`*, assets(name, type, location_id, locations(name))`).order("created_at", { ascending: false });
     const { data: assetData, error: assetError } = await supabase.from("assets").select("id, name, type").eq("is_active", true);
     const { data: locationData, error: locationError } = await supabase.from("locations").select("id, name").order("name", { ascending: true });
+    // Kandidat pengawas: user aktif selain role "manajemen" (manajemen tidak menerima notifikasi apa pun)
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("id, name, email, role, status")
+      .eq("status", "active")
+      .neq("role", "manajemen")
+      .order("name", { ascending: true });
+    if (userError) console.error("Gagal mengambil daftar user:", userError);
+    if (userData) setUsersList(userData as SelectableUser[]);
 
     if (woError) {
       console.error("Gagal mengambil daftar Work Order:", woError);
@@ -268,14 +283,18 @@ function CorrectiveContent() {
       damagePhotoUrl = publicUrl;
     }
 
+    const newWoId = formData.id || `WO-${Date.now().toString().slice(-4)}`;
+    const pengawasTerpilih = usersList.filter((u) => formData.pengawas_ids.includes(u.id));
+
     const { error } = await supabase.from("work_orders").insert([{
-      id: formData.id || `WO-${Date.now().toString().slice(-4)}`,
+      id: newWoId,
       tgl: formData.tgl,
       kategori: formData.kategori,
       asset_id: formData.asset_id,
       trouble: formData.trouble,
       tech_name: formData.oleh,
-      supervisor: formData.pengawas,
+      supervisor: pengawasTerpilih.map((u) => u.name).join(", "), // teks nama (dipakai laporan/detail)
+      supervisor_ids: formData.pengawas_ids, // id user pengawas (penerima email)
       priority: formData.priority,
       cost_part: formData.costPart,
       cost_service: formData.costService,
@@ -288,6 +307,8 @@ function CorrectiveContent() {
 
     if (!error) {
       await supabase.from("assets").update({ status: "Perbaikan" }).eq("id", formData.asset_id);
+      fireNotification("work_order_created", newWoId);
+      setFormData((prev) => ({ ...prev, pengawas_ids: [] }));
       setIsAddModalOpen(false);
       fetchData();
     } else {
@@ -522,13 +543,13 @@ function CorrectiveContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <div className="flex flex-col gap-2">
                   <label className="text-sm font-bold text-[#0F172A] dark:text-white uppercase tracking-wider">Pengawas (PENGAWAS)</label>
-                  <input 
-                    type="text" 
-                    placeholder="Contoh: Ariawan, Sujana" 
-                    value={formData.pengawas}
-                    onChange={e => setFormData({...formData, pengawas: e.target.value})}
-                    className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white" 
+                  <UserMultiSelect
+                    users={usersList}
+                    value={formData.pengawas_ids}
+                    onChange={(ids) => setFormData({ ...formData, pengawas_ids: ids })}
+                    placeholder="Pilih satu atau lebih pengawas..."
                   />
+                  <span className="text-[11px] text-[#94A3B8] italic">Hanya pengawas yang dipilih yang menerima email Work Order ini.</span>
                </div>
                <div className="flex flex-col gap-2">
                   <label className="text-sm text-[#0F172A] dark:text-white uppercase tracking-wider">Pelaksana (OLEH)</label>

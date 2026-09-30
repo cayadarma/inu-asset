@@ -16,6 +16,7 @@ import Pagination from "@/components/ui/Pagination"; // Pastikan file ini sudah 
 import { useLanguage } from "@/context/LanguageContext";
 import { translateEnum } from "@/lib/i18n/enumTranslate";
 import { useDynamicText, useDynamicTextMap } from "@/lib/i18n/useDynamicText";
+import { fireNotification } from "@/lib/notifyClient";
 
 // Urgensi tersimpan di DB dalam Bahasa Indonesia (nilai tetap), label ditampilkan via translateEnum
 const URGENCY_OPTIONS = ["Berat (Mati Total)", "Sedang", "Ringan"];
@@ -129,7 +130,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
         finalImageUrl = publicUrl;
       }
     }
-    const { error } = await supabase.from("damage_reports").insert([{
+    const { data: newReport, error } = await supabase.from("damage_reports").insert([{
       asset_id: id,
       reporter_name: reportData.reporter_name,
       incident_date: reportData.incident_date,
@@ -137,10 +138,11 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
       description: reportData.description,
       urgency: reportData.urgency,
       image_url: finalImageUrl
-    }]);
+    }]).select("id").single();
 
     if (!error) {
       await supabase.from("assets").update({ status: "Rusak" }).eq("id", id);
+      fireNotification("damage_report", newReport?.id); // email ke administrator/super_admin
       alert(t("bukuSakit.detail.alertLaporanDisimpan"));
       setIsRecordModalOpen(false);
       setImagePreview(null);
