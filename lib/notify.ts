@@ -68,6 +68,31 @@ async function fetchRecipients(opts: { roles?: Role[]; ids?: string[] }): Promis
   return Array.from(found.values());
 }
 
+
+type NotifyResult = SendResult & { debug?: unknown };
+
+// Penjelasan per pengawas: kenapa dia menerima / tidak menerima email (untuk debugging di DevTools)
+async function explainSupervisors(ids: string[]) {
+  if (ids.length === 0) {
+    return ["supervisor_ids KOSONG di Work Order ini (pengawas tidak tersimpan, atau tidak ada yang dipilih)"];
+  }
+  const { data } = await supabaseAdmin
+    .from("users")
+    .select("id, name, email, role, status, notification_settings")
+    .in("id", ids);
+  const byId = new Map((data || []).map((u: any) => [String(u.id), u]));
+  return ids.map((id) => {
+    const u: any = byId.get(String(id));
+    if (!u) return `${id}: TIDAK ditemukan di tabel users`;
+    let why = "OK, dapat email";
+    if (u.status !== "active") why = `TIDAK dapat: status "${u.status}" (bukan active)`;
+    else if (!u.email || !EMAIL_RE.test(String(u.email).trim())) why = "TIDAK dapat: email kosong/tidak valid";
+    else if (u.notification_settings?.notifEmail === false) why = "TIDAK dapat: toggle Notifikasi Email dimatikan";
+    else if (u.role === "manajemen") why = "TIDAK dapat: role manajemen tidak menerima notifikasi";
+    return `${u.name} <${u.email || "-"}> [${u.role}]: ${why}`;
+  });
+}
+
 async function send(messages: EmailMessage[]): Promise<SendResult> {
   return sendEmails(messages);
 }
@@ -112,7 +137,7 @@ export async function notifyDamageReport(reportId: string): Promise<SendResult> 
 // ---------------------------------------------------------------------------
 // 2. Work Order baru diterbitkan -> admin + pengawas terpilih
 // ---------------------------------------------------------------------------
-export async function notifyWorkOrderCreated(woId: string): Promise<SendResult> {
+export async function notifyWorkOrderCreated(woId: string): Promise<NotifyResult> {
   const { data: wo } = await supabaseAdmin
     .from("work_orders")
     .select("id, tgl, kategori, trouble, tech_name, supervisor, supervisor_ids, priority, tindak_lanjut, issued_by, assets(name, locations(name))")
@@ -143,19 +168,27 @@ export async function notifyWorkOrderCreated(woId: string): Promise<SendResult> 
       buttonUrl: link(`/pemeliharaan/korektif/${encodeURIComponent(wo.id)}`),
     });
 
-  return send(
+  const res = await send(
     recipients.map((u) => ({
       to: u.email,
       subject: `Work Order baru ${wo.id}: ${wo.trouble || ""}`.trim(),
       html: make(supervisorIds.includes(u.id)),
     }))
   );
+  return {
+    ...res,
+    debug: {
+      supervisor_ids_tersimpan: supervisorIds,
+      pengawas: await explainSupervisors(supervisorIds),
+      penerima: recipients.map((u) => `${u.name} <${u.email}> [${u.role}]${supervisorIds.includes(u.id) ? " (pengawas)" : ""}`),
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
 // 3. Update Work Order -> admin + pengawas terpilih
 // ---------------------------------------------------------------------------
-export async function notifyWorkOrderUpdate(woId: string): Promise<SendResult> {
+export async function notifyWorkOrderUpdate(woId: string): Promise<NotifyResult> {
   const { data: wo } = await supabaseAdmin
     .from("work_orders")
     .select("id, trouble, status, supervisor, supervisor_ids, actual_cost, assets(name, locations(name))")
@@ -190,13 +223,21 @@ export async function notifyWorkOrderUpdate(woId: string): Promise<SendResult> {
     buttonUrl: link(`/pemeliharaan/korektif/${encodeURIComponent(wo.id)}`),
   });
 
-  return send(
+  const res = await send(
     recipients.map((u) => ({
       to: u.email,
       subject: `${finished ? "WO selesai" : "Update WO"} ${wo.id}: ${upd?.status || wo.status || ""}`.trim(),
       html,
     }))
   );
+  return {
+    ...res,
+    debug: {
+      supervisor_ids_tersimpan: supervisorIds,
+      pengawas: await explainSupervisors(supervisorIds),
+      penerima: recipients.map((u) => `${u.name} <${u.email}> [${u.role}]${supervisorIds.includes(u.id) ? " (pengawas)" : ""}`),
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
