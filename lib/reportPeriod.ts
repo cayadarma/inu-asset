@@ -1,9 +1,7 @@
 // lib/reportPeriod.ts
 //
 // Helper filter periode reusable untuk halaman Laporan.
-// Mengikuti pola yang SUDAH ADA di components/ui/AvailabilityChart.tsx
-// (getWeekStart, getWeekEnd, opsi periode Harian/Mingguan/Bulanan/Tahunan/Custom),
-// supaya konsisten dengan komponen dashboard yang sudah dibuat sebelumnya.
+// Opsi periode Harian/Mingguan/Bulanan/Tahunan/Custom; minggu dimulai hari Minggu.
 
 export type PeriodMode = "Harian" | "Mingguan" | "Bulanan" | "Tahunan" | "Custom";
 
@@ -22,7 +20,7 @@ export function toDateStr(d: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// --- Sama persis dengan logic di AvailabilityChart.tsx: minggu dimulai hari Minggu ---
+// --- Minggu dimulai hari Minggu ---
 export function getWeekStart(dateStr: string): Date {
   const date = new Date(dateStr + "T00:00:00");
   const day = date.getDay(); // 0 = Minggu
