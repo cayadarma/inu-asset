@@ -171,6 +171,55 @@ function ChecklistHarianListContent() {
     return true;
   });
 
+  // --- CARI SEMUA ASET (level 1): cocokkan kode, nama, tipe, atau nama lokasi tanpa harus memilih lokasi dulu ---
+  const globalQuery = search.trim().toLowerCase();
+  const isGlobalSearching = !selectedGroup && globalQuery !== "";
+  const globalResults = isGlobalSearching
+    ? assets.filter(
+        (asset) =>
+          asset.id.toLowerCase().includes(globalQuery) ||
+          asset.name.toLowerCase().includes(globalQuery) ||
+          asset.type?.toLowerCase().includes(globalQuery) ||
+          asset.locations?.name?.toLowerCase().includes(globalQuery)
+      )
+    : [];
+
+  // Satu baris aset (dipakai di hasil pencarian semua aset dan di daftar aset per lokasi)
+  const renderAssetRow = (asset: AssetRow, showLocation: boolean) => {
+    const sudahDiisi = filledAssetIds.has(asset.id);
+    return (
+      <Link
+        key={asset.id}
+        href={`/pemeliharaan/checklist-harian/${asset.id}?date=${date}`}
+        className="flex items-center justify-between gap-4 px-6 py-5 border-b border-gray-50 dark:border-[#334155] last:border-0 hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-all group"
+      >
+        <div className="flex flex-col gap-1">
+          <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px] group-hover:text-[#0D9488] transition-colors">
+            {asset.id} - {asset.name}
+          </span>
+          <span className="text-xs text-[#94A3B8] font-medium">
+            {asset.type}
+            {showLocation && asset.locations?.name && (
+              <>
+                {" • "}
+                <LocationTitle name={asset.locations.name} />
+              </>
+            )}
+          </span>
+        </div>
+        {sudahDiisi ? (
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap bg-[#D1FAE5] dark:bg-[#115E59]/30 text-[#065F46] dark:text-[#37BAAE]">
+            <ClipboardCheck size={13} /> Sudah Diisi
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap bg-[#FEE2E2] dark:bg-[#EF4444]/20 text-[#991B1B] dark:text-[#EF4444]">
+            <ClipboardX size={13} /> Belum Diisi
+          </span>
+        )}
+      </Link>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-6 pb-10 font-poppins text-left">
       {/* Header */}
@@ -235,40 +284,71 @@ function ChecklistHarianListContent() {
       {isLoading ? (
         <p className="p-10 text-center text-sm text-secondary italic">Memuat...</p>
       ) : !selectedGroup ? (
-        /* LEVEL 1: PILIH LOKASI */
+        /* LEVEL 1: CARI SEMUA ASET / PILIH LOKASI */
         <div className="flex flex-col gap-4">
-          <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">Pilih Lokasi</span>
-          {locationGroups.length === 0 ? (
-            <p className="p-10 text-center text-sm text-secondary italic bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155]">
-              Belum ada aset dengan Kategori Checklist.
-            </p>
+          {/* Cari semua aset tanpa harus klik lokasi dulu */}
+          <div className="relative">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cari semua aset: kode, nama, tipe, atau lokasi..."
+              className="w-full pl-11 pr-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary bg-white dark:bg-[#1E293B] font-medium text-[#0F172A] dark:text-white"
+            />
+          </div>
+
+          {isGlobalSearching ? (
+            <>
+              <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">
+                Hasil Pencarian ({globalResults.length})
+              </span>
+              <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm overflow-hidden">
+                {globalResults.length === 0 ? (
+                  <p className="p-10 text-center text-sm text-secondary italic">Tidak ada aset yang cocok.</p>
+                ) : (
+                  globalResults.map((asset) => renderAssetRow(asset, true))
+                )}
+              </div>
+            </>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {locationGroups.map((group) => (
-                <LocationCard
-                  key={group.id}
-                  name={group.name}
-                  total={group.assets.length}
-                  belum={group.assets.filter((a) => !filledAssetIds.has(a.id)).length}
-                  href={buildUrl(date, group.id)}
-                />
-              ))}
-            </div>
+            <>
+              <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">Pilih Lokasi</span>
+              {locationGroups.length === 0 ? (
+                <p className="p-10 text-center text-sm text-secondary italic bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155]">
+                  Belum ada aset dengan Kategori Checklist.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {locationGroups.map((group) => (
+                    <LocationCard
+                      key={group.id}
+                      name={group.name}
+                      total={group.assets.length}
+                      belum={group.assets.filter((a) => !filledAssetIds.has(a.id)).length}
+                      href={buildUrl(date, group.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : (
         /* LEVEL 2: DAFTAR ASET DI LOKASI TERPILIH */
         <>
-          <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-4">
             <Link
               href={buildUrl(date)}
-              className="flex items-center gap-1.5 text-sm font-bold text-[#94A3B8] hover:text-[#0D9488] transition-colors w-fit"
+              className="flex items-center gap-1.5 text-sm font-bold text-[#94A3B8] hover:text-[#0D9488] transition-colors w-fit shrink-0"
             >
               <ChevronLeft size={16} /> Semua Lokasi
             </Link>
-            <h2 className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC] uppercase tracking-tight flex items-center gap-2">
-              <MapPin size={18} className="text-[#0D9488]" />
-              <LocationTitle name={selectedGroup.name} />
+            <h2 className="text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC] uppercase tracking-tight flex items-center gap-2 text-right min-w-0">
+              <MapPin size={18} className="text-[#0D9488] shrink-0" />
+              <span className="truncate">
+                <LocationTitle name={selectedGroup.name} />
+              </span>
             </h2>
           </div>
 
@@ -306,32 +386,7 @@ function ChecklistHarianListContent() {
             {filteredAssets.length === 0 ? (
               <p className="p-10 text-center text-sm text-secondary italic">Tidak ada aset yang cocok.</p>
             ) : (
-              filteredAssets.map((asset) => {
-                const sudahDiisi = filledAssetIds.has(asset.id);
-                return (
-                  <Link
-                    key={asset.id}
-                    href={`/pemeliharaan/checklist-harian/${asset.id}?date=${date}`}
-                    className="flex items-center justify-between gap-4 px-6 py-5 border-b border-gray-50 dark:border-[#334155] last:border-0 hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-all group"
-                  >
-                    <div className="flex flex-col gap-1">
-                      <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-[15px] group-hover:text-[#0D9488] transition-colors">
-                        {asset.id} - {asset.name}
-                      </span>
-                      <span className="text-xs text-[#94A3B8] font-medium">{asset.type}</span>
-                    </div>
-                    {sudahDiisi ? (
-                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap bg-[#D1FAE5] dark:bg-[#115E59]/30 text-[#065F46] dark:text-[#37BAAE]">
-                        <ClipboardCheck size={13} /> Sudah Diisi
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap bg-[#FEE2E2] dark:bg-[#EF4444]/20 text-[#991B1B] dark:text-[#EF4444]">
-                        <ClipboardX size={13} /> Belum Diisi
-                      </span>
-                    )}
-                  </Link>
-                );
-              })
+              filteredAssets.map((asset) => renderAssetRow(asset, false))
             )}
           </div>
         </>

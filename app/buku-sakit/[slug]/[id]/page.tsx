@@ -17,6 +17,8 @@ import { useLanguage } from "@/context/LanguageContext";
 import { translateEnum } from "@/lib/i18n/enumTranslate";
 import { useDynamicText, useDynamicTextMap } from "@/lib/i18n/useDynamicText";
 import { fireNotification } from "@/lib/notifyClient";
+import HistoryCheckbox from "@/components/ui/HistoryCheckbox";
+import { isOldIncident } from "@/lib/damageReportHistory";
 
 // Urgensi tersimpan di DB dalam Bahasa Indonesia (nilai tetap), label ditampilkan via translateEnum
 const URGENCY_OPTIONS = ["Berat (Mati Total)", "Sedang", "Ringan"];
@@ -25,6 +27,8 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
   const { slug, id } = use(params);
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  // Kotak "Data lama (riwayat)" hanya untuk administrator & super_admin. Operator memakai alur biasa (selalu email + status aset berubah).
+  const canMarkHistory = user?.role === "administrator" || user?.role === "super_admin";
   const isOperator = user?.role === "operator";
   const { t, lang } = useLanguage();
   const dateLocale = lang === "en" ? "en-US" : "id-ID";
@@ -38,6 +42,9 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
   const [maintenanceReports, setMaintenanceReports] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingReport, setIsSavingReport] = useState(false);
+  // "Data lama (riwayat)": otomatis tercentang kalau tanggal kejadian sudah lewat; bisa diubah manual
+  const [isHistory, setIsHistory] = useState(false);
+  const [historyTouched, setHistoryTouched] = useState(false);
   const [activeTab, setActiveTab] = useState<"gangguan" | "pemeliharaan">("gangguan");
 
   // --- 1. TAMBAHKAN STATE PAGINATION DI SINI (AGAR TIDAK MERAH) ---
@@ -141,12 +148,17 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
     }]).select("id").single();
 
     if (!error) {
-      await supabase.from("assets").update({ status: "Rusak" }).eq("id", id);
-      fireNotification("damage_report", newReport?.id); // email ke administrator/super_admin
+      // Data riwayat: status aset TIDAK diubah dan email TIDAK dikirim
+      if (!(canMarkHistory && isHistory)) {
+        await supabase.from("assets").update({ status: "Rusak" }).eq("id", id);
+        fireNotification("damage_report", newReport?.id); // email ke administrator/super_admin
+      }
       alert(t("bukuSakit.detail.alertLaporanDisimpan"));
       setIsRecordModalOpen(false);
       setImagePreview(null);
       setReportData({ urgency: "Sedang", reporter_name: user?.name || "", incident_date: "", issue_title: "", description: "" });
+      setIsHistory(false);
+      setHistoryTouched(false);
       fetchData();
     } else {
       alert(t("bukuSakit.detail.gagalMenyimpanLaporan", { message: error.message }));
@@ -323,11 +335,12 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                     required 
                     type="date" 
                     value={reportData.incident_date}
-                    onChange={(e) => setReportData({...reportData, incident_date: e.target.value})}
+                    onChange={(e) => { const v = e.target.value; setReportData({...reportData, incident_date: v}); if (canMarkHistory && !historyTouched) setIsHistory(isOldIncident(v)); }}
                     className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white font-bold" 
                 />
               </div>
             </div>
+            {canMarkHistory && <HistoryCheckbox checked={isHistory} autoDetected={!historyTouched} onChange={(v) => { setHistoryTouched(true); setIsHistory(v); }} />}
             <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.judulMasalah")}</label><input required type="text" value={reportData.issue_title} onChange={(e) => setReportData({...reportData, issue_title: e.target.value})} placeholder={t("bukuSakit.common.judulMasalahPlaceholder")} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
             <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.detail.kronologi")}</label><textarea rows={3} value={reportData.description} onChange={(e) => setReportData({...reportData, description: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white"></textarea></div>
           </div>

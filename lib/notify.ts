@@ -140,10 +140,11 @@ export async function notifyDamageReport(reportId: string): Promise<SendResult> 
 export async function notifyWorkOrderCreated(woId: string): Promise<NotifyResult> {
   const { data: wo } = await supabaseAdmin
     .from("work_orders")
-    .select("id, tgl, kategori, trouble, tech_name, supervisor, supervisor_ids, priority, tindak_lanjut, issued_by, assets(name, locations(name))")
+    .select("id, tgl, kategori, trouble, tech_name, supervisor, supervisor_ids, priority, tindak_lanjut, issued_by, is_history, assets(name, locations(name))")
     .eq("id", woId)
     .maybeSingle();
   if (!wo) return { sent: 0, failed: 0, errors: [], skipped: "Work Order tidak ditemukan" };
+  if (wo.is_history) return { sent: 0, failed: 0, errors: [], skipped: "Work Order riwayat (is_history) tidak mengirim email" };
 
   const supervisorIds: string[] = Array.isArray(wo.supervisor_ids) ? wo.supervisor_ids : [];
   const recipients = await fetchRecipients({ roles: ADMIN_ROLES, ids: supervisorIds });
@@ -191,10 +192,11 @@ export async function notifyWorkOrderCreated(woId: string): Promise<NotifyResult
 export async function notifyWorkOrderUpdate(woId: string): Promise<NotifyResult> {
   const { data: wo } = await supabaseAdmin
     .from("work_orders")
-    .select("id, trouble, status, supervisor, supervisor_ids, actual_cost, assets(name, locations(name))")
+    .select("id, trouble, status, supervisor, supervisor_ids, actual_cost, is_history, assets(name, locations(name))")
     .eq("id", woId)
     .maybeSingle();
   if (!wo) return { sent: 0, failed: 0, errors: [], skipped: "Work Order tidak ditemukan" };
+  if (wo.is_history) return { sent: 0, failed: 0, errors: [], skipped: "Work Order riwayat (is_history) tidak mengirim email" };
 
   const { data: upd } = await supabaseAdmin
     .from("work_order_updates")
@@ -246,10 +248,11 @@ export async function notifyWorkOrderUpdate(woId: string): Promise<NotifyResult>
 export async function notifyEmergencyRepair(woId: string): Promise<SendResult> {
   const { data: wo } = await supabaseAdmin
     .from("work_orders")
-    .select("id, tgl, trouble, tech_name, tindak_lanjut, issued_by, assets(name, locations(name))")
+    .select("id, tgl, trouble, tech_name, tindak_lanjut, issued_by, is_history, assets(name, locations(name))")
     .eq("id", woId)
     .maybeSingle();
   if (!wo) return { sent: 0, failed: 0, errors: [], skipped: "Work Order tidak ditemukan" };
+  if (wo.is_history) return { sent: 0, failed: 0, errors: [], skipped: "Work Order riwayat (is_history) tidak mengirim email" };
 
   const recipients = await fetchRecipients({ roles: [...ADMIN_ROLES, "operator"] });
   const html = renderEmail({

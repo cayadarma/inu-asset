@@ -7,6 +7,7 @@ import { ChevronLeft, CheckCircle2, Circle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { getWitaDateStr } from "@/lib/assetSnapshot";
+import UserMultiSelect, { type SelectableUser } from "@/components/ui/UserMultiSelect";
 import { resolveChecklistDate } from "@/lib/checklistDate";
 import {
   BCK_OPTIONS,
@@ -41,7 +42,10 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
   const [existingChecklist, setExistingChecklist] = useState<any>(null);
   const [existingItems, setExistingItems] = useState<Record<string, { field_label: string; field_type: string; value: string | null; tindakan: string | null }>>({});
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
-  const [pengawas, setPengawas] = useState("");
+  const [pelaksana, setPelaksana] = useState(""); // default: nama akun yang login, bisa diubah
+  const [pengawasIds, setPengawasIds] = useState<string[]>([]); // pengawas terpilih (boleh lebih dari satu)
+  const [usersList, setUsersList] = useState<SelectableUser[]>([]);
+  const [unmatchedPengawas, setUnmatchedPengawas] = useState(""); // nama pengawas bawaan aset yang bukan user terdaftar
   const [keterangan, setKeterangan] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,7 +61,7 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
   const fetchData = async () => {
     setIsLoading(true);
 
-    const [{ data: assetData }, { data: checklistData }] = await Promise.all([
+    const [{ data: assetData }, { data: checklistData }, { data: userData }] = await Promise.all([
       supabase
         .from("assets")
         .select("id, name, type, location_id, checklist_category, checklist_pengawas")
@@ -69,7 +73,17 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
         .eq("asset_id", assetId)
         .eq("tanggal", today)
         .maybeSingle(),
+      // Kandidat pengawas: user aktif selain role "manajemen" (nama + email), sama seperti di Work Order
+      supabase
+        .from("users")
+        .select("id, name, email, role, status")
+        .eq("status", "active")
+        .neq("role", "manajemen")
+        .order("name", { ascending: true }),
     ]);
+
+    const users = (userData || []) as SelectableUser[];
+    setUsersList(users);
 
     if (assetData) setAsset(assetData);
 
@@ -85,7 +99,6 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
         };
       });
       setExistingItems(itemsMap);
-      setPengawas(checklistData.pengawas || "");
       setKeterangan(checklistData.keterangan || "");
     } else {
       setExistingChecklist(null);
@@ -97,7 +110,21 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
         initialAnswers[f.key] = { value: null, tindakan: "" };
       });
       setAnswers(initialAnswers);
-      setPengawas(assetData?.checklist_pengawas || "");
+      // Pengawas bawaan aset (teks, dipisah koma) dicocokkan ke user terdaftar berdasarkan nama
+      const defaultNames = String(assetData?.checklist_pengawas || "")
+        .split(",")
+        .map((n: string) => n.trim())
+        .filter(Boolean);
+      const matchedIds: string[] = [];
+      const unmatched: string[] = [];
+      defaultNames.forEach((n: string) => {
+        const u = users.find((x) => x.name.trim().toLowerCase() === n.toLowerCase());
+        if (u) matchedIds.push(u.id);
+        else unmatched.push(n);
+      });
+      setPengawasIds(matchedIds);
+      setUnmatchedPengawas(unmatched.join(", "));
+      setPelaksana(user?.name || "");
       setKeterangan("");
     }
 
@@ -145,7 +172,9 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
         tanggal: today,
         diisi_oleh_id: user.id,
         diisi_oleh_nama: user.name,
-        pengawas: pengawas.trim() || null,
+        pelaksana: pelaksana.trim() || user.name || null,
+        // Teks nama pengawas (dipisah koma) supaya laporan/tampilan lama tetap kompatibel
+        pengawas: usersList.filter((u) => pengawasIds.includes(u.id)).map((u) => u.name).join(", ") || null,
         keterangan: keterangan.trim() || null,
       })
       .select()
@@ -222,7 +251,8 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
           </div>
 
           <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm overflow-hidden">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 px-6 py-5 border-b border-gray-50 dark:border-[#334155]">
+            <div className="flex flex-col gap-4 px-6 py-5 border-b border-gray-50 dark:border-[#334155]">
+              <DetailItem label="Pelaksana" val={existingChecklist.pelaksana || existingChecklist.diisi_oleh_nama} />
               <DetailItem label="Pengawas" val={existingChecklist.pengawas} />
               <DetailItem label="Keterangan" val={existingChecklist.keterangan} />
             </div>
@@ -248,14 +278,29 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
         <>
           <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm p-6 flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pengawas</label>
+              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pelaksana</label>
               <input
                 type="text"
-                value={pengawas}
-                onChange={(e) => setPengawas(e.target.value)}
-                placeholder="Nama pengawas"
+                value={pelaksana}
+                onChange={(e) => setPelaksana(e.target.value)}
+                placeholder="Nama pelaksana"
                 className="px-4 py-2.5 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary bg-white dark:bg-[#0F172A] font-medium text-[#0F172A] dark:text-white"
               />
+              <span className="text-[11px] text-[#94A3B8] italic">Otomatis terisi nama akun yang login, bisa diubah.</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Pengawas</label>
+              <UserMultiSelect
+                users={usersList}
+                value={pengawasIds}
+                onChange={setPengawasIds}
+                placeholder="Pilih satu atau lebih pengawas..."
+              />
+              {unmatchedPengawas && (
+                <span className="text-[11px] text-[#F59E0B] italic">
+                  Pengawas bawaan aset "{unmatchedPengawas}" bukan user terdaftar, jadi tidak terpilih otomatis.
+                </span>
+              )}
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">Keterangan</label>
