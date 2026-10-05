@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { ShieldCheck, PlayCircle, Wrench, AlertTriangle, Hammer } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -10,6 +11,8 @@ import { useLanguage } from "@/context/LanguageContext";
 // Tata letak 2x2 di bawah persentase:
 //   [Unit Beroperasi]   [Unit Pemeliharaan]
 //   [Unit Rusak]        [Unit Perbaikan]
+// Tiap kotak unit bisa diklik -> /registrasi-aset/semua?status=<status> (daftar aset dengan
+// status tersebut saja). Idle tidak punya kotak sendiri, jadi tidak ikut tersaring di sini.
 interface AvailabilitySummaryCardProps {
   availabilityPct: number; // 0-100
   totalActive: number; // denominator availability (aset aktif)
@@ -33,6 +36,7 @@ export default function AvailabilitySummaryCard({
   const units = [
     {
       key: "beroperasi",
+      status: "Beroperasi",
       title: t("dashboard.unitBeroperasi"),
       desc: t("dashboard.unitBeroperasiDesc"),
       value: active,
@@ -41,6 +45,7 @@ export default function AvailabilitySummaryCard({
     },
     {
       key: "pemeliharaan",
+      status: "Pemeliharaan",
       title: t("dashboard.unitPemeliharaan"),
       desc: t("dashboard.unitPemeliharaanDesc"),
       value: maintenance,
@@ -49,6 +54,7 @@ export default function AvailabilitySummaryCard({
     },
     {
       key: "rusak",
+      status: "Rusak",
       title: t("dashboard.unitRusak"),
       desc: t("dashboard.unitRusakDesc"),
       value: rusak,
@@ -57,6 +63,7 @@ export default function AvailabilitySummaryCard({
     },
     {
       key: "perbaikan",
+      status: "Perbaikan",
       title: t("dashboard.unitPerbaikan"),
       desc: t("dashboard.unitPerbaikanDesc"),
       value: perbaikan,
@@ -83,9 +90,10 @@ export default function AvailabilitySummaryCard({
       {/* 2x2: BEROPERASI, PEMELIHARAAN, RUSAK, PERBAIKAN */}
       <div className="grid grid-cols-2 gap-3 mt-auto pt-4 border-t border-gray-50 dark:border-[#334155]">
         {units.map((u) => (
-          <div
+          <Link
             key={u.key}
-            className="flex items-start gap-3 p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-100 dark:border-[#334155]"
+            href={`/registrasi-aset/semua?status=${encodeURIComponent(u.status)}`}
+            className="flex items-start gap-3 p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] border border-gray-100 dark:border-[#334155] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0D9488]/40 cursor-pointer"
           >
             <div className={`w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center ${u.iconClass}`}>{u.icon}</div>
             <div className="flex flex-col gap-0.5 min-w-0">
@@ -93,7 +101,7 @@ export default function AvailabilitySummaryCard({
               <span className="text-2xl font-black text-[#0F172A] dark:text-[#F8FAFC] leading-tight">{u.value}</span>
               <span className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-medium">{u.desc}</span>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

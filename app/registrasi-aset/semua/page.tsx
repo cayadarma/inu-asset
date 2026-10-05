@@ -22,17 +22,27 @@ export default function SemuaAsetPage() {
   const [filterStatus, setFilterStatus] = useState("Semua Status");
   const [filterOwnership, setFilterOwnership] = useState("Semua Kepemilikan");
   const [filterLocation, setFilterLocation] = useState("Semua Lokasi");
+  const [filterYear, setFilterYear] = useState("Semua Tahun");
   const [showInactive, setShowInactive] = useState(false);
 
   const fetchAssets = async () => {
     setIsLoading(true);
 
-    const { data: assetData, error } = await supabase
-      .from("assets")
-      .select("*, locations ( id, name )")
-      .order("created_at", { ascending: true });
-
-    if (!error && assetData) setAssets(assetData);
+    // Ambil SEMUA aset dengan paginasi: tanpa ini PostgREST memotong di 1000 baris
+    // sehingga jumlah di daftar bisa lebih kecil dari kenyataan.
+    const all: any[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: page, error } = await supabase
+        .from("assets")
+        .select("*, locations ( id, name )")
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, from + 999);
+      if (error || !page) break;
+      all.push(...page);
+      if (page.length < 1000) break;
+    }
+    setAssets(all);
     setIsLoading(false);
   };
 
@@ -47,7 +57,23 @@ export default function SemuaAsetPage() {
   useEffect(() => {
     fetchAssets();
     fetchFilters();
+
+    // Dari card Asset Availability di dashboard: /registrasi-aset/semua?status=Beroperasi dst.
+    const statusParam = new URLSearchParams(window.location.search).get("status");
+    if (statusParam && ["Beroperasi", "Idle", "Pemeliharaan", "Rusak", "Perbaikan"].includes(statusParam)) {
+      setFilterStatus(statusParam);
+    }
   }, []);
+
+  // Tahun pembelian yang benar-benar ada di data (terbaru dulu)
+  const availableYears = Array.from(
+    new Set(
+      assets
+        .filter((a) => a.purchase_date)
+        .map((a) => new Date(a.purchase_date).getFullYear())
+        .filter((y) => !Number.isNaN(y))
+    )
+  ).sort((a, b) => b - a);
 
   const filteredAssets = assets.filter((asset) => {
     const matchesSearch =
@@ -61,8 +87,13 @@ export default function SemuaAsetPage() {
       (filterOwnership === "-" ? !asset.ownership : asset.ownership === filterOwnership);
     const matchesLocation = filterLocation === "Semua Lokasi" || asset.locations?.id === filterLocation;
     const matchesActive = showInactive || asset.is_active !== false;
+    const matchesYear =
+      filterYear === "Semua Tahun" ||
+      (filterYear === "-"
+        ? !asset.purchase_date
+        : !!asset.purchase_date && String(new Date(asset.purchase_date).getFullYear()) === filterYear);
 
-    return matchesSearch && matchesType && matchesStatus && matchesLocation && matchesActive && matchesOwnership;
+    return matchesSearch && matchesType && matchesStatus && matchesLocation && matchesActive && matchesOwnership && matchesYear;
   });
 
   // Teks dinamis dari DB (nama aset, tipe aset, nama lokasi) diterjemahkan lewat DeepL (batch)
@@ -127,6 +158,12 @@ export default function SemuaAsetPage() {
           <option value="-">-</option>
         </select>
 
+        <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
+          <option value="Semua Tahun">{lang === "en" ? "All Purchase Years" : "Semua Tahun Pembelian"}</option>
+          {availableYears.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+          <option value="-">{lang === "en" ? "No purchase date" : "Tanpa tanggal"}</option>
+        </select>
+
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl text-sm font-bold text-[#475569] dark:text-[#F8FAFC] outline-none focus:border-primary cursor-pointer">
           <option value="Semua Status">{translateEnum("Semua Status", lang)}</option>
           <option value="Beroperasi">{translateEnum("Beroperasi", lang)}</option>
@@ -153,6 +190,7 @@ export default function SemuaAsetPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#F8FAFC] dark:bg-[#0F172A]/50 border-b border-gray-100 dark:border-[#334155] text-[#475569] dark:text-[#94A3B8] text-sm font-bold">
+                  <th className="pl-6 pr-2 py-4 w-12">No</th>
                   <th className="px-6 py-4">{t("registrasiAset.common.kodeAset")}</th>
                   <th className="px-6 py-4">{t("registrasiAset.common.namaAset")}</th>
                   <th className="px-6 py-4">{t("registrasiAset.common.tipeAset")}</th>
@@ -163,8 +201,9 @@ export default function SemuaAsetPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
-                {filteredAssets.map((asset) => (
+                {filteredAssets.map((asset, index) => (
                   <tr key={asset.id} className={`hover:bg-gray-50 dark:hover:bg-[#334155]/30 transition-colors ${asset.is_active === false ? "opacity-60" : ""}`}>
+                    <td className="pl-6 pr-2 py-5 text-sm font-bold text-[#94A3B8]">{index + 1}</td>
                     <td className="px-6 py-5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{asset.id}</td>
                     <td className="px-6 py-5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{dt(asset.name)}</td>
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{dt(asset.type)}</td>
