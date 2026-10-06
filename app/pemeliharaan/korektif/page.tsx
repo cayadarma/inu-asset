@@ -481,7 +481,7 @@ function CorrectiveContent() {
                       </div>
                     </td>
                     <td className="px-6 py-5 text-center">
-                      <Link href={`/pemeliharaan/korektif/${wo.id}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all"><Eye size={20}/></Link>
+                      <Link href={`/pemeliharaan/korektif/${wo.id}`} className="p-2 inline-block text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488] transition-all"><Eye size={20}/></Link>
                     </td>
                   </tr>
                 ))}

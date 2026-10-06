@@ -280,7 +280,7 @@ export default function StockPage() {
                     </td>
                     <td className="px-6 py-5">
                       <div className="flex justify-center gap-3">
-                        <Link href={`/stok/${item.id}`} className="text-[#64748B] hover:text-[#0D9488] transition-colors" title="Lihat Detail"><Eye size={18} /></Link>
+                        <Link href={`/stok/${item.id}`} className="text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488] transition-colors" title="Lihat Detail"><Eye size={18} /></Link>
                       </div>
                     </td>
                   </tr>

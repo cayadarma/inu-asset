@@ -237,7 +237,7 @@ function ChecklistHarianFormContent({ params }: { params: Promise<{ assetId: str
 
       {!template ? (
         <div className="bg-white dark:bg-[#1E293B] p-10 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm text-center">
-          <p className="text-sm text-secondary italic">
+          <p className="text-sm text-secondary dark:text-[#94A3B8] italic">
             Aset ini belum memiliki Kategori Checklist. Hubungi administrator untuk mengaturnya di halaman Registrasi Aset.
           </p>
         </div>

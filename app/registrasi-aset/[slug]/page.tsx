@@ -387,7 +387,7 @@ export default function AssetListPage({ params }: { params: Promise<{ slug: stri
                     <td className="px-6 py-5 text-center"><Badge status={asset.ownership || "-"} /></td>
                     <td className="px-6 py-5 text-center"><Badge status={asset.is_active === false ? "Nonaktif" : asset.status} /></td>
                     <td className="px-6 py-5 text-center">
-                      <Link href={`/registrasi-aset/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] hover:text-primary transition-all">
+                      <Link href={`/registrasi-aset/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] dark:text-[#94A3B8] hover:text-primary transition-all">
                         <Eye size={18} />
                       </Link>
                     </td>

@@ -246,7 +246,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                           <span className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-black rounded uppercase">{translateEnum(report.urgency || 'Sedang', lang)}</span>
                         </td>
                         <td className="px-6 py-5 text-center">
-                           <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${encodeURIComponent(locationNameFromUrl)}&assetName=${encodeURIComponent(asset?.name || "")}&issueTitle=${encodeURIComponent(report.issue_title)}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all">
+                           <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${encodeURIComponent(locationNameFromUrl)}&assetName=${encodeURIComponent(asset?.name || "")}&issueTitle=${encodeURIComponent(report.issue_title)}`} className="p-2 inline-block text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488] transition-all">
                               <Eye size={20} />
                            </Link>
                         </td>
@@ -285,7 +285,7 @@ export default function BukuSakitDetailPage({ params }: { params: Promise<{ slug
                           <Badge status={sch.status} />
                         </td>
                         <td className="px-6 py-5 text-center">
-                           <Link href={`/pemeliharaan/checklist/${sch.id}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all">
+                           <Link href={`/pemeliharaan/checklist/${sch.id}`} className="p-2 inline-block text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488] transition-all">
                               <Eye size={20} />
                            </Link>
                         </td>

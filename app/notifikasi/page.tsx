@@ -108,7 +108,7 @@ export default function NotificationPage() {
         ) : notifications.length === 0 ? (
           <div className="bg-white dark:bg-[#1E293B] p-20 rounded-3xl border border-dashed border-gray-200 dark:border-[#334155] text-[#94A3B8] dark:text-gray text-center flex flex-col items-center gap-4">
              <Bell size={48} className="text-[#94A3B8] dark:text-gray" />
-             <p className="text-secondary font-medium italic">{!maintNotifOn ? t("notif.disabledHint") : t("notif.empty")}</p>
+             <p className="text-secondary dark:text-[#94A3B8] font-medium italic">{!maintNotifOn ? t("notif.disabledHint") : t("notif.empty")}</p>
           </div>
         ) : (
           notifications.map((notif) => (

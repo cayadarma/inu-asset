@@ -647,7 +647,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                        </div>
                        <Link href={`/buku-sakit/${slug}/${id}/${report.id}?name=${encodeURIComponent(locationNameFromUrl)}&assetName=${encodeURIComponent(asset?.name || "")}&issueTitle=${encodeURIComponent(report.issue_title)}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">{t("registrasiAset.common.detail")}</Link>
                     </div>
-                 )) : <p className="p-10 text-center text-secondary italic">{t("registrasiAset.detail.tidakAdaRiwayat")}</p>
+                 )) : <p className="p-10 text-center text-secondary dark:text-[#94A3B8] italic">{t("registrasiAset.detail.tidakAdaRiwayat")}</p>
                ) : (
                  maintenanceHistory.length > 0 ? maintenanceHistory.map((sch, i) => (
                     <div key={i} className="flex justify-between items-center p-6 border-b border-gray-50 dark:border-[#334155] last:border-0 hover:bg-gray-50 dark:hover:bg-[#0F172A]/50 transition-all group">
@@ -665,7 +665,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ slug: st
                           <Link href={`/pemeliharaan/checklist/${sch.id}`} className="px-5 py-2 bg-[#96BEFF] text-[#0932B6] rounded-lg font-bold text-[12px]">{t("registrasiAset.common.detail")}</Link>
                        </div>
                     </div>
-                 )) : <p className="p-10 text-center text-secondary italic">{t("registrasiAset.detail.belumAdaRiwayatPemeliharaan")}</p>
+                 )) : <p className="p-10 text-center text-secondary dark:text-[#94A3B8] italic">{t("registrasiAset.detail.belumAdaRiwayatPemeliharaan")}</p>
                )}
             </div>
           </div>

@@ -213,7 +213,7 @@ export default function SemuaAsetPage() {
                     <td className="px-6 py-5 text-center">
                       <Link
                         href={`/registrasi-aset/${asset.location_id}/${asset.id}?name=${encodeURIComponent(asset.locations?.name || "")}&assetName=${encodeURIComponent(asset.name)}`}
-                        className="p-2 inline-block text-[#64748B] hover:text-primary transition-all"
+                        className="p-2 inline-block text-[#64748B] dark:text-[#94A3B8] hover:text-primary transition-all"
                       >
                         <Eye size={18} />
                       </Link>

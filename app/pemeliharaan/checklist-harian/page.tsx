@@ -282,7 +282,7 @@ function ChecklistHarianListContent() {
       </div>
 
       {isLoading ? (
-        <p className="p-10 text-center text-sm text-secondary italic">Memuat...</p>
+        <p className="p-10 text-center text-sm text-secondary dark:text-[#94A3B8] italic">Memuat...</p>
       ) : !selectedGroup ? (
         /* LEVEL 1: CARI SEMUA ASET / PILIH LOKASI */
         <div className="flex flex-col gap-4">
@@ -315,7 +315,7 @@ function ChecklistHarianListContent() {
             <>
               <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">Pilih Lokasi</span>
               {locationGroups.length === 0 ? (
-                <p className="p-10 text-center text-sm text-secondary italic bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155]">
+                <p className="p-10 text-center text-sm text-secondary dark:text-[#94A3B8] italic bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155]">
                   Belum ada aset dengan Kategori Checklist.
                 </p>
               ) : (
@@ -384,7 +384,7 @@ function ChecklistHarianListContent() {
           {/* DAFTAR ASET */}
           <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm overflow-hidden">
             {filteredAssets.length === 0 ? (
-              <p className="p-10 text-center text-sm text-secondary italic">Tidak ada aset yang cocok.</p>
+              <p className="p-10 text-center text-sm text-secondary dark:text-[#94A3B8] italic">Tidak ada aset yang cocok.</p>
             ) : (
               filteredAssets.map((asset) => renderAssetRow(asset, false))
             )}

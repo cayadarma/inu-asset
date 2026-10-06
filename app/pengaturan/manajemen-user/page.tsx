@@ -415,12 +415,12 @@ export default function ManajemenUserPage() {
                       <td className="px-6 py-5">
                         <div className="flex items-center justify-center gap-1.5">
                           {editable && (
-                            <button onClick={() => openEditForm(u)} title="Edit" className="p-2 text-[#64748B] hover:text-primary transition-all">
+                            <button onClick={() => openEditForm(u)} title="Edit" className="p-2 text-[#64748B] dark:text-[#94A3B8] hover:text-primary transition-all">
                               <Pencil size={17} />
                             </button>
                           )}
                           {resettable && (
-                            <button onClick={() => { setResetTarget(u); setResetPassword(""); }} title="Reset Password" className="p-2 text-[#64748B] hover:text-primary transition-all">
+                            <button onClick={() => { setResetTarget(u); setResetPassword(""); }} title="Reset Password" className="p-2 text-[#64748B] dark:text-[#94A3B8] hover:text-primary transition-all">
                               <KeyRound size={17} />
                             </button>
                           )}
@@ -428,13 +428,13 @@ export default function ManajemenUserPage() {
                             <button
                               onClick={() => setSuspendTarget(u)}
                               title={u.status === "active" ? "Suspend" : "Aktifkan"}
-                              className={`p-2 transition-all ${u.status === "active" ? "text-[#64748B] hover:text-amber-500" : "text-[#64748B] hover:text-[#0D9488]"}`}
+                              className={`p-2 transition-all ${u.status === "active" ? "text-[#64748B] dark:text-[#94A3B8] hover:text-amber-500" : "text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488]"}`}
                             >
                               {u.status === "active" ? <Ban size={17} /> : <CheckCircle2 size={17} />}
                             </button>
                           )}
                           {deletable && (
-                            <button onClick={() => setDeleteTarget(u)} title="Hapus Permanen" className="p-2 text-[#64748B] hover:text-red-500 transition-all">
+                            <button onClick={() => setDeleteTarget(u)} title="Hapus Permanen" className="p-2 text-[#64748B] dark:text-[#94A3B8] hover:text-red-500 transition-all">
                               <Trash2 size={17} />
                             </button>
                           )}
