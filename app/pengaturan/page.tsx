@@ -439,18 +439,22 @@ export default function SettingsPage() {
                 active={switches.notifEmail}
                 onToggle={() => toggleNotif("notifEmail")}
               />
-              <ToggleRow
-                title={t("settings.notifMaint")}
-                desc={t("settings.notifMaintDesc")}
-                active={switches.notifMaint}
-                onToggle={() => toggleNotif("notifMaint")}
-              />
-              <ToggleRow
-                title={t("settings.notifStock")}
-                desc={t("settings.notifStockDesc")}
-                active={switches.notifStock}
-                onToggle={() => toggleNotif("notifStock")}
-              />
+              {user?.role !== "manajemen" && (
+                <ToggleRow
+                  title={t("settings.notifMaint")}
+                  desc={t("settings.notifMaintDesc")}
+                  active={switches.notifMaint}
+                  onToggle={() => toggleNotif("notifMaint")}
+                />
+              )}
+              {user?.role !== "operator" && (
+                <ToggleRow
+                  title={t("settings.notifStock")}
+                  desc={t("settings.notifStockDesc")}
+                  active={switches.notifStock}
+                  onToggle={() => toggleNotif("notifStock")}
+                />
+              )}
             </div>
             <p className="text-xs text-[#94A3B8] italic">{t("notif.disabledHint")}</p>
           </div>

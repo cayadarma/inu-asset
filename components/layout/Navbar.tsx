@@ -133,20 +133,39 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const currentLang = LANGUAGES.find((l) => l.code === lang) || LANGUAGES[0];
 
   useEffect(() => {
-    // Notifikasi kerusakan aset (Buku Sakit) dianggap kategori "Pemeliharaan"
-    const maintNotifOn = user?.notification_settings?.notifMaint ?? true;
+    const canSeeMaint = user?.role !== "manajemen";
+    const canSeeStock = user?.role !== "operator";
+
+    const maintNotifOn = canSeeMaint && (user?.notification_settings?.notifMaint ?? true);
+    const stockNotifOn = canSeeStock && (user?.notification_settings?.notifStock ?? true);
 
     const getInitialCount = async () => {
-      if (!maintNotifOn) {
-        setNotifCount(0);
-        return;
+      let count = 0;
+
+      if (maintNotifOn) {
+        const { count: damageCount } = await supabase
+          .from("damage_reports")
+          .select("*", { count: "exact", head: true })
+          .eq("is_read", false);
+        count += (damageCount || 0);
       }
-      const { count } = await supabase
-        .from("damage_reports")
-        .select("*", { count: "exact", head: true })
-        .eq("is_read", false);
-      setNotifCount(count || 0);
+
+      if (stockNotifOn) {
+        const dismissedStock: string[] = typeof window !== "undefined"
+          ? JSON.parse(localStorage.getItem("dismissed_stock_notifs") || "[]")
+          : [];
+        const { data: stockData } = await supabase
+          .from("stock_items")
+          .select("id, qty, min_stock");
+        const lowStock = (stockData || []).filter(
+          (item) => (item.qty || 0) <= (item.min_stock || 0) && !dismissedStock.includes(item.id)
+        );
+        count += lowStock.length;
+      }
+
+      setNotifCount(count);
     };
+
     getInitialCount();
 
     const channel = supabase
@@ -154,12 +173,15 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "damage_reports" }, () =>
         getInitialCount()
       )
+      .on("postgres_changes", { event: "*", schema: "public", table: "stock_items" }, () =>
+        getInitialCount()
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.notification_settings?.notifMaint]);
+  }, [user?.role, user?.notification_settings?.notifMaint, user?.notification_settings?.notifStock]);
 
   return (
     <header className="h-[72px] bg-white dark:bg-[#1E293B] border-b border-gray-100 dark:border-[#334155] px-4 md:px-8 flex justify-between items-center sticky top-0 z-40 transition-all font-poppins">

@@ -76,9 +76,19 @@ export default function SemuaAsetPage() {
   ).sort((a, b) => b - a);
 
   const filteredAssets = assets.filter((asset) => {
+    const q = searchQuery.trim().toLowerCase();
+    const purchaseYear = asset.purchase_date ? String(new Date(asset.purchase_date).getFullYear()) : "";
+
     const matchesSearch =
-      asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.id.toLowerCase().includes(searchQuery.toLowerCase());
+      !q ||
+      asset.name?.toLowerCase().includes(q) ||
+      asset.id?.toLowerCase().includes(q) ||
+      asset.type?.toLowerCase().includes(q) ||
+      asset.specification?.toLowerCase().includes(q) ||
+      asset.ownership?.toLowerCase().includes(q) ||
+      purchaseYear.includes(q) ||
+      asset.purchase_date?.includes(q) ||
+      asset.locations?.name?.toLowerCase().includes(q);
 
     const matchesType = filterType === "Semua Tipe" || asset.type === filterType;
     const matchesStatus = filterStatus === "Semua Status" || asset.status === filterStatus;

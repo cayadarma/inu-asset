@@ -176,7 +176,7 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link href="/buku-sakit" className="p-2 hover:bg-white rounded-full transition-all border border-transparent hover:border-gray-200 shadow-sm"><ChevronLeft size={24} /></Link>
+          <Link href="/buku-sakit" className="p-2 hover:bg-white dark:hover:bg-[#1E293B] rounded-full transition-all border border-transparent hover:border-gray-200 dark:hover:border-[#334155] shadow-sm text-[#0F172A] dark:text-[#F8FAFC]"><ChevronLeft size={24} className="text-[#0F172A] dark:text-[#F8FAFC]" /></Link>
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("bukuSakit.assetList.title", { location: dt(realLocationName) || t("bukuSakit.common.memuat") })}</h1>
         </div>
         <button onClick={() => setIsBrokenModalOpen(true)} className="bg-[#EF4444] text-white px-5 py-3 rounded-xl font-bold text-sm shadow-md hover:bg-red-600 transition-all flex items-center gap-2">
