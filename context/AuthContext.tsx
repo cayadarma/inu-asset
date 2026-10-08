@@ -2,7 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { getSession, logout as doLogout, SessionUser } from "@/lib/auth";
+import { restoreSession, logout as doLogout, SessionUser } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 interface AuthContextType {
   user: SessionUser | null;
@@ -26,27 +27,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  // 1) Saat aplikasi dibuka: pulihkan sesi (diverifikasi ke server Supabase)
+  //    dan pantau kalau sesi berakhir (token kedaluwarsa, logout dari tab lain, dll).
   useEffect(() => {
-    const session = getSession();
-    setUserState(session);
-    setIsLoading(false);
+    let active = true;
+
+    (async () => {
+      const session = await restoreSession();
+      if (!active) return;
+      setUserState(session);
+      setIsLoading(false);
+    })();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        setUserState(null);
+      }
+    });
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // 2) Pengalihan halaman: belum login -> /login, sudah login -> keluar dari /login
+  useEffect(() => {
+    if (isLoading) return;
 
     const isPublic = PUBLIC_PATHS.includes(pathname);
-    if (!session && !isPublic) {
+    if (!user && !isPublic) {
       router.replace("/login");
     }
-    if (session && isPublic) {
+    if (user && isPublic) {
       router.replace("/");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+  }, [user, isLoading, pathname]);
 
   const setUser = (u: SessionUser) => setUserState(u);
 
   const logout = () => {
-    doLogout();
-    setUserState(null);
-    router.replace("/login");
+    doLogout().finally(() => {
+      setUserState(null);
+      router.replace("/login");
+    });
   };
 
   return (

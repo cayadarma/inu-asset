@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { Search, ChevronDown, Plus, Pencil, KeyRound, Ban, CheckCircle2, Trash2, AlertTriangle, Camera, LoaderCircle } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/apiClient";
+import { MIN_PASSWORD_LENGTH, validatePassword } from "@/lib/passwordPolicy";
 import { useAuth } from "@/context/AuthContext";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
@@ -12,7 +14,6 @@ import SettingsTabs from "@/components/layout/SettingsTabs";
 import {
   Role,
   ROLE_LABELS,
-  hashPassword,
   getVisibleRoles,
   getManageableRoles,
   canEditUser,
@@ -157,7 +158,7 @@ export default function ManajemenUserPage() {
     }
   };
 
-  // --- SIMPAN TAMBAH / EDIT ---
+  // --- SIMPAN TAMBAH / EDIT (lewat API server) ---
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!actorRole) return;
@@ -168,12 +169,22 @@ export default function ManajemenUserPage() {
       return;
     }
 
-    if (!selectedUser && form.password.length < 6) {
-      setFormError("Password minimal 6 karakter.");
-      return;
+    if (!selectedUser) {
+      const passwordError = validatePassword(form.password, form.username);
+      if (passwordError) {
+        setFormError(passwordError);
+        return;
+      }
     }
 
     setIsSaving(true);
+
+    const profileBody = {
+      name: form.name,
+      username: form.username,
+      email: form.email || "",
+      role: form.role,
+    };
 
     if (selectedUser) {
       // --- EDIT ---
@@ -183,53 +194,40 @@ export default function ManajemenUserPage() {
         return;
       }
 
-      const updatePayload: Record<string, any> = {
-        name: form.name,
-        username: form.username,
-        email: form.email || null,
-        role: form.role,
-      };
+      const body: Record<string, unknown> = { ...profileBody };
 
       if (avatarFile) {
         const publicUrl = await uploadAvatarFor(selectedUser.id);
-        if (publicUrl) updatePayload.avatar_url = publicUrl;
+        if (publicUrl) body.avatarUrl = publicUrl;
       }
 
-      const { error } = await supabase.from("users").update(updatePayload).eq("id", selectedUser.id);
+      const res = await apiFetch(`/api/admin/users/${selectedUser.id}`, { method: "PATCH", body });
 
       setIsSaving(false);
-      if (error) {
-        setFormError("Gagal menyimpan. Username mungkin sudah dipakai.");
+      if (!res.ok) {
+        setFormError(res.error || "Gagal menyimpan.");
         return;
       }
     } else {
       // --- TAMBAH ---
-      const password_hash = await hashPassword(form.password);
-      const { data: inserted, error } = await supabase
-        .from("users")
-        .insert([
-          {
-            name: form.name,
-            username: form.username,
-            email: form.email || null,
-            role: form.role,
-            password_hash,
-            status: "active",
-          },
-        ])
-        .select("id")
-        .single();
+      const res = await apiFetch<{ id: string }>("/api/admin/users", {
+        method: "POST",
+        body: { ...profileBody, password: form.password },
+      });
 
-      if (error || !inserted) {
+      if (!res.ok || !res.data?.id) {
         setIsSaving(false);
-        setFormError("Gagal membuat user. Username mungkin sudah dipakai.");
+        setFormError(res.error || "Gagal membuat user.");
         return;
       }
 
       if (avatarFile) {
-        const publicUrl = await uploadAvatarFor(inserted.id);
+        const publicUrl = await uploadAvatarFor(res.data.id);
         if (publicUrl) {
-          await supabase.from("users").update({ avatar_url: publicUrl }).eq("id", inserted.id);
+          await apiFetch(`/api/admin/users/${res.data.id}`, {
+            method: "PATCH",
+            body: { ...profileBody, avatarUrl: publicUrl },
+          });
         }
       }
 
@@ -243,16 +241,19 @@ export default function ManajemenUserPage() {
     fetchUsers();
   };
 
-  // --- SUSPEND / AKTIFKAN ---
+  // --- SUSPEND / AKTIFKAN (lewat API server) ---
   const handleToggleSuspend = async () => {
     if (!suspendTarget || !actorRole) return;
     if (!canSuspend(actorRole, suspendTarget.role)) return;
 
     const newStatus = suspendTarget.status === "active" ? "suspended" : "active";
-    const { error } = await supabase.from("users").update({ status: newStatus }).eq("id", suspendTarget.id);
+    const res = await apiFetch(`/api/admin/users/${suspendTarget.id}/suspend`, {
+      method: "POST",
+      body: { suspend: newStatus === "suspended" },
+    });
 
-    if (error) {
-      showToast("error", "Gagal mengubah status user.");
+    if (!res.ok) {
+      showToast("error", res.error || "Gagal mengubah status user.");
     } else {
       showToast("success", newStatus === "suspended" ? "User disuspend." : "User diaktifkan kembali.");
       setSuspendTarget(null);
@@ -260,15 +261,15 @@ export default function ManajemenUserPage() {
     }
   };
 
-  // --- DELETE PERMANEN ---
+  // --- DELETE PERMANEN (lewat API server) ---
   const handleDelete = async () => {
     if (!deleteTarget || !actorRole) return;
     if (!canDelete(actorRole, deleteTarget.role) || !isNeverUsed(deleteTarget)) return;
 
-    const { error } = await supabase.from("users").delete().eq("id", deleteTarget.id);
+    const res = await apiFetch(`/api/admin/users/${deleteTarget.id}`, { method: "DELETE" });
 
-    if (error) {
-      showToast("error", "Gagal menghapus user.");
+    if (!res.ok) {
+      showToast("error", res.error || "Gagal menghapus user.");
     } else {
       showToast("success", "User berhasil dihapus permanen.");
       setDeleteTarget(null);
@@ -276,23 +277,27 @@ export default function ManajemenUserPage() {
     }
   };
 
-  // --- RESET PASSWORD ---
+  // --- RESET PASSWORD (lewat API server) ---
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetTarget || !actorRole) return;
     if (!canResetPassword(actorRole, resetTarget.role)) return;
-    if (resetPassword.length < 6) {
-      showToast("error", "Password minimal 6 karakter.");
+
+    const passwordError = validatePassword(resetPassword, resetTarget.username);
+    if (passwordError) {
+      showToast("error", passwordError);
       return;
     }
 
     setIsResetting(true);
-    const password_hash = await hashPassword(resetPassword);
-    const { error } = await supabase.from("users").update({ password_hash }).eq("id", resetTarget.id);
+    const res = await apiFetch(`/api/admin/users/${resetTarget.id}/reset-password`, {
+      method: "POST",
+      body: { password: resetPassword },
+    });
     setIsResetting(false);
 
-    if (error) {
-      showToast("error", "Gagal mereset password.");
+    if (!res.ok) {
+      showToast("error", res.error || "Gagal mereset password.");
     } else {
       showToast("success", `Password ${resetTarget.name} berhasil direset.`);
       setResetTarget(null);
@@ -548,7 +553,7 @@ export default function ManajemenUserPage() {
                   autoComplete="new-password"
                   value={form.password}
                   onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-                  placeholder="Minimal 6 karakter"
+                  placeholder={`Minimal ${MIN_PASSWORD_LENGTH} karakter`}
                   className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-[#0D9488] dark:text-white"
                 />
               </div>
@@ -642,7 +647,7 @@ export default function ManajemenUserPage() {
               autoComplete="new-password"
               value={resetPassword}
               onChange={(e) => setResetPassword(e.target.value)}
-              placeholder="Minimal 6 karakter"
+              placeholder={`Minimal ${MIN_PASSWORD_LENGTH} karakter`}
               className="w-full px-4 py-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] text-sm outline-none focus:border-primary dark:text-white font-bold"
             />
           </div>

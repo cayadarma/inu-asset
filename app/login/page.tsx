@@ -25,7 +25,9 @@ export default function LoginPage() {
     const result = await login(username, password, rememberMe);
 
     if (result.error || !result.user) {
-      setError("username atau password salah!");
+      // Tampilkan pesan dari sistem login (mis. akun disuspend, terlalu banyak
+      // percobaan, atau username/password salah).
+      setError(result.error || "Username atau password salah.");
       setIsLoading(false);
       return;
     }

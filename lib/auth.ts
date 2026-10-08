@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { supabase } from "@/lib/supabase";
+import { supabase, REMEMBER_FLAG_KEY } from "@/lib/supabase";
 
 export type Role = "super_admin" | "administrator" | "manajemen" | "operator";
 export type UserStatus = "active" | "suspended";
@@ -22,7 +22,23 @@ export interface SessionUser {
   };
 }
 
-const SESSION_KEY = "inu_asset_session";
+// Kunci sesi LAMA (sebelum Supabase Auth). Tidak dipakai lagi dan dibersihkan
+// otomatis dari browser supaya tidak ada data sesi usang yang tertinggal.
+const LEGACY_SESSION_KEY = "inu_asset_session";
+
+// Batas umur sesi di sisi aplikasi (lapisan tambahan di atas token Supabase)
+const EXPIRES_AT_KEY = "inu_session_expires_at";
+const REMEMBER_ME_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
+const SESSION_ONLY_DURATION_MS = 12 * 60 * 60 * 1000; // 12 jam
+
+// Supabase Auth login-nya pakai email. Aplikasi tetap pakai USERNAME,
+// jadi username diubah jadi email khusus login (harus sama dengan file
+// 01-migrasi-users-ke-supabase-auth.sql).
+const LOGIN_EMAIL_DOMAIN = "inu-asset.internal";
+
+export function usernameToEmail(username: string): string {
+  return `${username.trim().toLowerCase()}@${LOGIN_EMAIL_DOMAIN}`;
+}
 
 // Label tampilan untuk tiap role (dipakai di Sidebar, Manajemen User, dll)
 export const ROLE_LABELS: Record<Role, string> = {
@@ -91,47 +107,45 @@ export function isPathAllowedForOperator(pathname: string): boolean {
   return isPathAllowedForRole(pathname, "operator");
 }
 
-// Buat hash password (dipakai saat membuat/mengganti akun)
+// Buat hash password.
+// CATATAN: setelah pindah ke Supabase Auth, hash di tabel `users` TIDAK lagi
+// dipakai untuk login. Fungsi ini masih dipakai halaman Pengaturan dan
+// Manajemen User, dan akan dihapus saat kedua halaman itu dipindah ke API server.
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 10);
 }
 
-// Login: cek username + password ke tabel `users`
-// rememberMe = true  -> sesi disimpan di localStorage, bertahan 30 hari walau browser ditutup
-// rememberMe = false -> sesi disimpan di sessionStorage, otomatis hilang saat tab/browser ditutup
-//                        (ditambah expiry 12 jam sebagai lapisan keamanan tambahan)
-export async function login(
-  username: string,
-  password: string,
-  rememberMe: boolean = false
-): Promise<{ user?: SessionUser; error?: string }> {
+// =====================================================================
+// LOGIN & SESI (Supabase Auth)
+// Sesi sekarang dipegang Supabase Auth (token yang diverifikasi server),
+// bukan lagi data buatan sendiri di localStorage.
+// rememberMe = true  -> sesi bertahan 30 hari walau browser ditutup
+// rememberMe = false -> sesi hilang saat tab/browser ditutup (maks 12 jam)
+// =====================================================================
+
+const PROFILE_COLUMNS =
+  "id, username, name, email, role, status, is_active, avatar_seed, avatar_url, language, notification_settings";
+
+type ProfileResult =
+  | { user: SessionUser }
+  | { error: string; invalid: boolean }; // invalid = akun tidak boleh dipakai (hapus sesi)
+
+// Ambil profil (nama, role, dll) dari tabel `users`. Tidak pernah mengambil password_hash.
+async function fetchProfile(userId: string): Promise<ProfileResult> {
   const { data, error } = await supabase
     .from("users")
-    .select("*")
-    .eq("username", username.trim())
+    .select(PROFILE_COLUMNS)
+    .eq("id", userId)
     .maybeSingle();
 
-  if (error) return { error: "Gagal terhubung ke database." };
-  if (!data) return { error: "Username tidak ditemukan." };
+  if (error) return { error: "Gagal terhubung ke database.", invalid: false };
+  if (!data) return { error: "Profil akun tidak ditemukan. Hubungi administrator.", invalid: true };
 
-  const isValid = await bcrypt.compare(password, data.password_hash);
-  if (!isValid) return { error: "Password salah." };
-
-  if (data.status === "suspended") {
-    return { error: "Akun ini telah dinonaktifkan (suspend). Hubungi administrator." };
-  }
-
-  const now = new Date().toISOString();
-
-  // Catat waktu login terakhir (dipakai untuk syarat Delete permanen di Manajemen User)
-  const { error: updateError } = await supabase
-    .from("users")
-    .update({ last_login_at: now })
-    .eq("id", data.id);
-
-  if (updateError) {
-    // Jangan gagalkan login hanya karena gagal mencatat last_login_at
-    console.error("Gagal mencatat last_login_at:", updateError);
+  if (data.status === "suspended" || data.is_active === false) {
+    return {
+      error: "Akun ini telah dinonaktifkan (suspend). Hubungi administrator.",
+      invalid: true,
+    };
   }
 
   const user: SessionUser = {
@@ -152,92 +166,135 @@ export async function login(
     },
   };
 
-  saveSession(user, rememberMe);
-
   return { user };
 }
 
-export function logout() {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(SESSION_KEY);
-  }
-}
-
-// Wrapper penyimpanan sesi: menyimpan user + waktu kadaluarsa (expiresAt).
-// - "Ingat saya" dicentang -> disimpan di localStorage, expiresAt = 30 hari ke depan.
-// - "Ingat saya" tidak dicentang -> disimpan di sessionStorage (otomatis hilang saat
-//   tab/browser ditutup), expiresAt = 12 jam ke depan sebagai lapisan keamanan tambahan
-//   (misalnya kalau komputer dibiarkan menyala lama tanpa ditutup).
-interface StoredSession {
-  user: SessionUser;
-  expiresAt: string; // ISO timestamp
-}
-
-const REMEMBER_ME_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
-const SESSION_ONLY_DURATION_MS = 12 * 60 * 60 * 1000; // 12 jam
-
-export function saveSession(user: SessionUser, rememberMe: boolean = false) {
+function clearLegacyAndExpiry() {
   if (typeof window === "undefined") return;
-
-  const durationMs = rememberMe ? REMEMBER_ME_DURATION_MS : SESSION_ONLY_DURATION_MS;
-  const payload: StoredSession = {
-    user,
-    expiresAt: new Date(Date.now() + durationMs).toISOString(),
-  };
-
-  // Pastikan tidak ada sesi lama tersisa di storage yang lain, supaya tidak
-  // konflik / ambigu soal sesi mana yang berlaku.
-  localStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(SESSION_KEY);
-
-  if (rememberMe) {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
-  } else {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
-  }
+  window.localStorage.removeItem(LEGACY_SESSION_KEY);
+  window.sessionStorage.removeItem(LEGACY_SESSION_KEY);
+  window.localStorage.removeItem(EXPIRES_AT_KEY);
+  window.sessionStorage.removeItem(EXPIRES_AT_KEY);
 }
 
-export function getSession(): SessionUser | null {
+function writeExpiry(rememberMe: boolean) {
+  if (typeof window === "undefined") return;
+  const durationMs = rememberMe ? REMEMBER_ME_DURATION_MS : SESSION_ONLY_DURATION_MS;
+  const value = String(Date.now() + durationMs);
+  const target = rememberMe ? window.localStorage : window.sessionStorage;
+  const other = rememberMe ? window.sessionStorage : window.localStorage;
+  other.removeItem(EXPIRES_AT_KEY);
+  target.setItem(EXPIRES_AT_KEY, value);
+}
+
+function readExpiry(): number | null {
+  if (typeof window === "undefined") return null;
+  const raw =
+    window.localStorage.getItem(EXPIRES_AT_KEY) ?? window.sessionStorage.getItem(EXPIRES_AT_KEY);
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Login: username + password diperiksa oleh Supabase Auth (di server).
+export async function login(
+  username: string,
+  password: string,
+  rememberMe: boolean = false
+): Promise<{ user?: SessionUser; error?: string }> {
+  if (typeof window === "undefined") return { error: "Login hanya bisa dilakukan dari browser." };
+
+  // Pilihan "Ingat saya" harus dicatat SEBELUM login, supaya token
+  // tersimpan di tempat yang benar (localStorage atau sessionStorage).
+  window.localStorage.setItem(REMEMBER_FLAG_KEY, rememberMe ? "1" : "0");
+  clearLegacyAndExpiry();
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: usernameToEmail(username),
+    password,
+  });
+
+  if (error || !data.user) {
+    const code = (error as { code?: string; status?: number } | null)?.code;
+    const status = (error as { code?: string; status?: number } | null)?.status;
+    if (code === "user_banned") {
+      return { error: "Akun ini telah dinonaktifkan (suspend). Hubungi administrator." };
+    }
+    if (code === "over_request_rate_limit" || status === 429) {
+      return { error: "Terlalu banyak percobaan login. Coba lagi beberapa menit lagi." };
+    }
+    // Pesan sengaja sama untuk username salah maupun password salah
+    return { error: "Username atau password salah." };
+  }
+
+  const profile = await fetchProfile(data.user.id);
+  if ("error" in profile) {
+    // Akun tidak boleh dipakai -> batalkan login (hanya di perangkat ini)
+    if (profile.invalid) await supabase.auth.signOut({ scope: "local" });
+    return { error: profile.error };
+  }
+
+  writeExpiry(rememberMe);
+
+  // Catat waktu login terakhir (dipakai untuk syarat Delete permanen di Manajemen User)
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({ last_login_at: new Date().toISOString() })
+    .eq("id", data.user.id);
+
+  if (updateError) {
+    // Jangan gagalkan login hanya karena gagal mencatat last_login_at
+    console.error("Gagal mencatat last_login_at:", updateError);
+  }
+
+  return { user: profile.user };
+}
+
+export async function logout(): Promise<void> {
+  // scope "local" = keluar di perangkat ini saja (tidak menendang
+  // perangkat lain yang sedang dipakai akun yang sama)
+  await supabase.auth.signOut({ scope: "local" });
+  clearLegacyAndExpiry();
+}
+
+// Dipanggil saat aplikasi dibuka / di-refresh: pulihkan sesi kalau masih sah.
+// Token diperiksa ke server Supabase (bukan sekadar dibaca dari browser),
+// jadi sesi palsu atau akun yang sudah diblokir tidak akan lolos.
+export async function restoreSession(): Promise<SessionUser | null> {
   if (typeof window === "undefined") return null;
 
-  // Cek localStorage (sesi "Ingat saya") dulu, baru sessionStorage.
-  const fromLocal = readStoredSession(localStorage);
-  if (fromLocal) return fromLocal;
+  // Bersihkan sisa sesi lama buatan sendiri
+  window.localStorage.removeItem(LEGACY_SESSION_KEY);
+  window.sessionStorage.removeItem(LEGACY_SESSION_KEY);
 
-  const fromSession = readStoredSession(sessionStorage);
-  if (fromSession) return fromSession;
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) return null;
 
-  return null;
-}
-
-function readStoredSession(storage: Storage): SessionUser | null {
-  const raw = storage.getItem(SESSION_KEY);
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw);
-
-    // Kompatibilitas mundur: sesi lama (sebelum fitur ini ada) tersimpan
-    // langsung sebagai objek SessionUser tanpa expiresAt. Anggap masih valid
-    // sekali ini saja, lalu akan otomatis diselamatkan ulang dengan expiry
-    // saat login berikutnya.
-    if (!parsed || typeof parsed !== "object") return null;
-    if (!("expiresAt" in parsed) || !("user" in parsed)) {
-      return parsed as SessionUser;
-    }
-
-    const stored = parsed as StoredSession;
-    if (new Date(stored.expiresAt).getTime() < Date.now()) {
-      storage.removeItem(SESSION_KEY);
-      return null;
-    }
-
-    return stored.user;
-  } catch {
-    storage.removeItem(SESSION_KEY);
+  // Batas umur sesi di sisi aplikasi
+  const expiresAt = readExpiry();
+  if (expiresAt !== null && expiresAt < Date.now()) {
+    await logout();
     return null;
   }
+  if (expiresAt === null) {
+    // Sesi ada tapi penanda umurnya hilang -> perlakukan sebagai sesi biasa (12 jam)
+    writeExpiry(window.localStorage.getItem(REMEMBER_FLAG_KEY) === "1");
+  }
+
+  // Verifikasi token ke server
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    await logout();
+    return null;
+  }
+
+  const profile = await fetchProfile(userData.user.id);
+  if ("error" in profile) {
+    if (profile.invalid) await logout();
+    return null;
+  }
+
+  return profile.user;
 }
 
 // Foto profil asli jika sudah upload, atau null kalau belum.
