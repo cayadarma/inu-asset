@@ -50,7 +50,7 @@ export default function BukuSakitPage() {
     <div className="flex flex-col gap-8 max-w-[1200px] font-poppins text-left">
       <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("bukuSakit.list.title")}</h1>
       <div className="flex flex-col gap-5">
-        {isLoading ? <div className="p-10 text-center">{t("bukuSakit.common.memuat")}</div> : locations.map((loc) => (
+        {isLoading ? <div className="p-10 text-center text-sm text-secondary dark:text-[#94A3B8] italic">{t("bukuSakit.common.memuat")}</div> : locations.map((loc) => (
           <Link 
             key={loc.id}
             href={`/buku-sakit/${loc.id}?name=${encodeURIComponent(loc.name)}`} // PENTING: Mengirim nama

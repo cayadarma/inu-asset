@@ -5,7 +5,6 @@ import { Eye } from "lucide-react";
 import Link from "next/link";
 
 import PeriodFilter from "@/components/laporan/PeriodFilter";
-import AvailabilityChart from "@/components/ui/AvailabilityChart";
 import CorrectiveSection from "@/components/laporan/CorrectiveSection";
 import PreventiveSection from "@/components/laporan/PreventiveSection";
 import BukuSakitSection from "@/components/laporan/BukuSakitSection";
@@ -77,7 +76,7 @@ export default function ReportPage() {
       {/* PANEL FILTER */}
       <div className="bg-white dark:bg-[#1E293B] p-6 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-          {/* Filter Periode (reusable, sama pola dengan AvailabilityChart) */}
+          {/* Filter Periode (reusable) */}
           <PeriodFilter value={periodParams} onChange={setPeriodParams} />
 
           <Link
@@ -93,7 +92,6 @@ export default function ReportPage() {
 
       {/* KONTEN LAPORAN (OPERASIONAL + KEUANGAN/MANAJEMEN DALAM SATU HALAMAN) */}
       <div className="flex flex-col gap-10">
-        <AvailabilityChart range={{ startDate: period.startDate, endDate: period.endDate, label: period.label }} />
         <CorrectiveSection data={corrective} isLoading={isLoading} />
         <PreventiveSection data={preventive} isLoading={isLoading} />
         <BukuSakitSection data={bukuSakit} isLoading={isLoading} />

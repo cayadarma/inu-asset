@@ -87,8 +87,7 @@ async function fetchAvailability(period: ResolvedPeriod) {
 
   // --- Jumlahkan dulu semua baris per-lokasi jadi satu total per tanggal, BARU hitung
   // persentase harian. Kalau tidak, satu hari dengan 5 baris lokasi akan dihitung sebagai
-  // 5 "hari" terpisah saat dirata-rata -- salah secara matematis (lihat juga
-  // fetchAvailabilityTrend di bawah, yang punya pola agregasi sama).
+  // 5 "hari" terpisah saat dirata-rata -- salah secara matematis.
   type Totals = { beroperasi: number; idle: number; pemeliharaan: number; total: number };
   const perDate = new Map<string, { sum: Totals; hasLocationRows: boolean; fallback?: Totals }>();
 
@@ -199,106 +198,6 @@ async function fetchBukuSakitCount(period: ResolvedPeriod) {
   return count || 0;
 }
 
-// --- Data tren availability harian (untuk grafik) dari asset_status_snapshots ---
-export interface AvailabilityTrendPoint {
-  date: string; // YYYY-MM-DD
-  beroperasi: number;
-  idle: number;
-  pemeliharaan: number;
-  perbaikan: number;
-  rusak: number;
-  total: number;
-  availabilityPct: number;
-}
-
-export async function fetchAvailabilityTrend(period: ResolvedPeriod): Promise<AvailabilityTrendPoint[]> {
-  // NB: asset_status_snapshots bisa punya LEBIH DARI 1 baris per snapshot_date
-  // (satu baris per location_id, sama seperti di components/ui/AvailabilityChart.tsx).
-  // Query di bawah ini WAJIB menjumlahkan seluruh baris per tanggal sebelum dipakai
-  // sebagai 1 titik grafik -- kalau tidak, tanggal yang sama akan muncul berkali-kali
-  // (satu titik per lokasi) dan grafik jadi bergerigi/zig-zag, bukan satu garis mulus
-  // per hari seperti di Dashboard.
-  interface TrendRow {
-    snapshot_date: string;
-    location_id: string | null;
-    beroperasi: number;
-    idle: number;
-    pemeliharaan: number;
-    perbaikan: number;
-    rusak: number;
-    total: number;
-  }
-
-  // NB: pakai fetchAllPages, BUKAN supabase.from(...).select(...) langsung -- rentang
-  // Tahunan/Custom yang panjang bisa melebihi batas default 1000 baris per request dari
-  // Supabase/PostgREST, dan karena datanya diurutkan ascending, yang kepotong diam-diam
-  // adalah tanggal-tanggal PALING BARU (persis gejala "grafik anjlok ke 0 di bulan-bulan
-  // belakangan" yang sebelumnya terjadi di Dashboard).
-  const data = await fetchAllPages<TrendRow>((from, to) =>
-    supabase
-      .from("asset_status_snapshots")
-      .select("snapshot_date, location_id, beroperasi, idle, pemeliharaan, perbaikan, rusak, total")
-      .gte("snapshot_date", period.startDate)
-      .lte("snapshot_date", period.endDate)
-      .order("snapshot_date", { ascending: true })
-      .range(from, to)
-  );
-
-  if (data.length === 0) return [];
-
-  type Totals = { beroperasi: number; idle: number; pemeliharaan: number; perbaikan: number; rusak: number; total: number };
-  const EMPTY_TOTALS: Totals = { beroperasi: 0, idle: 0, pemeliharaan: 0, perbaikan: 0, rusak: 0, total: 0 };
-
-  // --- Jumlahkan baris berlokasi (location_id NOT NULL) per tanggal.
-  // Fallback ke baris location_id NULL kalau tanggal itu belum punya breakdown per lokasi
-  // sama sekali (histori lama sebelum backfill per lokasi) -- persis pola di AvailabilityChart.tsx.
-  const perDate = new Map<string, { sum: Totals; hasLocationRows: boolean; fallback?: Totals }>();
-
-  data.forEach((row) => {
-    const entry = perDate.get(row.snapshot_date) || { sum: { ...EMPTY_TOTALS }, hasLocationRows: false, fallback: undefined };
-    const rowTotals: Totals = {
-      beroperasi: row.beroperasi,
-      idle: row.idle,
-      pemeliharaan: row.pemeliharaan,
-      perbaikan: row.perbaikan,
-      rusak: row.rusak,
-      total: row.total,
-    };
-
-    if (row.location_id) {
-      entry.hasLocationRows = true;
-      entry.sum = {
-        beroperasi: entry.sum.beroperasi + rowTotals.beroperasi,
-        idle: entry.sum.idle + rowTotals.idle,
-        pemeliharaan: entry.sum.pemeliharaan + rowTotals.pemeliharaan,
-        perbaikan: entry.sum.perbaikan + rowTotals.perbaikan,
-        rusak: entry.sum.rusak + rowTotals.rusak,
-        total: entry.sum.total + rowTotals.total,
-      };
-    } else {
-      entry.fallback = rowTotals;
-    }
-
-    perDate.set(row.snapshot_date, entry);
-  });
-
-  const datesSorted = Array.from(perDate.keys()).sort();
-
-  return datesSorted.map((date) => {
-    const entry = perDate.get(date)!;
-    const t = entry.hasLocationRows ? entry.sum : (entry.fallback || EMPTY_TOTALS);
-    return {
-      date,
-      beroperasi: t.beroperasi,
-      idle: t.idle,
-      pemeliharaan: t.pemeliharaan,
-      perbaikan: t.perbaikan,
-      rusak: t.rusak,
-      total: t.total,
-      availabilityPct: t.total > 0 ? ((t.beroperasi + t.idle + t.pemeliharaan) / t.total) * 100 : 0,
-    };
-  });
-}
 
 // ============================================================
 // SECTION: CORRECTIVE MAINTENANCE (+ MTTR breakdown)

@@ -10,6 +10,7 @@ import MaintenanceSummary from "../components/ui/MaintenanceSummary";
 import RecentActivity from "../components/ui/RecentActivity"; 
 import { Box, ClipboardCheck } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+import { buildSnapshotRows, getWitaDateStr, type AssetForSnapshot } from "@/lib/assetSnapshot";
 
 export default function Home() {
   const { t } = useLanguage();
@@ -32,8 +33,21 @@ export default function Home() {
 
   useEffect(() => {
     async function getStats() {
-      const { data } = await supabase.from("assets").select("status, purchase_date, is_active, location_id");
-      if (!data) return;
+      // Ambil SEMUA aset dengan paginasi: tanpa ini PostgREST memotong di 1000 baris dan hitungan
+      // (juga snapshot yang tersimpan) bisa lebih kecil dari kenyataan.
+      const data: any[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data: page, error: pageError } = await supabase
+          .from("assets")
+          .select("status, purchase_date, is_active, location_id")
+          .order("id", { ascending: true })
+          .range(from, from + 999);
+        if (pageError) return;
+        if (!page || page.length === 0) break;
+        data.push(...page);
+        if (page.length < 1000) break;
+      }
+      if (data.length === 0) return;
 
       // PENTING: aset yang sudah dinonaktifkan (is_active === false) dikeluarkan dari
       // perhitungan status & availability. Aset nonaktif dianggap tidak beroperasi dan tidak
@@ -96,35 +110,10 @@ export default function Home() {
       // dari baris-baris per lokasi ini saat ditampilkan di grafik.
       // NB: blok ini sekarang dijalankan LEBIH DULU (sebelum query realisasi program kerja),
       // supaya snapshot tetap tercatat walau query lain di bawah gagal.
-      const today = new Date().toISOString().slice(0, 10); // format YYYY-MM-DD
-      const byLocation = new Map<
-        string | null,
-        { beroperasi: number; idle: number; pemeliharaan: number; perbaikan: number; rusak: number; total: number }
-      >();
-      operationalAssets.forEach((a: any) => {
-        const locId = a.location_id ?? null;
-        const entry = byLocation.get(locId) || { beroperasi: 0, idle: 0, pemeliharaan: 0, perbaikan: 0, rusak: 0, total: 0 };
-        entry.total += 1;
-        if (a.status === "Beroperasi") entry.beroperasi += 1;
-        else if (a.status === "Idle") entry.idle += 1;
-        else if (a.status === "Pemeliharaan") entry.pemeliharaan += 1;
-        else if (a.status === "Perbaikan") entry.perbaikan += 1;
-        else if (a.status === "Rusak") entry.rusak += 1;
-        byLocation.set(locId, entry);
-      });
-
-      const snapshotRows = Array.from(byLocation.entries()).map(([location_id, c]) => ({
-        snapshot_date: today,
-        location_id,
-        beroperasi: c.beroperasi,
-        idle: c.idle,
-        pemeliharaan: c.pemeliharaan,
-        perbaikan: c.perbaikan,
-        rusak: c.rusak,
-        total: c.total,
-        source: "live", // penanda: baris ini dari pantauan real-time, JANGAN ditimpa oleh trigger recompute historis
-        updated_at: new Date().toISOString(),
-      }));
+      // Pakai helper BERSAMA dengan cron (lib/assetSnapshot.ts): tanggal WITA (bukan UTC, supaya
+      // kunjungan pagi 00:00-08:00 WITA tidak menimpa snapshot KEMARIN) dan aset tanpa lokasi
+      // dilewati (location_id NULL membuat baris dobel yang tidak pernah tertimpa).
+      const snapshotRows = buildSnapshotRows(data as AssetForSnapshot[], getWitaDateStr());
 
       if (snapshotRows.length > 0) {
         await supabase.from("asset_status_snapshots").upsert(

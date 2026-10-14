@@ -8,6 +8,7 @@ import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
 import imageCompression from "browser-image-compression";
+import { fireNotification } from "@/lib/notifyClient";
 
 interface StockItem {
   id: string;
@@ -235,6 +236,14 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
       return;
     }
 
+    // Email stok menipis/habis: hanya saat stok BARU melewati batas (dari aman -> menipis/habis),
+    // bukan setiap kali stok berubah, supaya tidak spam.
+    const wasLow = item.qty <= item.min_stock;
+    const isLowNow = newQty <= item.min_stock;
+    if (isLowNow && !wasLow) fireNotification("low_stock", item.id);
+    // Sudah menipis lalu jadi habis (0) juga dikabarkan sekali
+    else if (isLowNow && item.qty > 0 && newQty <= 0) fireNotification("low_stock", item.id);
+
     setIsSaving(false);
     setIsAdjustModalOpen(false);
     resetAdjustForm();
@@ -388,7 +397,7 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
             <div className="flex items-center gap-3">
               <h2 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{item.name}</h2>
               <Badge status={getStockStatus(item)} />
-              <button onClick={openItemModal} className="text-[#64748B] hover:text-[#0D9488] transition-colors" title="Edit Item">
+              <button onClick={openItemModal} className="text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488] transition-colors" title="Edit Item">
                 <Pencil size={16} />
               </button>
             </div>
@@ -465,7 +474,7 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => { setSelectedMovement(move); setIsMovementDetailOpen(true); }}
-                          className="text-[#64748B] hover:text-[#0D9488] transition-colors inline-flex"
+                          className="text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488] transition-colors inline-flex"
                           title="Lihat Detail"
                         >
                           <Eye size={18} />
@@ -483,7 +492,7 @@ export default function StockDetailPage({ params }: { params: Promise<{ id: stri
         <div className="bg-white dark:bg-[#1E293B] p-8 rounded-2xl border border-gray-100 dark:border-[#334155] shadow-sm flex flex-col gap-6">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] text-lg">Informasi Supplier</h3>
-            <button onClick={() => setIsSupplierModalOpen(true)} className="text-[#64748B] hover:text-[#0D9488] transition-colors">
+            <button onClick={() => setIsSupplierModalOpen(true)} className="text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488] transition-colors">
               <Pencil size={16} />
             </button>
           </div>

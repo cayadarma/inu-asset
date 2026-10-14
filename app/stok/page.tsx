@@ -7,6 +7,7 @@ import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import { supabase } from "@/lib/supabase";
 import imageCompression from "browser-image-compression";
+import { fireNotification } from "@/lib/notifyClient";
 
 interface StockItem {
   id: string;
@@ -184,6 +185,7 @@ export default function StockPage() {
     if (error) {
       alert("Gagal menyimpan item: " + error.message);
     } else {
+      if ((addForm.qty || 0) <= (addForm.min_stock || 5)) fireNotification("low_stock", newId);
       setIsAddModalOpen(false);
       resetAddForm();
       fetchData();
@@ -278,7 +280,7 @@ export default function StockPage() {
                     </td>
                     <td className="px-6 py-5">
                       <div className="flex justify-center gap-3">
-                        <Link href={`/stok/${item.id}`} className="text-[#64748B] hover:text-[#0D9488] transition-colors" title="Lihat Detail"><Eye size={18} /></Link>
+                        <Link href={`/stok/${item.id}`} className="text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488] transition-colors" title="Lihat Detail"><Eye size={18} /></Link>
                       </div>
                     </td>
                   </tr>

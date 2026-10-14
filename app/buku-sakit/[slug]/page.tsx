@@ -8,13 +8,20 @@ import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 import { translateEnum } from "@/lib/i18n/enumTranslate";
 import { useDynamicTextMap } from "@/lib/i18n/useDynamicText";
+import { fireNotification } from "@/lib/notifyClient";
+import HistoryCheckbox from "@/components/ui/HistoryCheckbox";
+import { isOldIncident } from "@/lib/damageReportHistory";
 
 // Urgensi tersimpan di DB dalam Bahasa Indonesia (nilai tetap), label ditampilkan via translateEnum
 const URGENCY_OPTIONS = ["Berat (Mati Total)", "Sedang", "Ringan"];
 
 export default function AssetSakitListPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { user } = useAuth();
+  // Kotak "Data lama (riwayat)" hanya untuk administrator & super_admin. Operator memakai alur biasa (selalu email + status aset berubah).
+  const canMarkHistory = user?.role === "administrator" || user?.role === "super_admin";
   const { slug } = use(params);
   const locationId = slug;
   const { t, lang } = useLanguage();
@@ -38,9 +45,13 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
     asset_id: "",
     urgency: "Sedang",
     reporter_name: "",
+    incident_date: "",
     issue_title: "",
     description: ""
   });
+  // "Data lama (riwayat)": otomatis tercentang kalau tanggal kejadian sudah lewat; bisa diubah manual
+  const [isHistory, setIsHistory] = useState(false);
+  const [historyTouched, setHistoryTouched] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -114,21 +125,28 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
         }
       }
 
-      const { error: reportError } = await supabase.from("damage_reports").insert([{
+      const { data: newReport, error: reportError } = await supabase.from("damage_reports").insert([{
         asset_id: reportData.asset_id,
         reporter_name: reportData.reporter_name,
+        incident_date: reportData.incident_date || null,
         issue_title: reportData.issue_title,
         description: reportData.description,
         urgency: reportData.urgency,
         image_url: finalImageUrl
-      }]);
+      }]).select("id").single();
 
       if (!reportError) {
-        await supabase.from("assets").update({ status: "Rusak" }).eq("id", reportData.asset_id);
+        // Data riwayat: status aset TIDAK diubah dan email TIDAK dikirim
+        if (!(canMarkHistory && isHistory)) {
+          await supabase.from("assets").update({ status: "Rusak" }).eq("id", reportData.asset_id);
+          fireNotification("damage_report", newReport?.id); // email ke administrator/super_admin
+        }
         alert(t("bukuSakit.assetList.alertLaporanTerkirim"));
         setIsBrokenModalOpen(false);
         setImagePreview(null);
-        setReportData({ asset_id: "", urgency: "Sedang", reporter_name: "", issue_title: "", description: "" });
+        setReportData({ asset_id: "", urgency: "Sedang", reporter_name: "", incident_date: "", issue_title: "", description: "" });
+        setIsHistory(false);
+        setHistoryTouched(false);
         fetchAssets();
       }
     } catch (err) { console.error(err); }
@@ -158,7 +176,7 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link href="/buku-sakit" className="p-2 hover:bg-white rounded-full transition-all border border-transparent hover:border-gray-200 shadow-sm"><ChevronLeft size={24} /></Link>
+          <Link href="/buku-sakit" className="p-2 hover:bg-white dark:hover:bg-[#1E293B] rounded-full transition-all border border-transparent hover:border-gray-200 dark:hover:border-[#334155] shadow-sm text-[#0F172A] dark:text-[#F8FAFC]"><ChevronLeft size={24} className="text-[#0F172A] dark:text-[#F8FAFC]" /></Link>
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">{t("bukuSakit.assetList.title", { location: dt(realLocationName) || t("bukuSakit.common.memuat") })}</h1>
         </div>
         <button onClick={() => setIsBrokenModalOpen(true)} className="bg-[#EF4444] text-white px-5 py-3 rounded-xl font-bold text-sm shadow-md hover:bg-red-600 transition-all flex items-center gap-2">
@@ -216,7 +234,7 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
                     <td className="px-6 py-5 text-sm text-[#475569] dark:text-[#94A3B8]">{dt(asset.specification)}</td>
                     <td className="px-6 py-5 text-center"><Badge status={asset.is_active === false ? "Nonaktif" : asset.status} /></td>
                     <td className="px-6 py-5 text-center">
-                      <Link href={`/buku-sakit/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] hover:text-[#0D9488] transition-all"><Eye size={20} /></Link>
+                      <Link href={`/buku-sakit/${locationId}/${asset.id}?name=${encodeURIComponent(realLocationName)}&assetName=${encodeURIComponent(asset.name)}`} className="p-2 inline-block text-[#64748B] dark:text-[#94A3B8] hover:text-[#0D9488] transition-all"><Eye size={20} /></Link>
                     </td>
                   </tr>
                 ))}
@@ -248,8 +266,9 @@ export default function AssetSakitListPage({ params }: { params: Promise<{ slug:
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.namaPelapor")}</label><input required type="text" value={reportData.reporter_name} onChange={(e) => setReportData({...reportData, reporter_name: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
-              <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.tanggal")}</label><input required type="date" className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
+              <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.tanggal")}</label><input required type="date" value={reportData.incident_date} onChange={(e) => { const v = e.target.value; setReportData({...reportData, incident_date: v}); if (canMarkHistory && !historyTouched) setIsHistory(isOldIncident(v)); }} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
             </div>
+            {canMarkHistory && <HistoryCheckbox checked={isHistory} autoDetected={!historyTouched} onChange={(v) => { setHistoryTouched(true); setIsHistory(v); }} />}
             <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.common.judulMasalah")}</label><input required type="text" value={reportData.issue_title} onChange={(e) => setReportData({...reportData, issue_title: e.target.value})} placeholder={t("bukuSakit.common.judulMasalahPlaceholder")} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white" /></div>
             <div className="flex flex-col gap-2"><label className="text-sm font-bold text-[#0F172A] dark:text-white">{t("bukuSakit.assetList.kronologiIndikasi")}</label><textarea rows={3} value={reportData.description} onChange={(e) => setReportData({...reportData, description: e.target.value})} className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl text-sm outline-none focus:border-primary dark:bg-[#0F172A] dark:text-white"></textarea></div>
           </div>
