@@ -1,4 +1,5 @@
 import { Lang } from "./dictionary";
+import { supabase } from "@/lib/supabase";
 
 // Cache di memori browser (per sesi tab) supaya teks yang sudah diterjemahkan
 // dalam sesi ini tidak fetch ulang ke /api/translate (yang sendiri juga punya
@@ -46,11 +47,30 @@ export async function translateTexts(
   if (toFetch.length === 0) return result;
 
   try {
+    // Endpoint terjemahan wajib login, jadi sertakan token sesi
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) {
+      toFetch.forEach((t) => result.set(t, t));
+      return result;
+    }
+
     const res = await fetch("/api/translate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ texts: toFetch, targetLang: "EN" }),
     });
+
+    // Kalau server menolak / error, tampilkan teks asli TANPA menyimpannya ke
+    // cache memori (supaya percobaan berikutnya masih bisa menerjemahkan).
+    if (!res.ok) {
+      toFetch.forEach((t) => result.set(t, t));
+      return result;
+    }
+
     const data = await res.json();
     const translations: Record<string, string> = data.translations || {};
 

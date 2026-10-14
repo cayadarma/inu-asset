@@ -40,7 +40,6 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     if (user) {
       const updatedUser = { ...user, language: newLang };
       setUser(updatedUser);
-      localStorage.setItem("inu_asset_session", JSON.stringify(updatedUser));
       await supabase.from("users").update({ language: newLang }).eq("id", user.id);
     }
   };

@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getActor, jsonError } from "@/lib/serverAuth";
+import { rateLimit } from "@/lib/rateLimit";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+// Batas ukuran permintaan (melindungi kuota DeepL)
+const MAX_TEXTS = 200;
+const MAX_TEXT_LENGTH = 1000;
+const MAX_TOTAL_CHARS = 20000;
 
 // DeepL Free endpoint. Kalau nanti upgrade ke paket Pro, ganti ke api.deepl.com
 const DEEPL_ENDPOINT = "https://api-free.deepl.com/v2/translate";
@@ -15,6 +25,13 @@ interface TranslateRequestBody {
 // (tampilkan data asli langsung).
 
 export async function POST(req: NextRequest) {
+  // Wajib login (semua role boleh) dan dibatasi per akun
+  const actor = await getActor(req);
+  if (!actor) return jsonError("Sesi tidak valid. Silakan login ulang.", 401);
+  if (!rateLimit(`translate:${actor.id}`, 30, 60_000)) {
+    return jsonError("Terlalu banyak permintaan. Coba lagi sebentar.", 429);
+  }
+
   try {
     const body: TranslateRequestBody = await req.json();
     const { texts, targetLang } = body;
@@ -34,6 +51,15 @@ export async function POST(req: NextRequest) {
 
     if (uniqueTexts.length === 0) {
       return NextResponse.json({ translations: {} });
+    }
+
+    const totalChars = uniqueTexts.reduce((sum, s) => sum + s.length, 0);
+    if (
+      uniqueTexts.length > MAX_TEXTS ||
+      uniqueTexts.some((s) => s.length > MAX_TEXT_LENGTH) ||
+      totalChars > MAX_TOTAL_CHARS
+    ) {
+      return jsonError("Permintaan terjemahan terlalu besar.", 413);
     }
 
     const result: Record<string, string> = {};

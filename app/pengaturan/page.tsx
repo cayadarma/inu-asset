@@ -8,7 +8,9 @@ import { useTheme } from "../../context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { hashPassword, ROLE_LABELS } from "@/lib/auth";
+import { ROLE_LABELS } from "@/lib/auth";
+import { apiFetch } from "@/lib/apiClient";
+import { MIN_PASSWORD_LENGTH, validatePassword } from "@/lib/passwordPolicy";
 import Avatar from "@/components/ui/Avatar";
 import { Lang } from "@/lib/i18n/dictionary";
 import imageCompression from "browser-image-compression";
@@ -22,7 +24,7 @@ export default function SettingsPage() {
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: user?.name || "", email: user?.email || "" });
-  const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" });
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -61,6 +63,17 @@ export default function SettingsPage() {
     setToastMsg({ type, text });
     setTimeout(() => setToastMsg(null), 2500);
   };
+
+  // Teks kolom "kata sandi saat ini" (wajib diisi untuk mengganti kata sandi)
+  const currentPasswordLabel = lang === "en" ? "Current Password" : "Kata Sandi Saat Ini";
+  const currentPasswordDesc =
+    lang === "en" ? "Required to change your password" : "Wajib diisi untuk mengganti kata sandi";
+  const currentPasswordRequired =
+    lang === "en" ? "Enter your current password" : "Isi kata sandi saat ini";
+  const passwordChangedProfileFailed =
+    lang === "en"
+      ? "Password changed, but the profile could not be saved"
+      : "Kata sandi berhasil diganti, tetapi profil gagal disimpan";
 
   // --- Pilih Foto: buka modal penyesuaian ukuran dulu ---
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -215,14 +228,17 @@ export default function SettingsPage() {
     setIsAdjustOpen(false);
   };
 
-  // --- Simpan Profil (nama, email, dan password baru jika diisi) ---
+  // --- Simpan Profil (nama, email, foto, dan password baru jika diisi) ---
+  // Ganti password diproses SERVER (wajib mengisi password saat ini).
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
+    const wantsPasswordChange = Boolean(passwordForm.newPassword || passwordForm.confirmPassword);
+
     // Validasi password baru (jika diisi)
-    if (passwordForm.newPassword || passwordForm.confirmPassword) {
-      if (passwordForm.newPassword.length < 6) {
+    if (wantsPasswordChange) {
+      if (passwordForm.newPassword.length < MIN_PASSWORD_LENGTH) {
         showToast("error", t("settings.passwordTooShort"));
         return;
       }
@@ -230,18 +246,39 @@ export default function SettingsPage() {
         showToast("error", t("settings.passwordMismatch"));
         return;
       }
+      const weakError = validatePassword(passwordForm.newPassword, user.username);
+      if (weakError) {
+        showToast("error", weakError);
+        return;
+      }
+      if (!passwordForm.currentPassword) {
+        showToast("error", currentPasswordRequired);
+        return;
+      }
     }
 
     setIsSavingProfile(true);
+
+    // 1) Ganti password dulu. Kalau password saat ini salah, seluruh simpan dibatalkan.
+    if (wantsPasswordChange) {
+      const res = await apiFetch("/api/auth/change-password", {
+        method: "POST",
+        body: {
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword,
+        },
+      });
+      if (!res.ok) {
+        setIsSavingProfile(false);
+        showToast("error", res.error || t("settings.saveFailed"));
+        return;
+      }
+    }
 
     const updatePayload: Record<string, any> = {
       name: profileForm.name,
       email: profileForm.email,
     };
-
-    if (passwordForm.newPassword) {
-      updatePayload.password_hash = await hashPassword(passwordForm.newPassword);
-    }
 
     // --- Jika ada foto profil baru yang masih PENDING, upload sekarang ---
     // Ini satu-satunya titik di mana foto profil benar-benar disimpan permanen.
@@ -259,7 +296,12 @@ export default function SettingsPage() {
         updatePayload.avatar_url = publicUrl;
       } catch (err: any) {
         setIsSavingProfile(false);
-        showToast("error", t("settings.saveFailed"));
+        if (wantsPasswordChange) {
+          setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+          showToast("error", passwordChangedProfileFailed);
+        } else {
+          showToast("error", t("settings.saveFailed"));
+        }
         return;
       }
     }
@@ -269,7 +311,12 @@ export default function SettingsPage() {
     setIsSavingProfile(false);
 
     if (error) {
-      showToast("error", t("settings.saveFailed"));
+      if (wantsPasswordChange) {
+        setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        showToast("error", passwordChangedProfileFailed);
+      } else {
+        showToast("error", t("settings.saveFailed"));
+      }
       return;
     }
 
@@ -280,8 +327,7 @@ export default function SettingsPage() {
       ...(newAvatarUrl ? { avatar_url: newAvatarUrl } : {}),
     };
     setUser(updatedUser);
-    localStorage.setItem("inu_asset_session", JSON.stringify(updatedUser));
-    setPasswordForm({ newPassword: "", confirmPassword: "" });
+    setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
     // Bersihkan state pending foto setelah berhasil disimpan
     pendingAvatarFileRef.current = null;
@@ -316,7 +362,6 @@ export default function SettingsPage() {
 
     // Optimistic update
     setUser(updatedUser);
-    localStorage.setItem("inu_asset_session", JSON.stringify(updatedUser));
 
     const { error } = await supabase
       .from("users")
@@ -326,7 +371,6 @@ export default function SettingsPage() {
     if (error) {
       // Rollback kalau gagal
       setUser(user);
-      localStorage.setItem("inu_asset_session", JSON.stringify(user));
       showToast("error", t("settings.saveFailed"));
     }
   };
@@ -379,7 +423,7 @@ export default function SettingsPage() {
             <button
               onClick={() => {
                 setProfileForm({ name: user?.name || "", email: user?.email || "" });
-                setPasswordForm({ newPassword: "", confirmPassword: "" });
+                setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
                 pendingAvatarFileRef.current = null;
                 setHasPendingAvatarChange(false);
                 setPreviewUrl(null);
@@ -560,6 +604,23 @@ export default function SettingsPage() {
                 className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-[#0D9488] dark:text-white"
               />
             </div>
+
+            {passwordForm.newPassword && (
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">{currentPasswordLabel}</label>
+                  <span className="text-xs text-[#94A3B8]">{currentPasswordDesc}</span>
+                </div>
+                <input
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
+                  placeholder={currentPasswordLabel}
+                  autoComplete="current-password"
+                  className="p-3 border border-gray-200 dark:border-[#334155] rounded-xl bg-white dark:bg-[#0F172A] text-sm font-bold outline-none focus:border-[#0D9488] dark:text-white"
+                />
+              </div>
+            )}
 
             <div className="flex gap-3 mt-6">
               <button
